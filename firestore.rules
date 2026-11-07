@@ -1,0 +1,200 @@
+rules_version = '2';
+
+// GCC — Firestore Security Rules.
+//
+// Clients read; the server writes. Every write is denied here, permanently.
+// All mutations run through Next.js server code with the Firebase Admin SDK.
+// Reads follow the least-privilege table in docs/02-DATA-MODEL.md.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function emailVerified() {
+      return signedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isSuperAdmin() {
+      return emailVerified() && request.auth.token.role == 'super_admin';
+    }
+
+    function isPublicTournamentStatus(status) {
+      return status in [
+        'registration_open',
+        'registration_closed',
+        'pots_confirmed',
+        'fixtures_published',
+        'league_phase',
+        'knockout',
+        'completed',
+        'archived'
+      ];
+    }
+
+    function isPublishedTournamentStatus(status) {
+      return status in [
+        'fixtures_published',
+        'league_phase',
+        'knockout',
+        'completed',
+        'archived'
+      ];
+    }
+
+    function tournamentPath(tournamentId) {
+      return /databases/$(database)/documents/tournaments/$(tournamentId);
+    }
+
+    function tournamentExists(tournamentId) {
+      return exists(tournamentPath(tournamentId));
+    }
+
+    function tournamentData(tournamentId) {
+      return get(tournamentPath(tournamentId)).data;
+    }
+
+    function isPublicTournament(tournamentId) {
+      return tournamentExists(tournamentId) &&
+        isPublicTournamentStatus(tournamentData(tournamentId).status);
+    }
+
+    function isPublishedTournament(tournamentId) {
+      return tournamentExists(tournamentId) &&
+        isPublishedTournamentStatus(tournamentData(tournamentId).status);
+    }
+
+    function isTournamentOwner(tournamentId) {
+      return signedIn() &&
+        tournamentExists(tournamentId) &&
+        tournamentData(tournamentId).ownerUid == request.auth.uid;
+    }
+
+    function matchPath(tournamentId, matchId) {
+      return /databases/$(database)/documents/tournaments/$(tournamentId)/matches/$(matchId);
+    }
+
+    function isMatchParticipant(tournamentId, matchId) {
+      return signedIn() &&
+        exists(matchPath(tournamentId, matchId)) &&
+        request.auth.uid in get(matchPath(tournamentId, matchId)).data.participants;
+    }
+
+    // Private profile: owner or Super Admin.
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isSuperAdmin());
+
+      match /notifications/{notificationId} {
+        allow read: if signedIn() && request.auth.uid == uid;
+      }
+    }
+
+    // Public display profile.
+    match /publicProfiles/{uid} {
+      allow read: if true;
+    }
+
+    // Gamer-tag reservation: server-only on both read and write.
+    match /gamerTags/{gamerTagLower} {
+      allow read: if false;
+    }
+
+    // Applicant or Super Admin only.
+    match /adminApplications/{applicationId} {
+      allow read: if signedIn() &&
+        (resource.data.uid == request.auth.uid || isSuperAdmin());
+    }
+
+    // Tournaments are public once they leave draft and are not suspended.
+    // Owners and the Super Admin always see their own records.
+    match /tournaments/{tournamentId} {
+      allow read: if isPublicTournamentStatus(resource.data.status) ||
+        (signedIn() && resource.data.ownerUid == request.auth.uid) ||
+        isSuperAdmin();
+
+      match /registrations/{uid} {
+        allow read: if isPublicTournament(tournamentId) ||
+          isTournamentOwner(tournamentId) ||
+          isSuperAdmin();
+      }
+
+      // Draw is private until confirmed; afterwards it is public with the event.
+      match /draw/{drawId} {
+        allow read: if isTournamentOwner(tournamentId) ||
+          isSuperAdmin() ||
+          (isPublicTournament(tournamentId) &&
+            resource != null &&
+            resource.data.confirmedAt != null);
+      }
+
+      // Unpublished fixture drafts stay private.
+      match /fixtureDrafts/{draftId} {
+        allow read: if isTournamentOwner(tournamentId) || isSuperAdmin();
+      }
+
+      // Fixtures become public once the tournament reaches fixtures_published.
+      match /matches/{matchId} {
+        allow read: if isPublishedTournament(tournamentId) ||
+          isTournamentOwner(tournamentId) ||
+          isSuperAdmin();
+      }
+
+      // Disputes are readable only by match participants, the owner and the
+      // Super Admin. Dispute documents carry a matchId field.
+      match /disputes/{disputeId} {
+        allow read: if isTournamentOwner(tournamentId) ||
+          isSuperAdmin() ||
+          isMatchParticipant(tournamentId, resource.data.matchId);
+      }
+
+      // Derived competition data is public only with a public tournament.
+      match /standings/{uid} {
+        allow read: if isPublicTournament(tournamentId) ||
+          isTournamentOwner(tournamentId) ||
+          isSuperAdmin();
+      }
+
+      match /knockoutTies/{tieId} {
+        allow read: if isPublicTournament(tournamentId) ||
+          isTournamentOwner(tournamentId) ||
+          isSuperAdmin();
+      }
+
+      match /announcements/{announcementId} {
+        allow read: if isPublicTournament(tournamentId) ||
+          isTournamentOwner(tournamentId) ||
+          isSuperAdmin();
+      }
+    }
+
+    // Platform-wide announcements.
+    match /announcements/{announcementId} {
+      allow read: if true;
+    }
+
+    // Permanent champions and records.
+    match /hallOfFame/{entryId} {
+      allow read: if true;
+    }
+
+    // Super Admin-only operational records.
+    match /auditLogs/{logId} {
+      allow read: if isSuperAdmin();
+    }
+
+    match /platformStats/{documentId} {
+      allow read: if documentId == 'summary' && isSuperAdmin();
+    }
+
+    // Rate-limit counters are server-only.
+    match /rateLimits/{key} {
+      allow read: if false;
+    }
+
+    // Permanent deny-all writes. No client role, including Super Admin, may
+    // write directly to Firestore.
+    match /{document=**} {
+      allow write: if false;
+    }
+  }
+}

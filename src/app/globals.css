@@ -1,0 +1,87 @@
+/* GCC — global styles and design tokens.
+   Palette documentation: docs/06-DESIGN-SYSTEM.md
+   Tailwind tokens live in tailwind.config.ts; the CSS variables below mirror
+   the core values for use in inline SVG and third-party integrations. */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --gcc-navy-950: #050f1f;
+  --gcc-navy-900: #0a1b33;
+  --gcc-navy-800: #132b4b;
+  --gcc-electric-500: #2e9bff;
+  --gcc-electric-400: #56b8ff;
+  --gcc-gold-400: #f5c443;
+  --gcc-white: #ffffff;
+  --gcc-grey-300: #cbd5e1;
+  --gcc-success: #22c55e;
+  --gcc-warning: #f59e0b;
+  --gcc-danger: #ef4444;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-navy-950 text-grey-100 antialiased;
+    text-rendering: optimizeLegibility;
+    background-image:
+      radial-gradient(80% 50% at 50% -10%, rgb(46 155 255 / 0.08), transparent 70%),
+      radial-gradient(40% 30% at 100% 0%, rgb(245 196 67 / 0.04), transparent 70%);
+    background-attachment: fixed;
+  }
+
+  html {
+    scrollbar-color: #275183 #050f1f;
+  }
+
+  /* The dialog and drawer components lock background scrolling by setting this
+     attribute on <html>. */
+  html[data-scroll-locked="true"] {
+    overflow: hidden;
+  }
+
+  ::selection {
+    @apply bg-electric-500/30 text-white;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-electric-400 ring-offset-2 ring-offset-navy-950;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .text-shadow-hero {
+    text-shadow: 0 18px 48px rgb(5 15 31 / 0.65);
+  }
+
+  /* Respect users who prefer reduced motion. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
