@@ -1,23 +1,23 @@
 // GCC - email verification.
-// Reached only when an unverified account is detected after verification opens.
-import { AuthNotice } from "@/components/auth/auth-notice";
+import { VerifyEmailPanel } from "@/components/auth/verify-email-panel";
 
 export const metadata = { title: "Verify your email" };
 
 export default function VerifyEmailPage() {
   return (
-    <AuthNotice
-      eyebrow="Email verification"
-      title="Verification is not open yet"
-      description="Email verification begins when accounts open. Until then, no account can be verified and no verification link is valid."
-      details={[
-        "Verification protects tournament entries and organiser tools.",
-        "Unverified accounts will be redirected here before they can use the platform.",
-        "If you believe you reached this page in error, return to the public site.",
-      ]}
-      tone="warning"
-      primaryAction={{ href: "/", label: "Back to home" }}
-      secondaryAction={{ href: "/contact", label: "Contact the team" }}
-    />
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-eyebrow text-gold-300">
+        Email verification
+      </p>
+      <h1 className="mt-2 font-display text-3xl font-semibold uppercase tracking-display text-white sm:text-4xl">
+        Verify your email
+      </h1>
+      <p className="mt-3 text-sm leading-6 text-grey-300">
+        Verification protects tournament entries and keeps account recovery in your hands.
+      </p>
+      <div className="mt-8">
+        <VerifyEmailPanel />
+      </div>
+    </div>
   );
 }

@@ -17,6 +17,22 @@ const serverEnvSchema = z.object({
   SUPER_ADMIN_EMAIL: z.email().transform((value) => value.trim().toLowerCase()),
   // Session cookie lifetime in days. Defaults to five days.
   SESSION_COOKIE_MAX_AGE_DAYS: z.coerce.number().int().min(1).max(30).default(5),
+  // Cloudinary credentials are server-only. The client never sees them.
+  // Optional at the environment level so auth still works in environments
+  // where avatar upload has not been configured yet; the avatar route reports
+  // a clear configuration error instead.
+  CLOUDINARY_CLOUD_NAME: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().trim().min(1).optional(),
+  ),
+  CLOUDINARY_API_KEY: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().trim().min(1).optional(),
+  ),
+  CLOUDINARY_API_SECRET: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().trim().min(1).optional(),
+  ),
 });
 
 const serverOnlySchemaKeys = [
@@ -25,6 +41,9 @@ const serverOnlySchemaKeys = [
   "FIREBASE_ADMIN_PRIVATE_KEY",
   "SUPER_ADMIN_EMAIL",
   "SESSION_COOKIE_MAX_AGE_DAYS",
+  "CLOUDINARY_CLOUD_NAME",
+  "CLOUDINARY_API_KEY",
+  "CLOUDINARY_API_SECRET",
 ] as const;
 
 export type ServerEnv = PublicEnv & z.infer<typeof serverEnvSchema>;
@@ -47,6 +66,9 @@ export function getServerEnv(): ServerEnv {
     FIREBASE_ADMIN_PRIVATE_KEY: process.env.FIREBASE_ADMIN_PRIVATE_KEY,
     SUPER_ADMIN_EMAIL: process.env.SUPER_ADMIN_EMAIL,
     SESSION_COOKIE_MAX_AGE_DAYS: process.env.SESSION_COOKIE_MAX_AGE_DAYS,
+    CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME,
+    CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY,
+    CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET,
   });
 
   if (!parsed.success) {

@@ -7,7 +7,7 @@ import "server-only";
 
 import { redirect } from "next/navigation";
 
-import { AuthenticationError, requireVerifiedUser } from "@/lib/auth/guards";
+import { AuthenticationError, requireUser, requireVerifiedUser } from "@/lib/auth/guards";
 import { hasRoleAtLeast } from "@/lib/auth/roles";
 import { safeRedirectPath } from "@/lib/security/redirect";
 import type { SessionUser } from "@/lib/auth/session";
@@ -16,6 +16,23 @@ import type { UserRole } from "@/types/domain";
 function loginPath(nextPath: string): string {
   const safeNext = safeRedirectPath(nextPath) ?? "/";
   return `/login?next=${encodeURIComponent(safeNext)}`;
+}
+
+/**
+ * Requires a valid, unrevoked session without requiring email verification.
+ * The participant dashboard uses this so an unverified player can still read
+ * their own profile. Tournament entry uses requireVerifiedUser instead.
+ */
+export async function requirePageSignedIn(nextPath: string): Promise<SessionUser> {
+  try {
+    return await requireUser();
+  } catch (error) {
+    if (error instanceof AuthenticationError) {
+      redirect(loginPath(nextPath));
+    }
+
+    throw error;
+  }
 }
 
 /**

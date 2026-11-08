@@ -531,3 +531,94 @@ when avatar upload is implemented.
 **Consequences.** No Firebase Storage or Cloudinary client dependency is added. Avatars are
 plain public URLs on `publicProfiles`, while `avatarPublicId` stays on the private user
 document. Image upload, transformation and cleanup are implemented in Phase 4.
+
+---
+
+## ADR-026 — Server-first atomic registration and immutable gamer tags
+
+**Date:** 2026-11-08
+**Status:** Accepted
+
+**Context.** Firebase Auth creates the account before Firestore can reference its UID, so a
+failure part-way through registration could leave an Auth user with no profile or a reserved
+gamer tag with no owner. Gamer tags also anchor results and history, so allowing a rename
+would rewrite competitive identity.
+
+**Decision.** `POST /api/auth/register` validates the payload first, then creates the Auth
+user, then runs one Firestore transaction that calls `transaction.create()` on the
+`gamerTags/{gamerTagLower}` reservation, creates `users/{uid}` and creates
+`publicProfiles/{uid}` with zeroed statistics. Any failure deletes the Auth user. The
+transaction's `create()` makes concurrent claims for the same lowercase tag safe: one
+succeeds, the other fails and rolls back its Auth user. Registration never sets a custom
+claim. Gamer tags are 3–16 characters, start and end alphanumerically, use only letters,
+digits, `.`, `_` and `-`, disallow repeated specials and reject reserved platform words.
+Tags are immutable; `PATCH /api/profile` rejects the field.
+
+**Consequences.** The tag race is enforced by Firestore rather than a best-effort pre-check.
+A failed registration leaves no orphan account. Name changes require a future, audited admin
+process rather than a profile edit. Reserved words live in
+`src/lib/config/reserved-gamer-tags.ts` for review.
+
+---
+
+## ADR-027 — Avatar bytes are uploaded, verified and rewritten by the server
+
+**Date:** 2026-11-08
+**Status:** Accepted
+
+**Context.** ADR-025 chose Cloudinary but left upload unspecified. Accepting a client-built
+URL would let a user point a profile at arbitrary content. Accepting a client-declared MIME
+type would allow disguised files.
+
+**Decision.** The browser crops to a centred square, resizes to 512×512 and compresses before
+sending multipart bytes. The server ignores the declared MIME type, verifies JPEG/PNG/WebP
+magic bytes, enforces a 1,000,000-byte cap, uploads to `gcc/avatars/{uid}` with server-only
+Cloudinary credentials, builds the `f_auto,q_auto` delivery URL and writes it to both
+profile documents in a transaction. Removing an avatar clears both documents and destroys the
+previous asset. The client never sends or chooses a URL.
+
+**Consequences.** Cloudinary configuration is optional at environment validation so auth and
+profiles work before avatar storage is configured; the avatar route returns 503 until it is.
+The browser still does the expensive resize work, but the server is the authority on format
+and size. Rate limiting (5 changes per hour) limits storage abuse.
+
+---
+
+## ADR-028 — Unverified accounts may view their own profile
+
+**Date:** 2026-11-08
+**Status:** Accepted
+
+**Context.** Requiring verification for every dashboard route would lock a new player out of
+the profile they just created and make the verification panel hard to reach.
+
+**Decision.** The participant dashboard layout uses `requirePageSignedIn`, which verifies the
+session but not the email. Dashboard and profile pages render with a verification banner.
+Server-side tournament registration and organiser/admin routes still use
+`requireVerifiedUser`/role guards. Sign-in redirects unverified users to `/verify-email`
+unless a safe `next` path was requested.
+
+**Consequences.** A player can inspect and edit their profile immediately, while anything
+competitive or privileged still requires a verified email. The banner keeps the state
+visible instead of silently blocking actions.
+
+---
+
+## ADR-029 — Country options derive names and flags at runtime
+
+**Date:** 2026-11-08
+**Status:** Accepted
+
+**Context.** Registration and profile editing need a country picker. Shipping a full
+country-name package or hardcoding flag images adds weight and maintenance for a list that
+browsers already understand.
+
+**Decision.** Store the ISO 3166-1 alpha-2 code list in
+`src/lib/config/countries.ts`. Build display names with `Intl.DisplayNames(["en"], { type:
+"region" })` and flags from regional-indicator symbols. Default the selector to `KE` (the
+launch community) but accept any valid code. The server validates the two-letter shape and
+stores the uppercase code.
+
+**Consequences.** The picker is localised by the browser without a runtime package. The
+default is a product choice, not a restriction. Country names and flags are presentation
+only; the stored value is the stable ISO code.

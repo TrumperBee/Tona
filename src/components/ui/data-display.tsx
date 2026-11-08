@@ -84,7 +84,7 @@ export function initialsFor(name: string): string {
   return `${parts[0]?.[0] ?? ""}${parts[1]?.[0] ?? ""}`.toUpperCase();
 }
 
-export type AvatarSize = "xs" | "sm" | "md" | "lg" | "xl";
+export type AvatarSize = "xs" | "sm" | "md" | "lg" | "xl" | "hero";
 
 const avatarSizes: Record<AvatarSize, { box: string; text: string; pixels: number }> = {
   xs: { box: "h-6 w-6", text: "text-[10px]", pixels: 24 },
@@ -92,6 +92,7 @@ const avatarSizes: Record<AvatarSize, { box: string; text: string; pixels: numbe
   md: { box: "h-10 w-10", text: "text-sm", pixels: 40 },
   lg: { box: "h-14 w-14", text: "text-lg", pixels: 56 },
   xl: { box: "h-20 w-20", text: "text-2xl", pixels: 80 },
+  hero: { box: "h-32 w-32", text: "text-4xl", pixels: 128 },
 };
 
 export interface AvatarProps {
@@ -99,9 +100,11 @@ export interface AvatarProps {
   readonly src?: string | null;
   readonly size?: AvatarSize;
   readonly className?: string;
+  /** Needed when the image is drawn to a canvas for export. */
+  readonly crossOrigin?: "anonymous" | "use-credentials";
 }
 
-export function Avatar({ name, src, size = "md", className }: AvatarProps) {
+export function Avatar({ name, src, size = "md", className, crossOrigin }: AvatarProps) {
   const dimensions = avatarSizes[size];
 
   return (
@@ -120,6 +123,7 @@ export function Avatar({ name, src, size = "md", className }: AvatarProps) {
           width={dimensions.pixels}
           height={dimensions.pixels}
           unoptimized
+          crossOrigin={crossOrigin}
           className="h-full w-full object-cover"
         />
       ) : (

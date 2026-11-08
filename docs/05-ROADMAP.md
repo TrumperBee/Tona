@@ -1,9 +1,9 @@
 # GCC — Roadmap
 
-> Phases 1, 1B, 2, 3 and 3B are done. Phase 3B was the alignment and hardening patch:
-> admin-only result entry, typed profile statistics and history, safer redirects,
-> same-origin checks, security headers and CI coverage. A phase starts only when
-> the previous phase is reviewed and accepted.
+> Phases 1, 1B, 2, 3, 3B and 4 are done. Phase 4 delivered real registration,
+> email verification, sign-in, password reset, player profiles, avatar upload and
+> public player search. A phase starts only when the previous phase is reviewed
+> and accepted.
 
 | #   | Phase                                              | Primary deliverables                                                                                                     | Status      |
 | --- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ----------- |
@@ -12,7 +12,7 @@
 | 2   | Data model, rules and auth                         | Firestore collections, Security Rules (read-only), indexes, Auth session cookies, custom claims, guards, Admin SDK types | Done        |
 | 3   | Design system                                      | Brand identity, home page, about/contact/legal pages, public discovery shell                                             | Done        |
 | 3B  | Patch                                              | Admin-only results, result reports, profile stats/history, redirect and same-origin hardening, security headers, CI/docs | Done        |
-| 4   | Accounts and profiles                              | Sign-up, email verification, sign-in, password reset, profiles, avatars                                                  | Not started |
+| 4   | Accounts and profiles                              | Sign-up, email verification, sign-in, password reset, profiles, avatars                                                  | Done        |
 | 5   | Super Admin dashboard                              | Platform overview, users, tournaments, analytics, settings, audit log viewer                                             | Not started |
 | 6   | Organiser application and approval                 | Application form, review queue, approval/rejection with audit entries                                                    | Not started |
 | 7   | Organiser dashboard                                | Organiser shell, owned-tournament management, ownership guards                                                           | Not started |

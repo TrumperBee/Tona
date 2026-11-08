@@ -1,20 +1,24 @@
-// GCC - password reset.
-// Accounts are not open in Phase 3; no reset form is rendered.
-import { AuthNotice } from "@/components/auth/auth-notice";
+// GCC - password reset request.
+import { ForgotPasswordForm } from "@/components/auth/forgot-password-form";
 
 export const metadata = { title: "Forgot password" };
 
 export default function ForgotPasswordPage() {
   return (
-    <AuthNotice
-      eyebrow="Account recovery"
-      title="Password recovery is not available yet"
-      description="Password reset will be handled by the account system once sign-in opens. No reset link can be requested today."
-      details={[
-        "GCC will never ask for your password by email, chat or social media.",
-        "Reset links will be single-use and time-limited.",
-      ]}
-      primaryAction={{ href: "/login", label: "Back to sign in" }}
-    />
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-eyebrow text-gold-300">
+        Account recovery
+      </p>
+      <h1 className="mt-2 font-display text-3xl font-semibold uppercase tracking-display text-white sm:text-4xl">
+        Reset your password
+      </h1>
+      <p className="mt-3 text-sm leading-6 text-grey-300">
+        Enter your account email and Firebase will send a single-use reset link. GCC never asks for
+        your password by email, chat or social media.
+      </p>
+      <div className="mt-8">
+        <ForgotPasswordForm />
+      </div>
+    </div>
   );
 }

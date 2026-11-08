@@ -1,44 +1,49 @@
-// GCC — player profile input schemas.
+// GCC — player profile edit schema.
+//
+// PATCH /api/profile accepts ONLY these fields. Gamer tag, email, role, status,
+// avatar URLs and statistics are deliberately absent: they are set by dedicated
+// server flows or by the server itself. Unknown keys are rejected.
 import { z } from "zod";
 
 import { countryCodeSchema, gameIdSchema, platformIdSchema } from "@/lib/validation/common";
-import { e164Schema } from "@/lib/whatsapp/phone";
 
-export const GAMER_TAG_PATTERN = /^[A-Za-z0-9][A-Za-z0-9 ._-]{2,23}$/;
+const optionalText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max, `Use at most ${max} characters.`)
+    .nullable()
+    .optional()
+    .transform((value) => {
+      if (value === undefined) {
+        return undefined;
+      }
 
-export const gamerTagSchema = z
-  .string()
-  .trim()
-  .regex(
-    GAMER_TAG_PATTERN,
-    "Use 3–24 letters, numbers, spaces, dots, hyphens or underscores, starting with a letter or number.",
-  )
-  .transform((value) => value.replace(/\s+/g, " "));
+      if (value === null) {
+        return null;
+      }
 
-export function normalizeGamerTag(gamerTag: string): string {
-  return gamerTag.trim().replace(/\s+/g, " ").toLowerCase();
-}
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    })
+    .pipe(z.string().max(max, `Use at most ${max} characters.`).nullable().optional());
 
-const profileFields = {
-  fullName: z.string().trim().min(2).max(80),
-  gamerTag: gamerTagSchema,
-  country: countryCodeSchema,
-  preferredGame: gameIdSchema,
-  platform: platformIdSchema,
-  community: z.string().trim().max(40).optional(),
-  favouriteClub: z.string().trim().max(40).optional(),
-  photoUrl: z.url().max(500).optional(),
-  avatarUrl: z.url().max(500).optional(),
-  avatarPublicId: z.string().trim().max(200).optional(),
-  whatsappE164: e164Schema.optional(),
-};
+export const profileEditSchema = z
+  .strictObject({
+    fullName: z
+      .string()
+      .trim()
+      .min(2, "Enter your full name.")
+      .max(60, "Use at most 60 characters.")
+      .optional(),
+    community: optionalText(40),
+    favouriteClub: optionalText(40),
+    // Raw input; the server normalises it with the selected or existing country.
+    whatsapp: z.string().trim().max(32, "That number is too long.").nullable().optional(),
+    country: countryCodeSchema.optional(),
+    preferredGame: gameIdSchema.optional(),
+    platform: platformIdSchema.optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, "Provide at least one field to update.");
 
-export const profileCreateSchema = z.object(profileFields);
-
-export const profileUpdateSchema = z
-  .object(profileFields)
-  .partial()
-  .refine((value) => Object.keys(value).length > 0, "Provide at least one profile field.");
-
-export type ProfileCreateInput = z.infer<typeof profileCreateSchema>;
-export type ProfileUpdateInput = z.infer<typeof profileUpdateSchema>;
+export type ProfileEditInput = z.infer<typeof profileEditSchema>;

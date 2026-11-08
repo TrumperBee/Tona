@@ -1,6 +1,6 @@
 # GCC — Firestore Data Model
 
-> **Status: implemented through Phase 3B.** Document shapes live in
+> **Status: implemented through Phase 4.** Document shapes live in
 > `src/types/domain.ts`, path builders in `src/lib/firebase/paths.ts`, Zod input
 > schemas in `src/lib/validation/`, and Security Rules in `firestore.rules`.
 >
@@ -70,8 +70,8 @@ Document id: Firebase Auth UID.
 
 | Field                     | Type            | Notes                                                  |
 | ------------------------- | --------------- | ------------------------------------------------------ |
-| `fullName`                | string          | 2–80 characters                                        |
-| `gamerTag`                | string          | Display casing, 3–24 characters                        |
+| `fullName`                | string          | 2–60 characters                                        |
+| `gamerTag`                | string          | Display casing, 3–16 characters, immutable             |
 | `gamerTagLower`           | string          | Normalised uniqueness key                              |
 | `email`                   | string          | Mirrors the verified Auth email                        |
 | `whatsappE164`            | string \| null  | Private contact number; never public                   |
@@ -87,7 +87,8 @@ Document id: Firebase Auth UID.
 | `status`                  | `AccountStatus` | `active`, `suspended`, `banned`                        |
 | `createdAt` / `updatedAt` | Timestamp       | Server-written                                         |
 
-**Writer:** profile server actions (Phase 4), account-status management (Phase 2).
+**Writer:** registration, profile edit and avatar routes (Phase 4); account-status
+management (Phase 2).
 **Readers:** owner and Super Admin. No public read. Any `role` field kept here is
 for display only; authorisation always reads the Firebase custom claim.
 
@@ -133,9 +134,17 @@ snapshot for a completed tournament: `tournamentName`, `slug`, `season`,
 { uid: string, createdAt: Timestamp }
 ```
 
-The document id is the normalised gamer tag. Profile creation/update runs a
-Firestore transaction that creates this reservation and updates the private
-profile together. A failed transaction leaves no partial reservation.
+The document id is the normalised (lowercase) gamer tag. Registration runs a
+Firestore transaction that, in order, creates this reservation with
+`transaction.create()`, creates `users/{uid}` and creates `publicProfiles/{uid}`.
+A tag may contain letters, digits, dots, underscores and hyphens, must start and
+end with a letter or digit, may not repeat a special character and may not be a
+reserved platform word. `transaction.create()` makes the tag race-safe: a
+concurrent registration for the same lowercase tag fails, the Auth user created
+for that attempt is deleted, and no partial reservation remains. The display
+casing in `gamerTag` is preserved; `gamerTagLower` is the uniqueness key.
+
+Gamer tags are immutable after creation. `PATCH /api/profile` rejects the field.
 **Readers:** nobody. **Writer:** server only (Phase 4).
 
 ### 3.4 `adminApplications/{id}` — Tournament Admin applications
@@ -397,7 +406,7 @@ Add an index only with the query that needs it. Deploy with
 | Phase | Server write                                                        |
 | ----- | ------------------------------------------------------------------- |
 | 2     | Session exchange, role/status administration, audit and rate limits |
-| 4     | Profile + gamerTag reservation transaction                          |
+| 4     | Atomic registration, profile edit, avatar upload/removal            |
 | 6     | Admin application submission/review                                 |
 | 8     | Tournament create/update/publish, registration, membership snapshot |
 | 9     | Draw generation, admin shuffle, confirmation                        |

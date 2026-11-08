@@ -1,25 +1,25 @@
 # GCC — Architecture
 
-> Status: Phase 3B. This document defines the rules every phase must follow.
+> Status: Phase 4. This document defines the rules every phase must follow.
 
 ## 1. Fixed technology stack
 
-| Layer          | Technology                                                              |
-| -------------- | ----------------------------------------------------------------------- |
-| Framework      | Next.js 16 (App Router), React, TypeScript strict mode                  |
-| Styling        | Tailwind CSS with tokens in `tailwind.config.ts`                        |
-| Authentication | Firebase Authentication                                                 |
-| Database       | Cloud Firestore                                                         |
-| Authorisation  | Firestore Security Rules + server-side guards and custom claims         |
-| File storage   | None at launch. The Spark plan is used; Firebase Storage is not used    |
-| Server compute | Next.js route handlers and server actions on Vercel. No Cloud Functions |
-| Validation     | Zod (server-side, always)                                               |
-| Unit tests     | Vitest                                                                  |
-| Rules tests    | `@firebase/rules-unit-testing` against the Firebase Emulator Suite      |
-| Quality        | ESLint + Prettier                                                       |
-| CI             | GitHub Actions (lint, typecheck, test)                                  |
-| Hosting        | Vercel                                                                  |
-| Graphics       | HTML/CSS/SVG in the browser, exported to PNG with `html-to-image`       |
+| Layer          | Technology                                                                            |
+| -------------- | ------------------------------------------------------------------------------------- |
+| Framework      | Next.js 16 (App Router), React, TypeScript strict mode                                |
+| Styling        | Tailwind CSS with tokens in `tailwind.config.ts`                                      |
+| Authentication | Firebase Authentication                                                               |
+| Database       | Cloud Firestore                                                                       |
+| Authorisation  | Firestore Security Rules + server-side guards and custom claims                       |
+| File storage   | Cloudinary for avatars, through server-only credentials. Firebase Storage is not used |
+| Server compute | Next.js route handlers and server actions on Vercel. No Cloud Functions               |
+| Validation     | Zod (server-side, always)                                                             |
+| Unit tests     | Vitest                                                                                |
+| Rules tests    | `@firebase/rules-unit-testing` against the Firebase Emulator Suite                    |
+| Quality        | ESLint + Prettier                                                                     |
+| CI             | GitHub Actions (lint, typecheck, unit tests, build, rules and integration tests)      |
+| Hosting        | Vercel                                                                                |
+| Graphics       | HTML/CSS/SVG in the browser, exported to PNG with `html-to-image`                     |
 
 Deliberate Spark-plan constraints: no Cloud Functions, no Firebase Storage and no
 Firebase Analytics. The web app initialises Auth and Firestore only.

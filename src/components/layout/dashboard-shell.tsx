@@ -17,7 +17,7 @@ import {
   isNavigationItemActive,
   type NavigationItem,
 } from "@/lib/config/navigation";
-import { viewerDisplayName, type Viewer } from "@/lib/auth/viewer";
+import { viewerName, type Viewer } from "@/lib/auth/viewer";
 import { cn } from "@/lib/utils/cn";
 
 interface DashboardShellProps {
@@ -71,7 +71,7 @@ function NavigationList({
 export function DashboardShell({ viewer, children }: DashboardShellProps) {
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const displayName = viewerDisplayName(viewer.email);
+  const displayName = viewerName(viewer);
   const activeItem = dashboardNavigation.find((item) =>
     isNavigationItemActive(pathname, item.href, item.exact),
   );
@@ -103,7 +103,7 @@ export function DashboardShell({ viewer, children }: DashboardShellProps) {
 
         <div className="border-t border-white/10 p-4">
           <div className="mb-3 flex items-center gap-3">
-            <Avatar name={displayName} size="sm" />
+            <Avatar name={displayName} src={viewer.avatarUrl} size="sm" />
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-white">{displayName}</p>
               <p className="truncate text-xs text-grey-500">{viewer.email}</p>
@@ -146,7 +146,7 @@ export function DashboardShell({ viewer, children }: DashboardShellProps) {
               aria-label="Your profile"
               className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-400"
             >
-              <Avatar name={displayName} size="sm" />
+              <Avatar name={displayName} src={viewer.avatarUrl} size="sm" />
             </Link>
             <IconButton
               label="Open dashboard menu"
@@ -230,7 +230,7 @@ export function DashboardShell({ viewer, children }: DashboardShellProps) {
             </Link>
           ) : null}
           <div className="mt-4 flex items-center gap-3">
-            <Avatar name={displayName} size="sm" />
+            <Avatar name={displayName} src={viewer.avatarUrl} size="sm" />
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-white">{displayName}</p>
               <p className="truncate text-xs text-grey-500">{viewer.email}</p>

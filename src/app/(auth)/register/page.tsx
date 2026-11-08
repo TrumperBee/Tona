@@ -1,20 +1,22 @@
 // GCC - account registration.
-// Accounts are not open in Phase 3; no registration form is rendered.
-import { AuthNotice } from "@/components/auth/auth-notice";
+import { RegisterForm } from "@/components/auth/register-form";
 
 export const metadata = { title: "Create an account" };
 
 export default function RegisterPage() {
   return (
-    <AuthNotice
-      eyebrow="Accounts"
-      title="Registration is not open yet"
-      description="Player and organiser accounts open with the first GCC season. There is no form to submit at this stage, and no personal details are being collected."
-      details={[
-        "Players will register a gamer tag, country, preferred game and platform.",
-        "Email verification will be required before a tournament entry is accepted.",
-        "Organiser status is granted by application and review, never by a public toggle.",
-      ]}
-    />
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-eyebrow text-gold-300">Accounts</p>
+      <h1 className="mt-2 font-display text-3xl font-semibold uppercase tracking-display text-white sm:text-4xl">
+        Create your player account
+      </h1>
+      <p className="mt-3 text-sm leading-6 text-grey-300">
+        One account covers every tournament you enter. Your gamer tag is permanent and anchors your
+        competitive record.
+      </p>
+      <div className="mt-8">
+        <RegisterForm />
+      </div>
+    </div>
   );
 }

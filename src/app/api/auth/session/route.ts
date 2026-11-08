@@ -10,15 +10,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { SESSION_COOKIE_NAME, SESSION_RATE_LIMIT } from "@/lib/auth/constants";
-import { isSuperAdminEmail, isUserRole } from "@/lib/auth/roles";
+import { syncSessionRole } from "@/lib/auth/role-sync";
 import { clearSessionCookie, createSessionCookie, setSessionCookie } from "@/lib/auth/session";
-import { getServerEnv } from "@/lib/config/env.server";
 import { getFirebaseAdminAuth, getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 import { checkRateLimit, rateLimitPolicy } from "@/lib/rate-limit";
 import { assertSameOrigin, SameOriginError } from "@/lib/security/same-origin";
 import { sessionExchangeSchema } from "@/lib/validation/auth";
-import { isAccountStatus, type UserRole } from "@/types/domain";
+import { isAccountStatus } from "@/types/domain";
 
 export const runtime = "nodejs";
 
@@ -93,45 +92,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return jsonError(`This account is ${privateStatus}.`, 403);
     }
 
-    const env = getServerEnv();
-    const configuredSuperAdmin = isSuperAdminEmail(user.email, env.SUPER_ADMIN_EMAIL);
-    const allowedSuperAdmin = configuredSuperAdmin && user.emailVerified;
-    const currentClaimValue = user.customClaims?.role;
-    const currentClaim = isUserRole(currentClaimValue) ? currentClaimValue : "user";
+    const synced = await syncSessionRole(user.uid);
 
-    let role: UserRole = currentClaim;
-
-    if (allowedSuperAdmin) {
-      role = "super_admin";
-    } else if (currentClaim === "super_admin") {
-      // The configuration changed, or the owner's email is no longer verified.
-      // Strip the stale privileged claim and force a fresh sign-in rather than
-      // issuing a cookie that could still read Super Admin-only data.
-      const claims: Record<string, unknown> = { ...(user.customClaims ?? {}), role: "user" };
-      delete claims.superAdmin;
-      await auth.setCustomUserClaims(user.uid, claims);
-      await auth.revokeRefreshTokens(user.uid);
-
+    if (synced.revoked) {
       return NextResponse.json({
-        role: "user" satisfies UserRole,
+        role: synced.role,
         refreshRequired: true,
         message: "Your account permissions changed. Refresh your token and sign in again.",
       });
     }
 
-    const claimsChanged = currentClaim !== role || user.customClaims?.superAdmin !== undefined;
-
-    if (claimsChanged) {
-      const claims: Record<string, unknown> = { ...(user.customClaims ?? {}), role };
-      delete claims.superAdmin;
-      await auth.setCustomUserClaims(user.uid, claims);
-    }
-
     const sessionCookie = await createSessionCookie(parsed.data.idToken);
     const response = NextResponse.json({
-      role,
-      emailVerified: user.emailVerified,
-      refreshRequired: claimsChanged,
+      role: synced.role,
+      emailVerified: synced.emailVerified,
+      refreshRequired: synced.refreshRequired,
     });
     setSessionCookie(response, sessionCookie);
 

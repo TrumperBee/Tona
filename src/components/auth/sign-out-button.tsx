@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { signOutCompletely } from "@/lib/auth/client";
 
 interface SignOutButtonProps {
   readonly variant?: "primary" | "secondary" | "ghost";
@@ -26,7 +27,7 @@ export function SignOutButton({
     setLoading(true);
 
     try {
-      await fetch("/api/auth/session", { method: "DELETE" });
+      await signOutCompletely();
       router.refresh();
       router.push("/");
     } finally {

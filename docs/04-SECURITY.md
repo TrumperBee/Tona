@@ -1,8 +1,10 @@
 # GCC — Security Requirements
 
-> **Status: Phase 3B implemented.** Firestore rules, session exchange, guards,
+> **Status: Phase 4 implemented.** Firestore rules, session exchange, guards,
+> registration, email verification, password reset, profile editing, avatar upload,
 > role/status administration, audit logging, rate limiting, same-origin checks,
-> security headers and rules tests exist. CSP and App Check remain Phase 18.
+> security headers, rules tests and emulator integration tests exist. CSP and App
+> Check remain Phase 18.
 
 ## 1. Security model
 
@@ -52,12 +54,15 @@ variants create duplicate identities.
 
 - `gamerTags/{gamerTagLower}` uses the normalised lowercase tag as the document
   id. Firestore guarantees one document per id.
-- Profile creation/update runs in a transaction that reserves the tag and writes
-  the profile together; a failed transaction leaves no partial reservation.
+- Registration creates the Auth user first, then reserves the tag, creates
+  `users/{uid}` and creates `publicProfiles/{uid}` in one transaction using
+  `transaction.create()`. A failed transaction deletes the Auth user, leaving no
+  orphan account or partial reservation.
 - The reservation collection is server-only on read and write.
-- Zod normalises whitespace and validates the allowed character set.
-- Changing a tag releases the old reservation and reserves the new one in the
-  same transaction.
+- Zod normalises whitespace and validates the allowed character set and reserved
+  words; the browser check is advisory and the server re-validates.
+- Gamer tags are immutable after creation. There is no rename path, so a tag
+  cannot be released and re-registered to rewrite history.
 
 ### 2.3 Phone-number leakage
 
@@ -169,6 +174,27 @@ different error messages, public profiles or collection reads.
 - **No hard deletes:** rules deny deletes and the server uses status/archive
   changes. Competition records are retained.
 
+### 2.9 Avatar upload abuse
+
+**Threat:** a caller uploads executable or oversized content, spoofs the MIME
+type, or injects an arbitrary remote URL into the profile.
+
+**Controls:**
+
+- The browser sends bytes as multipart form data, never a URL. The server builds
+  the Cloudinary delivery URL itself and rejects any client-supplied URL.
+- The server verifies the real format from magic bytes (JPEG, PNG or WebP) and
+  ignores the client-declared MIME type. Anything else is rejected with 415.
+- Uploads are capped at 1,000,000 bytes before parsing into an image.
+- The client centre-crops and compresses to a 512×512 square before upload; the
+  server does not rely on that for safety.
+- Uploads go to the server-only `gcc/avatars/{uid}` Cloudinary folder with
+  `f_auto,q_auto` delivery. Cloudinary credentials never reach the browser.
+- Avatar replacement and removal are transactional, and the previous Cloudinary
+  asset is destroyed on removal. The rate limit is 5 changes per hour per user.
+- If Cloudinary is not configured, the avatar route returns 503 while the rest of
+  the account and profile continue to work.
+
 ## 3. Authentication and sessions
 
 - Firebase Authentication owns password hashing and credential verification.
@@ -183,6 +209,15 @@ different error messages, public profiles or collection reads.
 - `src/proxy.ts` only checks for cookie presence and redirects to `/login`. It is
   a navigation guard, not authorisation. The `next` parameter is sanitised by
   `safeRedirectPath()`; only a same-origin relative path is accepted.
+- `POST /api/auth/register` is server-first: it validates the payload, normalises
+  WhatsApp to E.164, creates the Firebase Auth user, then writes the tag
+  reservation and both profiles in one Firestore transaction. Any failure deletes
+  the Auth user. Registration never sets a custom claim.
+- Sign-in and password-reset responses are deliberately generic. The client never
+  learns whether an email address has an account.
+- Unverified accounts may read their own dashboard and profile. Server-side
+  tournament registration uses `requireVerifiedUser`, so an unverified email
+  cannot enter a competition.
 - Server guards (`src/lib/auth/guards.ts`) are the authorisation boundary:
   `getCurrentUser`, `requireUser`, `requireVerifiedUser`, `requireRole`,
   `requireSuperAdmin`, `requireTournamentOwnerOrSuperAdmin`.
@@ -209,8 +244,10 @@ different error messages, public profiles or collection reads.
   `firestore.indexes.json`.
 - Tests use `@firebase/rules-unit-testing` against the emulator. The emulator
   requires Java 21. Run `npm run test:rules`; plain `npm test` never needs Java.
-  Tests cover anonymous denial, owner-only reads, draft isolation, organiser
-  ownership, result-report access, collection-group leakage, Super Admin audit
+  Tests cover anonymous denial, owner-only reads, memberships, public history,
+  draft isolation, organiser ownership, result-report access, broad
+  collection-group denial for history/memberships/result reports,
+  collection-group leakage for matches and registrations, Super Admin audit
   access and the deny-all write matrix for user, organiser and Super Admin
   clients.
 
@@ -229,9 +266,10 @@ different error messages, public profiles or collection reads.
 
 - Only `NEXT_PUBLIC_*` variables reach the browser.
 - `FIREBASE_ADMIN_PROJECT_ID`, `FIREBASE_ADMIN_CLIENT_EMAIL`,
-  `FIREBASE_ADMIN_PRIVATE_KEY`, `SUPER_ADMIN_EMAIL` and
-  `SESSION_COOKIE_MAX_AGE_DAYS` are server-only and validated by
-  `src/lib/config/env.server.ts`.
+  `FIREBASE_ADMIN_PRIVATE_KEY`, `SUPER_ADMIN_EMAIL`,
+  `SESSION_COOKIE_MAX_AGE_DAYS`, `CLOUDINARY_CLOUD_NAME`,
+  `CLOUDINARY_API_KEY` and `CLOUDINARY_API_SECRET` are server-only and validated
+  by `src/lib/config/env.server.ts`.
 - The private key keeps escaped `\n` sequences and is normalised only in server
   memory.
 - `.env.local` is git-ignored; `.env.example` contains no real values.
@@ -241,9 +279,14 @@ different error messages, public profiles or collection reads.
 ## 7. Input validation
 
 - Every server action and route handler parses input with a Zod schema.
-- Payload schemas cover profiles, admin applications, tournament create/update,
-  admin result entry/corrections, result reports, role changes and account
-  status.
+- Payload schemas cover registration, profiles, admin applications, tournament
+  create/update, admin result entry/corrections, result reports, role changes and
+  account status.
+- Profile PATCH accepts only `fullName`, `community`, `favouriteClub`,
+  `whatsapp`, `country`, `preferredGame` and `platform`. Gamer tag, email, role,
+  status, avatar URLs and statistics are rejected by the strict schema.
+- Country codes and game/platform ids are checked against the configured lists;
+  phone numbers are parsed with `libphonenumber-js` and stored only as E.164.
 - Status, owner, counters, roles and computed standings are never accepted from
   clients.
 - Firestore document shapes are enforced in server code because Firestore has no
@@ -255,9 +298,9 @@ different error messages, public profiles or collection reads.
 
 - Firestore-backed fixed-window counters run in transactions, so all serverless
   instances share the budget.
-- Sensitive endpoints: session exchange (implemented), registration, password
-  reset, admin result entry, result-report creation and admin application (later
-  phases).
+- Sensitive endpoints: session exchange, registration, gamer-tag lookup, player
+  search, profile edits and avatar changes (implemented); password reset, admin
+  result entry, result-report creation and admin application (later phases).
 - Limitations: fixed windows allow boundary bursts; transactions add latency;
   counter documents need eventual cleanup; keys must be scoped carefully.
 - Rate limiting is abuse control, not a WAF or a replacement for Firebase Auth

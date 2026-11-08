@@ -17,6 +17,7 @@ import {
   type RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
 import {
+  collection,
   collectionGroup,
   deleteDoc,
   doc,
@@ -510,6 +511,55 @@ describe("result reports", () => {
     await assertSucceeds(
       getDoc(doc(user("root", "super_admin"), "tournaments/public/resultReports/r1")),
     );
+  });
+
+  it("lets a reporter query only their own reports inside a public tournament", async () => {
+    const reporter = user("alice");
+    const ownReports = query(
+      collection(reporter, "tournaments/public/resultReports"),
+      where("reportedBy", "==", "alice"),
+    );
+    await assertSucceeds(getDocs(ownReports));
+
+    const everyoneReports = collection(reporter, "tournaments/public/resultReports");
+    await assertFails(getDocs(everyoneReports));
+  });
+
+  it("lets the tournament owner read the whole report channel", async () => {
+    await assertSucceeds(
+      getDocs(collection(user("organiser-a", "organiser"), "tournaments/public/resultReports")),
+    );
+  });
+
+  it("is not exposed through a broad collection-group query", async () => {
+    await assertFails(getDocs(collectionGroup(user("alice"), "resultReports")));
+    await assertFails(getDocs(collectionGroup(anonymous(), "resultReports")));
+  });
+});
+
+describe("membership and history reads", () => {
+  it("lets an owner list only their own membership snapshots", async () => {
+    const alice = user("alice");
+    await assertSucceeds(getDocs(collection(alice, "users/alice/memberships")));
+
+    const bob = user("bob");
+    await assertFails(getDocs(collection(bob, "users/alice/memberships")));
+    await assertFails(getDoc(doc(anonymous(), "users/alice/memberships/public")));
+  });
+
+  it("does not expose memberships through a broad collection-group query", async () => {
+    await assertFails(getDocs(collectionGroup(user("alice"), "memberships")));
+    await assertFails(getDocs(collectionGroup(anonymous(), "memberships")));
+  });
+
+  it("lets the public list a player's public career history for that profile only", async () => {
+    await assertSucceeds(getDocs(collection(anonymous(), "publicProfiles/alice/history")));
+    await assertSucceeds(getDocs(collection(user("bob"), "publicProfiles/alice/history")));
+  });
+
+  it("does not expose career history through a broad collection-group query", async () => {
+    await assertFails(getDocs(collectionGroup(anonymous(), "history")));
+    await assertFails(getDocs(collectionGroup(user("alice"), "history")));
   });
 });
 

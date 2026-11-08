@@ -26,7 +26,26 @@ function normalizePrivateKey(privateKey: string): string {
   return privateKey.replace(/\\n/g, "\n");
 }
 
+/**
+ * True when the Firebase Emulator Suite is in use. The Admin SDK connects to
+ * the emulators through FIRESTORE_EMULATOR_HOST / FIREBASE_AUTH_EMULATOR_HOST
+ * and does not need real service-account credentials.
+ */
+export function isFirebaseEmulatorMode(): boolean {
+  return Boolean(process.env.FIRESTORE_EMULATOR_HOST || process.env.FIREBASE_AUTH_EMULATOR_HOST);
+}
+
 function createAdminApp(): App {
+  if (isFirebaseEmulatorMode()) {
+    const projectId =
+      process.env.FIREBASE_ADMIN_PROJECT_ID ??
+      process.env.GCLOUD_PROJECT ??
+      process.env.GOOGLE_CLOUD_PROJECT ??
+      "gcc-emulator";
+
+    return initializeApp({ projectId }, "gcc-admin");
+  }
+
   const env = getServerEnv();
   const privateKey = normalizePrivateKey(env.FIREBASE_ADMIN_PRIVATE_KEY);
 

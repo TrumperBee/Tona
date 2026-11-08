@@ -17,15 +17,18 @@
     "test:watch": "vitest",
     "emulators": "firebase emulators:start",
     "test:rules": "firebase emulators:exec --only firestore,auth \"vitest run --config vitest.rules.config.ts\"",
+    "test:integration": "firebase emulators:exec --only firestore,auth \"vitest run --config vitest.integration.config.ts\"",
     "rules:deploy": "firebase deploy --only firestore:rules",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
   "dependencies": {
+    "cloudinary": "^2.11.0",
     "clsx": "^2.1.1",
     "firebase": "^13.2.0",
     "firebase-admin": "^14.5.0",
     "html-to-image": "^1.11.13",
+    "libphonenumber-js": "^1.13.15",
     "lucide-react": "^1.70.0",
     "next": "16.4.5",
     "react": "19.3.0",

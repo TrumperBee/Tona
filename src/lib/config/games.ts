@@ -66,3 +66,8 @@ export function getGame(id: GameId): SupportedGame {
 
   return game;
 }
+
+/** Platforms supported by a game, typed as a plain list for comparisons. */
+export function getGamePlatforms(id: GameId): readonly PlatformId[] {
+  return getGame(id).platforms;
+}

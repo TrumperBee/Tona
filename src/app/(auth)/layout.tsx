@@ -38,12 +38,12 @@ export default function AuthLayout({
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 bg-hero-glow opacity-70"
         />
-        <div className="relative w-full max-w-md rounded-xl border border-white/10 bg-navy-900/70 p-6 shadow-card backdrop-blur sm:p-8">
+        <div className="relative w-full max-w-xl rounded-xl border border-white/10 bg-navy-900/70 p-6 shadow-card backdrop-blur sm:p-8">
           {children}
         </div>
       </main>
 
-      <footer className="border-t border-white/10 px-4 py-5 text-center text-xs leading-5 text-grey-500">
+      <footer className="border-t border-white/10 px-4 py-5 text-center text-xs leading-5 text-grey-400">
         GCC is an independent competition platform and is not affiliated with any football governing
         body, game publisher or league.
       </footer>
