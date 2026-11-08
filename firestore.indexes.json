@@ -74,16 +74,6 @@
       ]
     },
     {
-      "collectionGroup": "notifications",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [{ "fieldPath": "createdAt", "order": "DESCENDING" }]
-    },
-    {
-      "collectionGroup": "auditLogs",
-      "queryScope": "COLLECTION",
-      "fields": [{ "fieldPath": "createdAt", "order": "DESCENDING" }]
-    },
-    {
       "collectionGroup": "auditLogs",
       "queryScope": "COLLECTION",
       "fields": [
@@ -98,11 +88,6 @@
         { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
-    },
-    {
-      "collectionGroup": "standings",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [{ "fieldPath": "position", "order": "ASCENDING" }]
     }
   ],
   "fieldOverrides": []

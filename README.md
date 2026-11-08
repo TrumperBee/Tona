@@ -108,7 +108,7 @@ Never paste secrets into chat or commit them.
 | `npm run emulators`        | Start the Firebase Emulator Suite (Auth 9099, Firestore 8080, UI enabled)            |
 | `npm run test:rules`       | Run Firestore rules tests against the emulators (requires Java 21)                   |
 | `npm run test:integration` | Run registration and role integration tests against the emulators (requires Java 21) |
-| `npm run rules:deploy`     | Deploy Firestore rules to the default project                                        |
+| `npm run rules:deploy`     | Deploy Firestore rules and indexes to the default project                            |
 | `npm run format`           | Prettier write                                                                       |
 | `npm run format:check`     | Prettier check                                                                       |
 
