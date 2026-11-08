@@ -7,6 +7,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { SESSION_COOKIE_NAME } from "@/lib/auth/constants";
+import { safeRedirectPath } from "@/lib/security/redirect";
 
 const PROTECTED_PREFIXES = ["/dashboard", "/organiser", "/super-admin"] as const;
 
@@ -28,8 +29,11 @@ export function proxy(request: NextRequest) {
   }
 
   const loginUrl = new URL("/login", request.url);
-  // TODO(phase 2): validate this relative path before redirecting after login.
-  loginUrl.searchParams.set("next", pathname);
+  const safeNext = safeRedirectPath(pathname);
+
+  if (safeNext) {
+    loginUrl.searchParams.set("next", safeNext);
+  }
 
   return NextResponse.redirect(loginUrl);
 }

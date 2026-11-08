@@ -5,7 +5,7 @@ These tests run against the Firebase Emulator Suite using
 
 ## Requirements
 
-- **Java 11 or newer** on `PATH`. The Firestore emulator is a Java process.
+- **Java 21 (Temurin) or newer** on `PATH`. The Firestore emulator is a Java process.
   Verify with `java -version`.
 - Firebase CLI installed through the project's dev dependency (no global install
   required).
@@ -25,11 +25,11 @@ require Java or an emulator.
 ## What is covered
 
 - Anonymous users cannot read private collections.
-- Owners can read their private profile and notifications only.
-- Public profiles, public tournaments and public subcollections are readable.
+- Owners can read their private profile, notifications and memberships only.
+- Public profiles, public history, public tournaments and public subcollections are readable.
 - Draft and suspended tournaments remain hidden from the public.
 - An organiser can read their own draft but not another organiser's draft.
-- Disputes are visible only to match participants, the tournament owner and the
-  Super Admin.
+- Result reports are visible only to the reporter, the tournament owner and the Super Admin.
+- Collection-group match and registration queries cannot leak draft or suspended tournaments.
 - Audit logs and platform stats are Super Admin-only.
 - No client role can write to any collection.

@@ -84,20 +84,21 @@ const sections: readonly LegalSection[] = [
     ),
   },
   {
-    id: "results-disputes",
-    heading: "Results, standings and disputes",
+    id: "results-reports",
+    heading: "Results, standings and result reports",
     body: (
       <>
         <p>
           Match results, standings, qualification and knockout progression are calculated and stored
-          by the platform. The server record is authoritative; screenshots and chat messages may
-          support a review but do not replace it.
+          by the platform. The tournament owner or a Super Admin enters every final score; players
+          do not submit or confirm results. The server record is authoritative, and screenshots or
+          chat messages do not replace it.
         </p>
         <p>
-          A result challenge must be raised through the dispute process within the deadline
-          published for that tournament. Organisers review disputes and record a decision with a
-          reason. Decisions may be corrected; corrections create a new record and an audit entry
-          rather than deleting history.
+          A player who believes a recorded result is wrong can use the &ldquo;Report a
+          problem&rdquo; channel for admin review. A report is not an official result change. Any
+          correction is made by the tournament owner or Super Admin with a reason and an audit
+          entry, so history is preserved rather than deleted.
         </p>
       </>
     ),
@@ -142,8 +143,8 @@ const sections: readonly LegalSection[] = [
         </p>
         <p>
           An organiser must publish clear rules, apply them consistently, protect participant data
-          and use the platform&rsquo;s result and dispute tools rather than private side-agreements.
-          Abuse of the role may result in removal.
+          and use the platform&rsquo;s result and result-report tools rather than private
+          side-agreements. Abuse of the role may result in removal.
         </p>
       </>
     ),

@@ -12,7 +12,7 @@ import {
   ChevronDown,
   Copy,
   Download,
-  Gavel,
+  Flag,
   Info,
   LayoutDashboard,
   Plus,
@@ -730,7 +730,7 @@ function ShowcaseInner() {
                   { label: "Overview", icon: LayoutDashboard },
                   { label: "Players", icon: Users },
                   { label: "Fixtures", icon: CalendarDays },
-                  { label: "Disputes", icon: Gavel },
+                  { label: "Result reports", icon: Flag },
                   { label: "Settings", icon: Settings },
                 ].map((item) => {
                   const Icon = item.icon;

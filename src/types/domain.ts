@@ -28,15 +28,10 @@ export const TOURNAMENT_STATUSES = [
 ] as const;
 export type TournamentStatus = (typeof TOURNAMENT_STATUSES)[number];
 
-export const MATCH_STATUSES = [
-  "scheduled",
-  "awaiting_result",
-  "awaiting_confirmation",
-  "confirmed",
-  "disputed",
-  "completed",
-  "forfeited",
-] as const;
+// Results are entered by the tournament owner (or Super Admin) only. There is
+// no player submission or confirmation stage, so a match is either waiting to
+// be played or has a final result recorded by an authorised admin.
+export const MATCH_STATUSES = ["scheduled", "completed"] as const;
 export type MatchStatus = (typeof MATCH_STATUSES)[number];
 
 export const STAGE_TYPES = ["league", "playoff", "r16", "qf", "sf", "final"] as const;
@@ -45,11 +40,8 @@ export type StageType = (typeof STAGE_TYPES)[number];
 export const APPLICATION_STATUSES = ["pending", "approved", "rejected"] as const;
 export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number];
 
-export const DISPUTE_STATUSES = ["open", "under_review", "resolved", "rejected"] as const;
-export type DisputeStatus = (typeof DISPUTE_STATUSES)[number];
-
-export const RESULT_SOURCES = ["participant", "admin", "forfeit"] as const;
-export type ResultSource = (typeof RESULT_SOURCES)[number];
+export const RESULT_REPORT_STATUSES = ["open", "resolved", "dismissed"] as const;
+export type ResultReportStatus = (typeof RESULT_REPORT_STATUSES)[number];
 
 export const REGISTRATION_STATUSES = ["registered", "withdrawn", "removed"] as const;
 export type RegistrationStatus = (typeof REGISTRATION_STATUSES)[number];
@@ -62,7 +54,7 @@ export const NOTIFICATION_TYPES = [
   "tournament",
   "fixture",
   "result",
-  "dispute",
+  "result_report",
   "announcement",
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
@@ -100,6 +92,8 @@ export function canTransition(from: TournamentStatus, to: TournamentStatus): boo
   return allowed?.includes(to) ?? false;
 }
 
+// The authoritative role is the Firebase custom claim. Any `role` value kept
+// on this document is display-only and must never be used for authorisation.
 export interface UserDocument {
   readonly fullName: string;
   readonly gamerTag: string;
@@ -109,18 +103,18 @@ export interface UserDocument {
   readonly country: string;
   readonly preferredGame: GameId;
   readonly platform: PlatformId;
+  readonly community: string | null;
+  readonly favouriteClub: string | null;
   readonly photoUrl: string | null;
+  readonly avatarUrl: string | null;
+  readonly avatarPublicId: string | null;
+  readonly role?: UserRole;
   readonly status: AccountStatus;
   readonly createdAt: Timestamp;
   readonly updatedAt: Timestamp;
 }
 
-export interface PublicProfileDocument {
-  readonly gamerTag: string;
-  readonly country: string;
-  readonly preferredGame: GameId;
-  readonly platform: PlatformId;
-  readonly photoUrl: string | null;
+export interface ProfileStatTotals {
   readonly tournaments: number;
   readonly played: number;
   readonly wins: number;
@@ -129,6 +123,79 @@ export interface PublicProfileDocument {
   readonly goalsFor: number;
   readonly goalsAgainst: number;
   readonly titles: number;
+}
+
+export interface GameProfileStats extends ProfileStatTotals {
+  readonly rating: number | null;
+  readonly ratedMatches: number;
+}
+
+/**
+ * Typed profile aggregates. Phase 17 computes these values; until then the
+ * server writes the zero default. `byGame` is partial because a player only
+ * has entries for games they have actually played.
+ */
+export interface ProfileStats {
+  readonly overall: ProfileStatTotals;
+  readonly byGame: Readonly<Partial<Record<GameId, GameProfileStats>>>;
+}
+
+export const EMPTY_PROFILE_STATS: ProfileStats = {
+  overall: {
+    tournaments: 0,
+    played: 0,
+    wins: 0,
+    draws: 0,
+    losses: 0,
+    goalsFor: 0,
+    goalsAgainst: 0,
+    titles: 0,
+  },
+  byGame: {},
+};
+
+export interface PublicProfileDocument {
+  readonly gamerTag: string;
+  readonly gamerTagLower: string;
+  readonly country: string;
+  readonly preferredGame: GameId;
+  readonly platform: PlatformId;
+  readonly community: string | null;
+  readonly favouriteClub: string | null;
+  readonly photoUrl: string | null;
+  readonly avatarUrl: string | null;
+  readonly avatarPublicId: string | null;
+  readonly stats: ProfileStats;
+}
+
+/**
+ * Server-written "My Tournaments" entry. Owning the parent user document is
+ * enough to read it; no tournament read is required.
+ */
+export interface MembershipDocument {
+  readonly tournamentId: string;
+  readonly slug: string;
+  readonly name: string;
+  readonly gameId: GameId;
+  readonly status: TournamentStatus;
+  readonly registeredAt: Timestamp;
+}
+
+/** Server-written public career history entry for a completed tournament. */
+export interface PlayerHistoryDocument {
+  readonly tournamentName: string;
+  readonly slug: string;
+  readonly season: string;
+  readonly gameId: GameId;
+  readonly finalPosition: number;
+  readonly played: number;
+  readonly wins: number;
+  readonly draws: number;
+  readonly losses: number;
+  readonly goalsFor: number;
+  readonly goalsAgainst: number;
+  readonly wonTitle: boolean;
+  readonly completedAt: Timestamp;
 }
 
 export interface GamerTagReservation {
@@ -176,6 +243,7 @@ export interface TournamentDocument {
 }
 
 export interface RegistrationDocument {
+  readonly tournamentId: string;
   readonly gamerTag: string;
   readonly country: string;
   readonly photoUrl: string | null;
@@ -201,7 +269,6 @@ export interface DraftFixture {
   readonly homeTag: string;
   readonly awayTag: string;
   readonly scheduledAt: Timestamp | null;
-  readonly deadlineAt: Timestamp | null;
 }
 
 export interface FixtureValidationIssue {
@@ -222,17 +289,16 @@ export interface FixtureDraftDocument {
 export interface MatchResult {
   readonly homeGoals: number;
   readonly awayGoals: number;
-  readonly source: ResultSource;
-}
-
-export interface PendingMatchResult {
-  readonly submittedBy: string;
-  readonly homeGoals: number;
-  readonly awayGoals: number;
-  readonly submittedAt: Timestamp;
+  /** UID of the tournament owner or Super Admin who recorded the result. */
+  readonly enteredBy: string;
+  readonly enteredAt: Timestamp;
+  readonly lastEditedBy?: string;
+  readonly lastEditedAt?: Timestamp;
+  readonly editCount: number;
 }
 
 export interface MatchDocument {
+  readonly tournamentId: string;
   readonly stage: StageType;
   readonly matchday: number;
   readonly homeUid: string;
@@ -242,30 +308,25 @@ export interface MatchDocument {
   readonly participants: readonly [string, string];
   readonly status: MatchStatus;
   readonly scheduledAt: Timestamp;
-  readonly deadlineAt: Timestamp;
   readonly result: MatchResult | null;
-  readonly pendingResult: PendingMatchResult | null;
-  readonly confirmedAt: Timestamp | null;
   readonly updatedAt: Timestamp;
 }
 
-export interface DisputeSubmission {
-  readonly submittedBy: string;
-  readonly note: string;
-  readonly submittedAt: Timestamp;
-}
-
-export interface DisputeDocument {
+/**
+ * A player-to-admin "Report a problem" message about a recorded result. It is
+ * not an official result workflow: the admin may resolve or dismiss it, and
+ * the audit log records any result correction separately.
+ */
+export interface ResultReportDocument {
   readonly matchId: string;
-  readonly raisedBy: string;
-  readonly submissions: readonly DisputeSubmission[];
-  readonly evidenceNotes: string;
-  readonly status: DisputeStatus;
-  readonly resolution: string | null;
+  readonly reportedBy: string;
+  readonly reportedByTag: string;
+  readonly reason: string;
+  readonly status: ResultReportStatus;
+  readonly adminNote: string | null;
   readonly resolvedBy: string | null;
-  readonly reason: string | null;
+  readonly resolvedAt: Timestamp | null;
   readonly createdAt: Timestamp;
-  readonly updatedAt: Timestamp;
 }
 
 export interface StandingDocument {

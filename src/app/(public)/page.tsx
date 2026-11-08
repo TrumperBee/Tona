@@ -117,11 +117,11 @@ export default async function HomePage() {
           <div className="relative mx-auto w-full max-w-md">
             <div
               aria-hidden="true"
-              className="absolute inset-8 rounded-full bg-electric-500/10 blur-3xl"
+              className="absolute inset-8 rounded-full bg-[radial-gradient(circle_at_center,rgba(59,130,246,0.16),transparent_70%)]"
             />
             <Card
               variant="elevated"
-              className="relative overflow-hidden border-white/15 bg-navy-900/70 p-6 backdrop-blur"
+              className="relative overflow-hidden border-white/15 bg-navy-900/80 p-6"
             >
               <div className="flex items-center justify-between gap-3">
                 <p className="text-xs font-semibold uppercase tracking-eyebrow text-grey-400">

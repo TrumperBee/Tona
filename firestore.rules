@@ -70,16 +70,6 @@ service cloud.firestore {
         tournamentData(tournamentId).ownerUid == request.auth.uid;
     }
 
-    function matchPath(tournamentId, matchId) {
-      return /databases/$(database)/documents/tournaments/$(tournamentId)/matches/$(matchId);
-    }
-
-    function isMatchParticipant(tournamentId, matchId) {
-      return signedIn() &&
-        exists(matchPath(tournamentId, matchId)) &&
-        request.auth.uid in get(matchPath(tournamentId, matchId)).data.participants;
-    }
-
     // Private profile: owner or Super Admin.
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isSuperAdmin());
@@ -87,11 +77,20 @@ service cloud.firestore {
       match /notifications/{notificationId} {
         allow read: if signedIn() && request.auth.uid == uid;
       }
+
+      // "My Tournaments" membership snapshots are owner-read only.
+      match /memberships/{tournamentId} {
+        allow read: if signedIn() && request.auth.uid == uid;
+      }
     }
 
-    // Public display profile.
+    // Public display profile and its public career history.
     match /publicProfiles/{uid} {
       allow read: if true;
+
+      match /history/{tournamentId} {
+        allow read: if true;
+      }
     }
 
     // Gamer-tag reservation: server-only on both read and write.
@@ -139,12 +138,13 @@ service cloud.firestore {
           isSuperAdmin();
       }
 
-      // Disputes are readable only by match participants, the owner and the
-      // Super Admin. Dispute documents carry a matchId field.
-      match /disputes/{disputeId} {
+      // Result reports are a player-to-admin "Report a problem" channel. They
+      // are readable by the reporter, the tournament owner and the Super Admin.
+      // They never change an official result; writes remain deny-all.
+      match /resultReports/{reportId} {
         allow read: if isTournamentOwner(tournamentId) ||
           isSuperAdmin() ||
-          isMatchParticipant(tournamentId, resource.data.matchId);
+          (signedIn() && resource.data.reportedBy == request.auth.uid);
       }
 
       // Derived competition data is public only with a public tournament.
@@ -189,6 +189,22 @@ service cloud.firestore {
     // Rate-limit counters are server-only.
     match /rateLimits/{key} {
       allow read: if false;
+    }
+
+    // Collection-group reads for player history. Every query must constrain
+    // tournamentId so the rules engine can prove that draft, suspended and
+    // otherwise hidden tournaments are excluded. A broad cross-tournament
+    // query fails rather than leaking a hidden tournament's documents.
+    match /{path=**}/matches/{matchId} {
+      allow read: if isPublishedTournament(resource.data.tournamentId) ||
+        isTournamentOwner(resource.data.tournamentId) ||
+        isSuperAdmin();
+    }
+
+    match /{path=**}/registrations/{uid} {
+      allow read: if isPublicTournament(resource.data.tournamentId) ||
+        isTournamentOwner(resource.data.tournamentId) ||
+        isSuperAdmin();
     }
 
     // Permanent deny-all writes. No client role, including Super Admin, may

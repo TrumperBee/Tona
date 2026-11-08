@@ -1,37 +1,38 @@
-// GCC — match, result and dispute input schemas.
-// Scores submitted by participants are never trusted as final: an authorised
-// admin confirms them before they affect standings.
+// GCC — admin-only match result and "Report a problem" input schemas.
+//
+// Results are entered by the tournament owner or Super Admin. Players never
+// submit or confirm scores; they can only report a problem for admin review.
 import { z } from "zod";
 
 export const scoreSchema = z.number().int().min(0).max(99);
 
 const firestoreIdSchema = z.string().trim().min(1).max(128);
 
-export const matchResultSubmissionSchema = z.object({
+export const matchResultEntrySchema = z.object({
+  tournamentId: firestoreIdSchema,
   matchId: firestoreIdSchema,
   homeGoals: scoreSchema,
   awayGoals: scoreSchema,
 });
 
-export const matchResultReviewSchema = z.object({
+export const matchResultCorrectionSchema = matchResultEntrySchema.extend({
+  reason: z.string().trim().min(5).max(300),
+});
+
+export const resultReportCreateSchema = z.object({
+  tournamentId: firestoreIdSchema,
   matchId: firestoreIdSchema,
-  decision: z.enum(["confirm", "reject"]),
-  reviewNote: z.string().trim().max(500).optional(),
+  reason: z.string().trim().min(5).max(500),
 });
 
-export const disputeCreateSchema = z.object({
-  matchId: firestoreIdSchema,
-  reason: z.string().trim().min(10).max(1000),
-  evidenceNotes: z.string().trim().max(5000).optional(),
+export const resultReportResolveSchema = z.object({
+  tournamentId: firestoreIdSchema,
+  reportId: firestoreIdSchema,
+  decision: z.enum(["resolved", "dismissed"]),
+  adminNote: z.string().trim().min(5).max(1000),
 });
 
-export const disputeResolveSchema = z.object({
-  disputeId: firestoreIdSchema,
-  decision: z.enum(["resolved", "rejected"]),
-  resolution: z.string().trim().min(10).max(2000),
-});
-
-export type MatchResultSubmissionInput = z.infer<typeof matchResultSubmissionSchema>;
-export type MatchResultReviewInput = z.infer<typeof matchResultReviewSchema>;
-export type DisputeCreateInput = z.infer<typeof disputeCreateSchema>;
-export type DisputeResolveInput = z.infer<typeof disputeResolveSchema>;
+export type MatchResultEntryInput = z.infer<typeof matchResultEntrySchema>;
+export type MatchResultCorrectionInput = z.infer<typeof matchResultCorrectionSchema>;
+export type ResultReportCreateInput = z.infer<typeof resultReportCreateSchema>;
+export type ResultReportResolveInput = z.infer<typeof resultReportResolveSchema>;

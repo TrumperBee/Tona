@@ -8,7 +8,7 @@ import {
   CalendarDays,
   CircleDot,
   ClipboardList,
-  Gavel,
+  Flag,
   Image as ImageIcon,
   LayoutDashboard,
   Megaphone,
@@ -32,13 +32,7 @@ export interface NavigationItem {
   readonly exact?: boolean;
 }
 
-export const publicNavigation = [
-  { href: "/tournaments", label: "Tournaments" },
-  { href: "/rankings", label: "Rankings" },
-  { href: "/hall-of-fame", label: "Hall of Fame" },
-  { href: "/archives", label: "Archives" },
-  { href: "/about", label: "About" },
-] as const;
+export { isNavigationItemActive, publicNavigation } from "@/lib/config/public-navigation";
 
 export const dashboardNavigation: readonly NavigationItem[] = [
   {
@@ -117,7 +111,7 @@ export const organiserTournamentWorkspace: readonly TournamentWorkspaceItem[] = 
   { segment: "fixtures", label: "Fixtures", icon: CalendarDays },
   { segment: "results", label: "Results", icon: ClipboardList },
   { segment: "knockout", label: "Knockout", icon: Swords },
-  { segment: "disputes", label: "Disputes", icon: Gavel },
+  { segment: "result-reports", label: "Result reports", icon: Flag },
   { segment: "announcements", label: "Announcements", icon: Megaphone },
   { segment: "graphics", label: "Graphics", icon: ImageIcon },
   { segment: "settings", label: "Settings", icon: Settings },
@@ -159,10 +153,10 @@ export const superAdminNavigation: readonly NavigationItem[] = [
     icon: Trophy,
   },
   {
-    href: "/super-admin/disputes",
-    label: "Disputes",
-    description: "Result challenges and reviews",
-    icon: Gavel,
+    href: "/super-admin/result-reports",
+    label: "Result reports",
+    description: "Player reports about recorded results",
+    icon: Flag,
   },
   {
     href: "/super-admin/announcements",
@@ -189,15 +183,6 @@ export const superAdminNavigation: readonly NavigationItem[] = [
     icon: Settings,
   },
 ];
-
-/** True when a pathname belongs to a navigation item. */
-export function isNavigationItemActive(pathname: string, href: string, exact = false): boolean {
-  if (pathname === href) {
-    return true;
-  }
-
-  return !exact && pathname.startsWith(`${href}/`);
-}
 
 /** Extracts the tournament id from an organiser workspace path, if present. */
 export function tournamentIdFromOrganiserPath(pathname: string): string | null {

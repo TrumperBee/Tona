@@ -43,8 +43,7 @@ const sections: readonly LegalSection[] = [
           </li>
           <li>
             <strong className="text-grey-100">Competition data:</strong> registrations, pot and
-            fixture assignments, submitted and verified results, standings, disputes and
-            announcements.
+            fixture assignments, admin-entered results, standings, result reports and announcements.
           </li>
           <li>
             <strong className="text-grey-100">Organiser data:</strong> application details such as
@@ -73,7 +72,7 @@ const sections: readonly LegalSection[] = [
           <li>To enter you in competitions, generate fixtures and record results.</li>
           <li>To display public competition records and career statistics.</li>
           <li>To review organiser applications and administer roles.</li>
-          <li>To investigate disputes, fair-play concerns and security incidents.</li>
+          <li>To investigate result reports, fair-play concerns and security incidents.</li>
           <li>To meet legal obligations and enforce our terms.</li>
         </ul>
         <p>

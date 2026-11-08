@@ -20,11 +20,13 @@ export const COLLECTIONS = {
 
 export const SUBCOLLECTIONS = {
   notifications: "notifications",
+  memberships: "memberships",
+  history: "history",
   registrations: "registrations",
   draw: "draw",
   fixtureDrafts: "fixtureDrafts",
   matches: "matches",
-  disputes: "disputes",
+  resultReports: "resultReports",
   standings: "standings",
   knockoutTies: "knockoutTies",
   announcements: "announcements",
@@ -66,9 +68,17 @@ export const paths = {
     collectionPath(COLLECTIONS.users, uid, SUBCOLLECTIONS.notifications),
   userNotification: (uid: string, notificationId: string) =>
     documentPath(COLLECTIONS.users, uid, SUBCOLLECTIONS.notifications, notificationId),
+  userMemberships: (uid: string) =>
+    collectionPath(COLLECTIONS.users, uid, SUBCOLLECTIONS.memberships),
+  userMembership: (uid: string, tournamentId: string) =>
+    documentPath(COLLECTIONS.users, uid, SUBCOLLECTIONS.memberships, tournamentId),
 
   publicProfiles: () => COLLECTIONS.publicProfiles,
   publicProfile: (uid: string) => documentPath(COLLECTIONS.publicProfiles, uid),
+  publicProfileHistory: (uid: string) =>
+    collectionPath(COLLECTIONS.publicProfiles, uid, SUBCOLLECTIONS.history),
+  publicProfileHistoryEntry: (uid: string, tournamentId: string) =>
+    documentPath(COLLECTIONS.publicProfiles, uid, SUBCOLLECTIONS.history, tournamentId),
 
   gamerTags: () => COLLECTIONS.gamerTags,
   gamerTag: (gamerTagLower: string) => documentPath(COLLECTIONS.gamerTags, gamerTagLower),
@@ -100,10 +110,10 @@ export const paths = {
     collectionPath(COLLECTIONS.tournaments, tournamentId, SUBCOLLECTIONS.matches),
   tournamentMatch: (tournamentId: string, matchId: string) =>
     documentPath(COLLECTIONS.tournaments, tournamentId, SUBCOLLECTIONS.matches, matchId),
-  tournamentDisputes: (tournamentId: string) =>
-    collectionPath(COLLECTIONS.tournaments, tournamentId, SUBCOLLECTIONS.disputes),
-  tournamentDispute: (tournamentId: string, disputeId: string) =>
-    documentPath(COLLECTIONS.tournaments, tournamentId, SUBCOLLECTIONS.disputes, disputeId),
+  tournamentResultReports: (tournamentId: string) =>
+    collectionPath(COLLECTIONS.tournaments, tournamentId, SUBCOLLECTIONS.resultReports),
+  tournamentResultReport: (tournamentId: string, reportId: string) =>
+    documentPath(COLLECTIONS.tournaments, tournamentId, SUBCOLLECTIONS.resultReports, reportId),
   tournamentStandings: (tournamentId: string) =>
     collectionPath(COLLECTIONS.tournaments, tournamentId, SUBCOLLECTIONS.standings),
   tournamentStanding: (tournamentId: string, uid: string) =>

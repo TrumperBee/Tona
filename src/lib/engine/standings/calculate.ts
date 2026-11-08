@@ -1,4 +1,5 @@
 // GCC — standings calculation.
 // Planned: compute league tables from confirmed results only. Unconfirmed,
-// disputed or rejected results must never affect standings.
+// Only admin-entered final results may affect standings. Unplayed or corrected
+// results are never inferred from client input.
 // TODO(phase 12): implement calculation from ConfirmedResult records.

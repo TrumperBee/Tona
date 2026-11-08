@@ -32,7 +32,7 @@ const topics = [
   {
     title: "Competitions and results",
     description:
-      "Questions about a published tournament, a fixture or a recorded result. Once competitions are live, result challenges must be raised through the dispute process so they carry an audit trail.",
+      "Questions about a published tournament, a fixture or a recorded result. Once competitions are live, use the “Report a problem” channel on the result so the review carries an audit trail.",
     icon: Trophy,
   },
   {
@@ -143,7 +143,7 @@ export default function ContactPage() {
                   <ul className="mt-5 space-y-3 text-sm leading-6 text-grey-300">
                     {[
                       "Include your gamer tag, the game and the competition name.",
-                      "Raise result challenges through the dispute process, not chat.",
+                      "Report a problem from the recorded result, not in chat.",
                       "Never send passwords, one-time codes or payment details.",
                     ].map((item) => (
                       <li key={item} className="flex items-start gap-2.5">

@@ -9,11 +9,13 @@ import { redirect } from "next/navigation";
 
 import { AuthenticationError, requireVerifiedUser } from "@/lib/auth/guards";
 import { hasRoleAtLeast } from "@/lib/auth/roles";
+import { safeRedirectPath } from "@/lib/security/redirect";
 import type { SessionUser } from "@/lib/auth/session";
 import type { UserRole } from "@/types/domain";
 
 function loginPath(nextPath: string): string {
-  return `/login?next=${encodeURIComponent(nextPath)}`;
+  const safeNext = safeRedirectPath(nextPath) ?? "/";
+  return `/login?next=${encodeURIComponent(safeNext)}`;
 }
 
 /**

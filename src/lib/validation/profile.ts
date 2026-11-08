@@ -25,7 +25,11 @@ const profileFields = {
   country: countryCodeSchema,
   preferredGame: gameIdSchema,
   platform: platformIdSchema,
+  community: z.string().trim().max(40).optional(),
+  favouriteClub: z.string().trim().max(40).optional(),
   photoUrl: z.url().max(500).optional(),
+  avatarUrl: z.url().max(500).optional(),
+  avatarPublicId: z.string().trim().max(200).optional(),
   whatsappE164: e164Schema.optional(),
 };
 

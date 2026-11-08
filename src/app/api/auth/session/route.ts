@@ -16,6 +16,7 @@ import { getServerEnv } from "@/lib/config/env.server";
 import { getFirebaseAdminAuth, getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 import { checkRateLimit, rateLimitPolicy } from "@/lib/rate-limit";
+import { assertSameOrigin, SameOriginError } from "@/lib/security/same-origin";
 import { sessionExchangeSchema } from "@/lib/validation/auth";
 import { isAccountStatus, type UserRole } from "@/types/domain";
 
@@ -33,6 +34,16 @@ function jsonError(message: string, status: number): NextResponse {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  try {
+    assertSameOrigin(request);
+  } catch (error) {
+    if (error instanceof SameOriginError) {
+      return jsonError("Cross-origin request rejected.", 403);
+    }
+
+    throw error;
+  }
+
   let body: unknown;
 
   try {
@@ -133,6 +144,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 }
 
 export async function DELETE(request: NextRequest): Promise<NextResponse> {
+  try {
+    assertSameOrigin(request);
+  } catch (error) {
+    if (error instanceof SameOriginError) {
+      return jsonError("Cross-origin request rejected.", 403);
+    }
+
+    throw error;
+  }
+
   const cookieValue = request.cookies.get(SESSION_COOKIE_NAME)?.value;
 
   if (cookieValue) {

@@ -123,9 +123,10 @@ and keeps one identity, profile and competitive record across all of them.
 ## 5. What success looks like
 
 - A community organiser can run a full 36-team season without spreadsheets.
-- A participant can see fixtures, submit results, follow standings and keep a permanent
-  record.
-- A dispute can be reviewed with evidence and an audit trail.
+- A participant can see fixtures, read admin-entered results, follow standings and keep a
+  permanent record.
+- A player can report a problem with a recorded result, and an admin can review it with an
+  audit trail.
 - A past season can be revisited years later with its champion, stats and Hall of Fame
   entries intact.
 - The platform can host additional competition formats without a rewrite.

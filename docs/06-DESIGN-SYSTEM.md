@@ -658,7 +658,7 @@ page-access helper. `workspace-shell.tsx` renders:
 
 - Organiser navigation: Overview, Tournaments, New tournament.
 - A tournament sub-navigation when the path contains an id: Overview, Registrations,
-  Pots and draw, Fixtures, Results, Knockout, Disputes, Announcements, Graphics,
+  Pots and draw, Fixtures, Results, Knockout, Result reports, Announcements, Graphics,
   Settings.
 
 Every route above exists in the app tree. The overall accent is electric blue.
@@ -667,7 +667,7 @@ Every route above exists in the app tree. The overall accent is electric blue.
 
 `src/app/(super-admin)/layout.tsx` requires `super_admin`. The same `workspace-shell.tsx`
 renders a visually distinguishable console (gold-tinted rail) with: Overview, Users,
-Applications, Tournaments, Disputes, Announcements, Analytics, Audit log, Settings.
+Applications, Tournaments, Result reports, Announcements, Analytics, Audit log, Settings.
 
 ### 9.5 Access rules
 

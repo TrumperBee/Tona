@@ -16,7 +16,19 @@ import {
   type RulesTestContext,
   type RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
-import { deleteDoc, doc, getDoc, setDoc, Timestamp, type Firestore } from "firebase/firestore";
+import {
+  collectionGroup,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  orderBy,
+  query,
+  setDoc,
+  Timestamp,
+  where,
+  type Firestore,
+} from "firebase/firestore";
 import { afterAll, beforeAll, beforeEach, describe, it } from "vitest";
 
 const rules = readFileSync(
@@ -91,18 +103,28 @@ async function seed(): Promise<void> {
       }),
       setDoc(doc(db, "publicProfiles/alice"), {
         gamerTag: "Alice",
+        gamerTagLower: "alice",
         country: "NG",
         preferredGame: "efootball",
         platform: "android",
+        community: "UON Esports Club",
+        favouriteClub: "Arsenal",
         photoUrl: null,
-        tournaments: 1,
-        played: 0,
-        wins: 0,
-        draws: 0,
-        losses: 0,
-        goalsFor: 0,
-        goalsAgainst: 0,
-        titles: 0,
+        avatarUrl: null,
+        avatarPublicId: null,
+        stats: {
+          overall: {
+            tournaments: 1,
+            played: 0,
+            wins: 0,
+            draws: 0,
+            losses: 0,
+            goalsFor: 0,
+            goalsAgainst: 0,
+            titles: 0,
+          },
+          byGame: {},
+        },
       }),
       setDoc(doc(db, "gamerTags/alice"), { uid: "alice", createdAt: now }),
       setDoc(doc(db, "adminApplications/app1"), {
@@ -159,7 +181,47 @@ async function seed(): Promise<void> {
         startsAt: now,
         updatedAt: now,
       }),
+      setDoc(doc(db, "users/alice/memberships/public"), {
+        tournamentId: "public",
+        slug: "public-cup",
+        name: "Public Cup",
+        gameId: "efootball",
+        status: "registration_open",
+        registeredAt: now,
+      }),
+      setDoc(doc(db, "publicProfiles/alice/history/public"), {
+        tournamentName: "Public Cup",
+        slug: "public-cup",
+        season: "2026",
+        gameId: "efootball",
+        finalPosition: 1,
+        played: 0,
+        wins: 0,
+        draws: 0,
+        losses: 0,
+        goalsFor: 0,
+        goalsAgainst: 0,
+        wonTitle: false,
+        completedAt: now,
+      }),
       setDoc(doc(db, "tournaments/public/registrations/alice"), {
+        tournamentId: "public",
+        gamerTag: "Alice",
+        country: "NG",
+        photoUrl: null,
+        status: "registered",
+        registeredAt: now,
+      }),
+      setDoc(doc(db, "tournaments/draft/registrations/alice"), {
+        tournamentId: "draft",
+        gamerTag: "Alice",
+        country: "NG",
+        photoUrl: null,
+        status: "registered",
+        registeredAt: now,
+      }),
+      setDoc(doc(db, "tournaments/suspended/registrations/alice"), {
+        tournamentId: "suspended",
         gamerTag: "Alice",
         country: "NG",
         photoUrl: null,
@@ -187,6 +249,7 @@ async function seed(): Promise<void> {
         validation: { valid: true, issues: [] },
       }),
       setDoc(doc(db, "tournaments/public/matches/m1"), {
+        tournamentId: "public",
         stage: "league",
         matchday: 1,
         homeUid: "alice",
@@ -196,23 +259,61 @@ async function seed(): Promise<void> {
         participants: ["alice", "bob"],
         status: "scheduled",
         scheduledAt: now,
-        deadlineAt: now,
         result: null,
-        pendingResult: null,
-        confirmedAt: null,
         updatedAt: now,
       }),
-      setDoc(doc(db, "tournaments/public/disputes/d1"), {
-        matchId: "m1",
-        raisedBy: "alice",
-        submissions: [],
-        evidenceNotes: "",
-        status: "open",
-        resolution: null,
-        resolvedBy: null,
-        reason: null,
-        createdAt: now,
+      setDoc(doc(db, "tournaments/published/matches/p1"), {
+        tournamentId: "published",
+        stage: "league",
+        matchday: 1,
+        homeUid: "alice",
+        awayUid: "bob",
+        homeTag: "Alice",
+        awayTag: "Bob",
+        participants: ["alice", "bob"],
+        status: "scheduled",
+        scheduledAt: now,
+        result: null,
         updatedAt: now,
+      }),
+      setDoc(doc(db, "tournaments/draft/matches/d1"), {
+        tournamentId: "draft",
+        stage: "league",
+        matchday: 1,
+        homeUid: "alice",
+        awayUid: "bob",
+        homeTag: "Alice",
+        awayTag: "Bob",
+        participants: ["alice", "bob"],
+        status: "scheduled",
+        scheduledAt: now,
+        result: null,
+        updatedAt: now,
+      }),
+      setDoc(doc(db, "tournaments/suspended/matches/s1"), {
+        tournamentId: "suspended",
+        stage: "league",
+        matchday: 1,
+        homeUid: "alice",
+        awayUid: "bob",
+        homeTag: "Alice",
+        awayTag: "Bob",
+        participants: ["alice", "bob"],
+        status: "scheduled",
+        scheduledAt: now,
+        result: null,
+        updatedAt: now,
+      }),
+      setDoc(doc(db, "tournaments/public/resultReports/r1"), {
+        matchId: "m1",
+        reportedBy: "alice",
+        reportedByTag: "Alice",
+        reason: "The score recorded for this match looks incorrect.",
+        status: "open",
+        adminNote: null,
+        resolvedBy: null,
+        resolvedAt: null,
+        createdAt: now,
       }),
       setDoc(doc(db, "tournaments/public/standings/alice"), {
         gamerTag: "Alice",
@@ -329,13 +430,15 @@ describe("private collections", () => {
     }
   });
 
-  it("lets a user read only their own private profile and notifications", async () => {
+  it("lets a user read only their own private profile, notifications and memberships", async () => {
     const alice = user("alice");
 
     await assertSucceeds(getDoc(doc(alice, "users/alice")));
     await assertSucceeds(getDoc(doc(alice, "users/alice/notifications/n1")));
+    await assertSucceeds(getDoc(doc(alice, "users/alice/memberships/public")));
     await assertFails(getDoc(doc(alice, "users/bob")));
     await assertFails(getDoc(doc(alice, "users/bob/notifications/n1")));
+    await assertFails(getDoc(doc(alice, "users/bob/memberships/public")));
   });
 
   it("lets an applicant and the Super Admin read an admin application, but not another user", async () => {
@@ -346,10 +449,11 @@ describe("private collections", () => {
 });
 
 describe("public reads", () => {
-  it("lets anyone read public profiles, platform announcements and the Hall of Fame", async () => {
+  it("lets anyone read public profiles, their public history, platform announcements and the Hall of Fame", async () => {
     const db = anonymous();
 
     await assertSucceeds(getDoc(doc(db, "publicProfiles/alice")));
+    await assertSucceeds(getDoc(doc(db, "publicProfiles/alice/history/public")));
     await assertSucceeds(getDoc(doc(db, "announcements/platform-a1")));
     await assertSucceeds(getDoc(doc(db, "hallOfFame/h1")));
   });
@@ -373,7 +477,7 @@ describe("public reads", () => {
     await assertFails(getDoc(doc(db, "tournaments/draft")));
     await assertFails(getDoc(doc(db, "tournaments/suspended")));
     await assertFails(getDoc(doc(db, "tournaments/public/fixtureDrafts/current")));
-    await assertFails(getDoc(doc(db, "tournaments/public/disputes/d1")));
+    await assertFails(getDoc(doc(db, "tournaments/public/resultReports/r1")));
   });
 
   it("does not expose an unconfirmed draw but exposes a confirmed one", async () => {
@@ -395,17 +499,65 @@ describe("organiser ownership", () => {
   });
 });
 
-describe("disputes", () => {
-  it("is readable only by match participants, the owner and the Super Admin", async () => {
-    await assertSucceeds(getDoc(doc(user("alice"), "tournaments/public/disputes/d1")));
-    await assertSucceeds(getDoc(doc(user("bob"), "tournaments/public/disputes/d1")));
-    await assertFails(getDoc(doc(user("carol"), "tournaments/public/disputes/d1")));
+describe("result reports", () => {
+  it("is readable only by the reporter, the owner and the Super Admin", async () => {
+    await assertSucceeds(getDoc(doc(user("alice"), "tournaments/public/resultReports/r1")));
+    await assertFails(getDoc(doc(user("bob"), "tournaments/public/resultReports/r1")));
+    await assertFails(getDoc(doc(user("carol"), "tournaments/public/resultReports/r1")));
     await assertSucceeds(
-      getDoc(doc(user("organiser-a", "organiser"), "tournaments/public/disputes/d1")),
+      getDoc(doc(user("organiser-a", "organiser"), "tournaments/public/resultReports/r1")),
     );
     await assertSucceeds(
-      getDoc(doc(user("root", "super_admin"), "tournaments/public/disputes/d1")),
+      getDoc(doc(user("root", "super_admin"), "tournaments/public/resultReports/r1")),
     );
+  });
+});
+
+describe("collection-group player history", () => {
+  it("lets a player query matches for a published tournament", async () => {
+    const db = user("alice");
+    const history = query(
+      collectionGroup(db, "matches"),
+      where("tournamentId", "==", "published"),
+      where("participants", "array-contains", "alice"),
+      orderBy("updatedAt", "desc"),
+    );
+
+    await assertSucceeds(getDocs(history));
+  });
+
+  it("does not leak draft or suspended tournament matches through collection-group queries", async () => {
+    const db = user("alice");
+
+    const broad = query(
+      collectionGroup(db, "matches"),
+      where("participants", "array-contains", "alice"),
+      orderBy("updatedAt", "desc"),
+    );
+    await assertFails(getDocs(broad));
+
+    for (const tournamentId of ["draft", "suspended"]) {
+      const hidden = query(
+        collectionGroup(db, "matches"),
+        where("tournamentId", "==", tournamentId),
+        where("participants", "array-contains", "alice"),
+      );
+      await assertFails(getDocs(hidden));
+    }
+  });
+
+  it("lets a player query registrations for public tournaments only", async () => {
+    const published = query(
+      collectionGroup(user("alice"), "registrations"),
+      where("tournamentId", "==", "public"),
+    );
+    await assertSucceeds(getDocs(published));
+
+    const draft = query(
+      collectionGroup(user("alice"), "registrations"),
+      where("tournamentId", "==", "draft"),
+    );
+    await assertFails(getDocs(draft));
   });
 });
 
@@ -426,7 +578,9 @@ describe("client writes", () => {
     const writePaths = [
       "users/alice",
       "users/alice/notifications/n1",
+      "users/alice/memberships/public",
       "publicProfiles/alice",
+      "publicProfiles/alice/history/public",
       "gamerTags/alice",
       "adminApplications/app1",
       "tournaments/public",
@@ -434,7 +588,7 @@ describe("client writes", () => {
       "tournaments/public/draw/current",
       "tournaments/public/fixtureDrafts/current",
       "tournaments/public/matches/m1",
-      "tournaments/public/disputes/d1",
+      "tournaments/public/resultReports/r1",
       "tournaments/public/standings/alice",
       "tournaments/public/knockoutTies/t1",
       "tournaments/public/announcements/a1",

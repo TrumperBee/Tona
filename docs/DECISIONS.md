@@ -290,8 +290,8 @@ private data.
 **Decision.** Rules implement the read table in `docs/02-DATA-MODEL.md` exactly. Draft and
 suspended tournaments and all their subcollections are hidden from the public. Matches
 become public only for published statuses. Draws become public only after confirmation.
-Fixture drafts are owner/Super Admin only. Disputes require match participation, ownership
-or Super Admin. `gamerTags` and `rateLimits` have no client read. Every write is denied.
+Fixture drafts are owner/Super Admin only. Result reports are readable by the reporter, the
+tournament owner and the Super Admin, and cannot change a result. `gamerTags` and `rateLimits` have no client read. Every write is denied.
 
 **Consequences.** Queries may need explicit status filters to satisfy rules. Server routes
 remain the only write path. Rules tests assert both allowed reads and denied reads/writes.
@@ -406,3 +406,128 @@ calculations and stored timestamps use UTC; display converts to the tournament t
 **Consequences.** Daylight-saving changes in other zones are handled correctly by IANA
 data. All date formatting must take a tournament timezone rather than a hardcoded offset.
 Existing utility defaults are reviewed in Phase 3/8.
+
+---
+
+## ADR-020 — Results are entered by admins only
+
+**Date:** 2026-11-08
+**Status:** Accepted
+
+**Context.** Allowing players to submit scores created a provisional-result state, a
+confirmation step, a dispute workflow and several match statuses. Review showed that this
+made the authoritative result ambiguous and gave players a path into result data.
+
+**Decision.** Results are entered strictly by the tournament owner or the Super Admin. A
+match is either `scheduled` or `completed`. `MatchResult` records the score, `enteredBy`,
+`enteredAt`, optional last-editor fields and an `editCount`. Corrections require a reason and
+are audit-logged with before/after values. Players only read results.
+
+**Consequences.** `pendingResult`, `deadlineAt`, the old match statuses and participant result
+schemas are removed. The result entry route is the only write path for scores, and every
+correction leaves an audit trail. A future player-facing concern uses the result-report
+channel instead of a result workflow.
+
+---
+
+## ADR-021 — "Report a problem" replaces player disputes
+
+**Date:** 2026-11-08
+**Status:** Accepted
+
+**Context.** The dispute model implied that players could contest and potentially change an
+official result. The product needs a simple way for a player to ask an admin to review a
+recorded result, without creating a parallel decision process.
+
+**Decision.** Replace `tournaments/{id}/disputes` with
+`tournaments/{id}/resultReports`. A report carries `matchId`, `reportedBy`, `reportedByTag`,
+`reason` (max 500 characters), `status` (`open`, `resolved`, `dismissed`), `adminNote`,
+`resolvedBy`, `resolvedAt` and `createdAt`. It is readable by the reporter, the tournament
+owner and the Super Admin. Writes remain deny-all and are server-only.
+
+**Consequences.** Routes and navigation are renamed to `result-reports`; the organiser and
+Super Admin pages explain that a report is not an official result change. Any correction is
+made through the admin result workflow and audit log.
+
+---
+
+## ADR-022 — Profile fields for community, favourite club and avatars
+
+**Date:** 2026-11-08
+**Status:** Accepted
+
+**Context.** Public profiles need enough identity for community competition without exposing
+private contact data. The review also asked for typed career statistics and a stable
+lowercase gamer tag for prefix search.
+
+**Decision.** Add `community` (optional, max 40), `favouriteClub` (optional, max 40, plain
+text, no logos), `avatarUrl`, `avatarPublicId` and `gamerTagLower` to profiles. Replace the
+flat public aggregates with a typed `stats` object: `overall` plus a partial `byGame` map, each
+with tournaments, played, wins, draws, losses, goalsFor, goalsAgainst, titles, and per-game
+rating/ratedMatches. Defaults are zeros and `rating: null`. Add owner-read
+`users/{uid}/memberships/{tournamentId}` and public-read
+`publicProfiles/{uid}/history/{tournamentId}`.
+
+**Consequences.** Phase 17 computes the statistics; Phase 3B defines the shape. The users
+`role` field stays display-only; custom claims remain the only authority. Collection-group
+rules and indexes keep hidden tournaments out of player history queries.
+
+---
+
+## ADR-023 — Firebase default hosted email action handler
+
+**Date:** 2026-11-08
+**Status:** Accepted
+
+**Context.** The application had an `/auth/callback` route that returned 501 and did not
+verify Firebase action codes. Firebase Authentication already hosts email verification,
+password reset and email-change pages.
+
+**Decision.** Use Firebase's default hosted email action handler for all email actions. Delete
+`/auth/callback` and every reference to it. The application never receives or verifies
+Firebase email action codes.
+
+**Consequences.** There is one less route to secure, and email action links work without
+custom code. Branded email templates and a custom action handler can be revisited later if
+Firebase supports them without a Cloud Function.
+
+---
+
+## ADR-024 — Same-origin guard and security headers; CSP deferred to Phase 18
+
+**Date:** 2026-11-08
+**Status:** Accepted
+
+**Context.** Cookie-authenticated state-changing routes need CSRF defence beyond
+`SameSite=Lax`. Redirect parameters also need a reusable, testable sanitiser. A full CSP is
+risky before Firebase, Cloudinary and Next.js asset origins are finalised.
+
+**Decision.** Add a pure `safeRedirectPath()` used by the proxy and login redirect builder,
+and a reusable `assertSameOrigin(request)` helper applied to `/api/auth/session`. Every future
+POST/PATCH/PUT/DELETE route must call the helper. Add `X-Content-Type-Options: nosniff`,
+`Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY` and a restrictive
+`Permissions-Policy` in `next.config.ts`. Defer a Content-Security-Policy to Phase 18, when it
+can explicitly allow Firebase and Cloudinary.
+
+**Consequences.** Cross-origin state-changing requests are rejected with 403, and open-redirect
+tricks are unit-tested. CSP remains an explicit Phase 18 deliverable rather than an
+under-specified header that could break authentication or avatars.
+
+---
+
+## ADR-025 — Cloudinary for avatars
+
+**Date:** 2026-11-08
+**Status:** Accepted
+
+**Context.** The project stays on the Firebase Spark plan and does not use Firebase Storage.
+Profiles still need user avatars, and the review asked for a concrete storage decision.
+
+**Decision.** Store Cloudinary delivery URLs in `avatarUrl` and Cloudinary public ids in
+`avatarPublicId`. Do not add the Cloudinary SDK as a dependency; server code treats the values
+as opaque validated URLs/ids and can delete or replace an asset through a small server route
+when avatar upload is implemented.
+
+**Consequences.** No Firebase Storage or Cloudinary client dependency is added. Avatars are
+plain public URLs on `publicProfiles`, while `avatarPublicId` stays on the private user
+document. Image upload, transformation and cleanup are implemented in Phase 4.

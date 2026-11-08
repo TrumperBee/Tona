@@ -9,12 +9,14 @@ knockouts and preserves champions, player statistics and a Hall of Fame.
 
 GCC is **not affiliated with UEFA** and never uses UEFA logos or branding.
 
-> **Project status: Phase 2 - backend foundation.**
+> **Project status: Phase 3B - alignment and hardening patch.**
 > Phase 1 delivered the scaffold. Phase 1B migrated the database stack to Firebase.
-> Phase 2 implements the Firestore data model, Security Rules, rules tests and server auth
-> infrastructure. No accounts, tournaments, fixtures, results or dashboards are
-> implemented yet. Every page states which phase will build it. There is no fake data and
-> no decorative functionality.
+> Phase 2 implemented the Firestore data model, Security Rules, rules tests and server auth
+> infrastructure. Phase 3 delivered the public design system and site skeleton. Phase 3B
+> makes result handling admin-only, adds typed profile statistics and history, and hardens
+> redirects, same-origin checks and security headers. No accounts, tournaments, fixtures,
+> results or dashboards are implemented yet. Every page states which phase will build it.
+> There is no fake data and no decorative functionality.
 
 ## Architecture principle: clients read, the server writes
 
@@ -35,16 +37,17 @@ GCC is **not affiliated with UEFA** and never uses UEFA logos or branding.
 - Zod validation, server-side guards and custom claims
 - Vitest for unit tests
 - ESLint + Prettier
-- GitHub Actions CI: lint, typecheck, test
+- GitHub Actions CI: lint, typecheck, test, production build and rules tests
 - Deployment target: Vercel
+- Avatars: Cloudinary URLs stored on the profile (no Cloudinary SDK, no Firebase Storage)
 - Graphics: HTML/CSS/SVG in the browser, exported to PNG
 
 ## Requirements
 
-- Node.js 20.9 or newer (developed on Node 24)
+- Node.js 22 or newer (developed on Node 24)
 - npm 10 or newer
 - A Firebase project (default project id in `.firebaserc`: `tona-d6f56`)
-- Java 11+ only for `npm run test:rules` (the Firestore emulator is a Java process)
+- Java 21 (Temurin) only for `npm run test:rules` (the Firestore emulator is a Java process)
 
 ## Install and run
 
@@ -98,7 +101,7 @@ Never paste secrets into chat or commit them.
 | `npm run test`         | Vitest unit tests (no emulator or Java required)                          |
 | `npm run test:watch`   | Vitest in watch mode                                                      |
 | `npm run emulators`    | Start the Firebase Emulator Suite (Auth 9099, Firestore 8080, UI enabled) |
-| `npm run test:rules`   | Run Firestore rules tests against the emulators (requires Java 11+)       |
+| `npm run test:rules`   | Run Firestore rules tests against the emulators (requires Java 21)        |
 | `npm run rules:deploy` | Deploy Firestore rules to the default project                             |
 | `npm run format`       | Prettier write                                                            |
 | `npm run format:check` | Prettier check                                                            |
@@ -113,6 +116,11 @@ Firestore rules deny all client writes and allow reads only where documented in
 | -------------------------- | ------------------------------------------------------------ |
 | `POST /api/auth/session`   | Exchange a Firebase ID token for an http-only session cookie |
 | `DELETE /api/auth/session` | Clear the cookie and revoke refresh tokens                   |
+
+Both methods reject cross-origin requests. Every future state-changing route must call
+`assertSameOrigin()` from `src/lib/security/same-origin.ts` before reading a body.
+`NEXT_PUBLIC_SITE_URL` is optional in development (it falls back to
+`http://localhost:3000`) and required for a production build.
 
 ## Project layout
 
@@ -144,7 +152,7 @@ tests/            Unit tests now; rules and end-to-end tests later
 Start with [`docs/00-PROJECT-VISION.md`](docs/00-PROJECT-VISION.md), then:
 
 - [Architecture](docs/01-ARCHITECTURE.md)
-- [Firestore data model (planned)](docs/02-DATA-MODEL.md)
+- [Firestore data model](docs/02-DATA-MODEL.md)
 - [Competition engine](docs/03-COMPETITION-ENGINE.md)
 - [Security](docs/04-SECURITY.md)
 - [Roadmap](docs/05-ROADMAP.md)

@@ -1,6 +1,6 @@
 # GCC — Architecture
 
-> Status: Phase 2. This document defines the rules every phase must follow.
+> Status: Phase 3B. This document defines the rules every phase must follow.
 
 ## 1. Fixed technology stack
 
@@ -95,7 +95,7 @@ Firebase Analytics. The web app initialises Auth and Firestore only.
              └──────────────────────────────────────────┘
 ```
 
-### Write flow (e.g. confirm a result)
+### Write flow (e.g. enter an admin result)
 
 1. Client submits input to a route handler or server action.
 2. Server authenticates the session (Firebase session cookie, http-only).
@@ -160,7 +160,7 @@ No component writes data. Read hooks are added later.
 
 - `src/proxy.ts` — Next.js 16 Proxy. Cookie-presence navigation guard only; not
   authorisation.
-- `src/types/` — shared TypeScript types (Firestore types arrive in Phase 2).
+- `src/types/` — shared TypeScript types and Firestore document shapes.
 - `src/hooks/` — client hooks (later phases).
 - `firestore.rules` — Security Rules. Client writes are denied permanently.
 - `firestore.indexes.json` — composite indexes, deployed from the repository.
@@ -175,7 +175,8 @@ No component writes data. Read hooks are added later.
 
 - `src/lib/config/env.ts` validates public Firebase web configuration, the site URL and
   the eHubMarket URL. It reads each variable explicitly so Next.js can inline
-  `NEXT_PUBLIC_*` values.
+  `NEXT_PUBLIC_*` values. A blank `NEXT_PUBLIC_SITE_URL` falls back to
+  `http://localhost:3000` in development; production builds require a valid absolute URL.
 - `src/lib/config/env.server.ts` imports `server-only` and validates
   `FIREBASE_ADMIN_PROJECT_ID`, `FIREBASE_ADMIN_CLIENT_EMAIL`,
   `FIREBASE_ADMIN_PRIVATE_KEY`, `SUPER_ADMIN_EMAIL` and
@@ -191,11 +192,13 @@ No component writes data. Read hooks are added later.
 - Validation and utility tests live beside their modules or in the same test folder.
 - Security Rules are tested with `@firebase/rules-unit-testing` against the emulator
   suite: client reads allowed only where intended, **all client writes denied**. The
-  emulator requires Java 11+.
+  emulator requires Java 21 (Temurin).
 - Run `npm run test:rules` (starts emulators and runs the rules suite). Plain `npm test`
   runs unit tests only and never needs Java.
-- CI runs lint, typecheck and unit tests on every push and pull request. Rules tests run
-  in a Java-capable job.
+- CI runs lint, typecheck, unit tests and a production build with dummy public values on
+  every push and pull request. A separate Java 21 job runs the rules tests.
+- State-changing route tests cover same-origin rejection; redirect sanitiser tests cover
+  common open-redirect bypasses.
 - End-to-end tests arrive in Phase 18.
 
 ## 7. Deployment model

@@ -18,9 +18,11 @@ export default async function ResultsPage({ params }: PageProps) {
       title="Results"
       description={
         <>
-          Record verified scores and confirm the outcomes that update the league table. This
-          workspace is scoped to tournament <span className="font-mono text-grey-200">{id}</span>.
-          Every action applies to this competition only.
+          Record final scores as the tournament owner or Super Admin. A recorded result updates the
+          league table immediately; corrections require a reason and are kept in the audit history.
+          This workspace is scoped to tournament{" "}
+          <span className="font-mono text-grey-200">{id}</span>. Every action applies to this
+          competition only.
         </>
       }
       breadcrumbs={[
@@ -31,7 +33,7 @@ export default async function ResultsPage({ params }: PageProps) {
         { label: "Results" },
       ]}
       availabilityTitle="No results recorded yet"
-      availabilityDescription="Only confirmed matches will appear here. A score entered by a participant is not final until it passes the review process."
+      availabilityDescription="Only matches with a result entered by the tournament owner or Super Admin appear here. Players never submit or confirm scores; they can report a problem for admin review."
       icon={ClipboardList}
     />
   );

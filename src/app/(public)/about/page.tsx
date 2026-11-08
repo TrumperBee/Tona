@@ -104,7 +104,7 @@ export default function AboutPage() {
           <SectionHeading
             eyebrow="Why it exists"
             title="Community tournaments deserve real infrastructure"
-            description="Spreadsheets work until a competition grows. Then fixtures collide, tables are calculated by hand, disputes disappear into chat history and past seasons are impossible to revisit."
+            description="Spreadsheets work until a competition grows. Then fixtures collide, tables are calculated by hand, result reports disappear into chat history and past seasons are impossible to revisit."
           />
 
           <div className="mt-10 grid gap-4 sm:grid-cols-2">
@@ -278,7 +278,7 @@ export default function AboutPage() {
                     "Create a competition and publish its rules and dates.",
                     "Review registrations and confirm the field of 36.",
                     "Confirm pots, generate fixtures and publish them once.",
-                    "Record verified results, resolve disputes and preserve the season.",
+                    "Record admin-entered results, review result reports and preserve the season.",
                   ].map((item) => (
                     <li key={item} className="flex gap-2.5">
                       <CalendarCheck

@@ -44,7 +44,8 @@ Inputs:
 
 - Participants.
 - Fixtures.
-- **Confirmed** results only (never submitted, disputed or rejected results).
+- **Completed** results only. Results are entered by the tournament owner or Super Admin;
+  players never submit or confirm a score.
 - Format tiebreak order.
 
 Outputs:
@@ -87,8 +88,8 @@ The engine must fail loudly rather than publish an invalid schedule.
 ## 5. Standings and tiebreakers
 
 - Points: win = 3, draw = 1, loss = 0.
-- Only confirmed results affect standings. Submitted, disputed or rejected results are
-  excluded.
+- Only completed results affect standings. Unplayed or corrected results are never inferred
+  from client input.
 - Ordering plan:
   1. Points
   2. Goal difference

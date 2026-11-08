@@ -32,7 +32,7 @@ export default async function IdPage({ params }: PageProps) {
         { label: "Overview" },
       ]}
       availabilityTitle="Tournament management is not available yet"
-      availabilityDescription="Registrations, pots, fixtures, results, disputes, announcements and settings will be managed from this workspace when the competition engine opens."
+      availabilityDescription="Registrations, pots, fixtures, results, result reports, announcements and settings will be managed from this workspace when the competition engine opens."
       icon={LayoutDashboard}
     />
   );
