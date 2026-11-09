@@ -1,6 +1,6 @@
 # GCC — Firestore Data Model
 
-> **Status: implemented through Phase 4.** Document shapes live in
+> **Status: implemented through Phase 5.** Document shapes live in
 > `src/types/domain.ts`, path builders in `src/lib/firebase/paths.ts`, Zod input
 > schemas in `src/lib/validation/`, and Security Rules in `firestore.rules`.
 >
@@ -35,29 +35,30 @@
 
 ## 2. Path overview
 
-| Path                                          | Contents                                                                                                                                                                                               | Read access                                                     |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
-| `users/{uid}`                                 | Private profile: fullName, gamerTag, gamerTagLower, email, whatsappE164, country, preferredGame, platform, community, favouriteClub, photoUrl, avatarUrl, avatarPublicId, status, createdAt, updatedAt | Owner, Super Admin                                              |
-| `users/{uid}/notifications/{id}`              | type, title, body, link, read, createdAt                                                                                                                                                               | Owner                                                           |
-| `users/{uid}/memberships/{tournamentId}`      | tournamentId, slug, name, gameId, status, registeredAt                                                                                                                                                 | Owner                                                           |
-| `publicProfiles/{uid}`                        | gamerTag, gamerTagLower, country, preferredGame, platform, community, favouriteClub, photoUrl, avatarUrl, avatarPublicId, typed stats                                                                  | Anyone                                                          |
-| `publicProfiles/{uid}/history/{tournamentId}` | tournamentName, slug, season, gameId, finalPosition, played, wins, draws, losses, goalsFor, goalsAgainst, wonTitle, completedAt                                                                        | Anyone                                                          |
-| `gamerTags/{gamerTagLower}`                   | `{ uid, createdAt }` uniqueness reservation                                                                                                                                                            | Nobody (server only)                                            |
-| `adminApplications/{id}`                      | uid, communityName, experience, motivation, expectedPlayers, contact details, status, reviewer fields, timestamps                                                                                      | Applicant, Super Admin                                          |
-| `tournaments/{id}`                            | ownerUid, slug, name, description, gameId, formatId, coverImageUrl, rules, matchDurationMinutes, timezone, registration/starts dates, maxParticipants, registrationCount, status, season, timestamps   | Public unless `draft`/`suspended`; owner and Super Admin always |
-| `tournaments/{id}/registrations/{uid}`        | tournamentId, gamerTag, country, photoUrl, status, registeredAt                                                                                                                                        | Public with a public tournament; owner and Super Admin always   |
-| `tournaments/{id}/draw/current`               | pots `{1:[uid…],2:[…],3:[…],4:[…]}`, method, shuffleSeed, confirmedAt, confirmedBy                                                                                                                     | Owner/Super Admin before confirmation; public after             |
-| `tournaments/{id}/fixtureDrafts/current`      | Generated unpublished fixtures and validation report                                                                                                                                                   | Owner, Super Admin                                              |
-| `tournaments/{id}/matches/{matchId}`          | tournamentId, stage, matchday, homeUid, awayUid, homeTag, awayTag, participants, status, scheduledAt, result, updatedAt                                                                                | Owner/Super Admin always; public once fixtures are published    |
-| `tournaments/{id}/resultReports/{id}`         | matchId, reportedBy, reportedByTag, reason, status, adminNote, resolvedBy, resolvedAt, createdAt                                                                                                       | Reporter, owner, Super Admin                                    |
-| `tournaments/{id}/standings/{uid}`            | Derived gamerTag, MP, W, D, L, GF, GA, GD, Pts, position, qualificationBand                                                                                                                            | Public with a public tournament; owner and Super Admin always   |
-| `tournaments/{id}/knockoutTies/{id}`          | round, seeds, legs, aggregate, winnerUid, status                                                                                                                                                       | Public with a public tournament; owner and Super Admin always   |
-| `tournaments/{id}/announcements/{id}`         | title, body, authorUid, publishedAt                                                                                                                                                                    | Public with a public tournament; owner and Super Admin always   |
-| `announcements/{id}`                          | Platform-wide title, body, authorUid, publishedAt                                                                                                                                                      | Anyone                                                          |
-| `hallOfFame/{id}`                             | tournamentId, season, championUid/tag, finalistUid/tag, thirdPlace, stats                                                                                                                              | Anyone                                                          |
-| `auditLogs/{id}`                              | actorUid, actorRole, action, targetType, targetId, tournamentId, before, after, reason, createdAt                                                                                                      | Super Admin only                                                |
-| `rateLimits/{key}`                            | key, count, windowStart, expiresAt, updatedAt                                                                                                                                                          | Nobody (server only)                                            |
-| `platformStats/summary`                       | totalUsers, totalTournaments, totalMatches, activeTournaments, updatedAt                                                                                                                               | Super Admin only                                                |
+| Path                                          | Contents                                                                                                                                                                                               | Read access                                                      |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| `users/{uid}`                                 | Private profile: fullName, gamerTag, gamerTagLower, email, whatsappE164, country, preferredGame, platform, community, favouriteClub, photoUrl, avatarUrl, avatarPublicId, status, createdAt, updatedAt | Owner, Super Admin                                               |
+| `users/{uid}/notifications/{id}`              | type, title, body, link, read, createdAt                                                                                                                                                               | Owner                                                            |
+| `users/{uid}/memberships/{tournamentId}`      | tournamentId, slug, name, gameId, status, registeredAt                                                                                                                                                 | Owner                                                            |
+| `publicProfiles/{uid}`                        | gamerTag, gamerTagLower, country, preferredGame, platform, community, favouriteClub, photoUrl, avatarUrl, avatarPublicId, status, typed stats                                                          | Anyone                                                           |
+| `publicProfiles/{uid}/history/{tournamentId}` | tournamentName, slug, season, gameId, finalPosition, played, wins, draws, losses, goalsFor, goalsAgainst, wonTitle, completedAt                                                                        | Anyone                                                           |
+| `gamerTags/{gamerTagLower}`                   | `{ uid, createdAt }` uniqueness reservation                                                                                                                                                            | Nobody (server only)                                             |
+| `adminApplications/{id}`                      | uid, communityName, experience, motivation, expectedPlayers, contact details, status, reviewer fields, timestamps                                                                                      | Applicant, Super Admin                                           |
+| `tournaments/{id}`                            | ownerUid, slug, name, description, gameId, formatId, coverImageUrl, rules, matchDurationMinutes, timezone, registration/starts dates, maxParticipants, registrationCount, status, season, timestamps   | Public unless `draft`/`suspended`; owner and Super Admin always  |
+| `tournaments/{id}/registrations/{uid}`        | tournamentId, gamerTag, country, photoUrl, status, registeredAt                                                                                                                                        | Public with a public tournament; owner and Super Admin always    |
+| `tournaments/{id}/draw/current`               | pots `{1:[uid…],2:[…],3:[…],4:[…]}`, method, shuffleSeed, confirmedAt, confirmedBy                                                                                                                     | Owner/Super Admin before confirmation; public after              |
+| `tournaments/{id}/fixtureDrafts/current`      | Generated unpublished fixtures and validation report                                                                                                                                                   | Owner, Super Admin                                               |
+| `tournaments/{id}/matches/{matchId}`          | tournamentId, stage, matchday, homeUid, awayUid, homeTag, awayTag, participants, status, scheduledAt, result, updatedAt                                                                                | Owner/Super Admin always; public once fixtures are published     |
+| `tournaments/{id}/resultReports/{id}`         | matchId, reportedBy, reportedByTag, reason, status, adminNote, resolvedBy, resolvedAt, createdAt                                                                                                       | Reporter, owner, Super Admin                                     |
+| `tournaments/{id}/standings/{uid}`            | Derived gamerTag, MP, W, D, L, GF, GA, GD, Pts, position, qualificationBand                                                                                                                            | Public with a public tournament; owner and Super Admin always    |
+| `tournaments/{id}/knockoutTies/{id}`          | round, seeds, legs, aggregate, winnerUid, status                                                                                                                                                       | Public with a public tournament; owner and Super Admin always    |
+| `tournaments/{id}/announcements/{id}`         | title, body, authorUid, publishedAt                                                                                                                                                                    | Public with a public tournament; owner and Super Admin always    |
+| `announcements/{id}`                          | Platform-wide title, body, severity, pinned, publishedAt, expiresAt, authorUid, createdAt, updatedAt, deletedAt                                                                                        | Published, unexpired, non-deleted: anyone; otherwise Super Admin |
+| `hallOfFame/{id}`                             | tournamentId, season, championUid/tag, finalistUid/tag, thirdPlace, stats                                                                                                                              | Anyone                                                           |
+| `auditLogs/{id}`                              | actorUid, actorRole, action, targetType, targetId, tournamentId, before, after, reason, createdAt                                                                                                      | Super Admin only                                                 |
+| `rateLimits/{key}`                            | key, count, windowStart, expiresAt, updatedAt                                                                                                                                                          | Nobody (server only)                                             |
+| `platformSettings/main`                       | maintenanceMode, maintenanceMessage, registrationsOpen, maxActiveTournamentsPerOrganiser, applicationCooldownDays, updatedBy, updatedAt                                                                | Super Admin only (public fields served by a server helper)       |
+| `platformStats/summary`                       | totalUsers, totalTournaments, totalMatches, activeTournaments plus Phase 5 analytics fields, updatedAt                                                                                                 | Super Admin only                                                 |
 
 The canonical path builders are in `src/lib/firebase/paths.ts`. Server code must
 use them rather than hand-building strings.
@@ -99,7 +100,12 @@ refreshed by the server; Phase 17 computes them and Phase 3B defines the shape.
 
 Display fields: `gamerTag`, `gamerTagLower` (for prefix search), `country`,
 `preferredGame`, `platform`, `community`, `favouriteClub`, `photoUrl`,
-`avatarUrl`, `avatarPublicId`.
+`avatarUrl`, `avatarPublicId`, `status`.
+
+`status` mirrors `users/{uid}.status`. Suspended and banned profiles show
+"Profile unavailable" instead of player details, so account enforcement does not
+leave a live public identity behind. The server writes both documents together
+when the Super Admin changes an account status.
 
 `stats` is typed as:
 
@@ -285,8 +291,18 @@ awayGoals }`, `winnerUid`, `status` (`scheduled`, `in_progress`, `completed`).
 
 - `tournaments/{id}/announcements/{id}`: title, body, authorUid, publishedAt.
   Public with a public tournament.
-- `announcements/{id}`: platform-wide announcement with the same fields.
-  Public.
+- `announcements/{id}`: platform-wide notice with `title` (max 100), `body` (max
+  2000, plain text), `severity` (`info` or `important`), `pinned`,
+  `publishedAt` (null while a draft), optional `expiresAt`, `authorUid`,
+  `createdAt`, `updatedAt` and `deletedAt`. Public readers see only entries that
+  are published, not soft-deleted and not expired. The Super Admin console reads
+  drafts and deleted entries through the Admin SDK. Deletion is soft: the server
+  sets `deletedAt` and clears `publishedAt`; the record is retained.
+
+  Writes are server-only, one route per transition: create, edit, publish,
+  unpublish and delete. Each transition is audited. The signed-in banner shows
+  pinned or active notices and remembers dismissals in `localStorage` per
+  announcement id.
 
 ### 3.14 `users/{uid}/notifications/{id}` — notifications
 
@@ -305,16 +321,37 @@ Fields: `actorUid`, `actorRole`, `action`, `targetType`, `targetId`,
 `tournamentId`, `before`, `after`, `reason`, `createdAt`. Written by
 `src/lib/audit/log.ts`; readable only by Super Admin.
 
+Phase 5 actions: `user.status.set`, `user.role.set`, `user.contact_revealed`,
+`platform.settings.updated`, `announcement.created`, `announcement.updated`,
+`announcement.published`, `announcement.unpublished` and
+`announcement.deleted`. `src/lib/audit/actions.ts` is the register of known
+actions and their human-readable labels. Payloads are redacted before display
+(see `src/lib/audit/redact.ts`); phone numbers are never written to an audit
+entry. `user.contact_revealed` records only that a reveal happened, not the
+number.
+
 ### 3.17 `rateLimits/{key}` — fixed-window counters
 
 Fields: `key`, `count`, `windowStart`, `expiresAt`, `updatedAt` (epoch
 milliseconds). The document id is a SHA-256 hash of the caller key. Written by
 `src/lib/rate-limit/index.ts` inside a Firestore transaction. Not client-readable.
 
-### 3.18 `platformStats/summary` — owner overview counters
+### 3.18 `platformStats/summary` — Super Admin analytics
 
-Fields: `totalUsers`, `totalTournaments`, `totalMatches`, `activeTournaments`,
-`updatedAt`. Super Admin only.
+Cached summary refreshed on demand from the overview/analytics pages and the
+Refresh action. Figures that can be counted use Firestore `count()`
+aggregations.
+
+Exact counters: `totalUsers`, `totalTournaments`, `totalMatches`,
+`activeTournaments`, `totalRegistrations`, plus `tournamentsByStatus`.
+Breakdowns: `signupsByDay` (last 30 days), `usersByCountry`, `usersByGame` and
+`usersByPlatform`. Breakdowns and the daily series are derived from a bounded
+sample of at most `sampleCap` (`USER_SAMPLE_CAP = 1000`) user documents;
+`usersSampled` records how many were read so the UI can be honest about it.
+
+Cache metadata: `generatedAt` and `updatedAt`. The console treats a summary
+older than five minutes as stale and offers a manual Refresh; it never claims a
+cached figure is live. Super Admin only.
 
 ### 3.19 `users/{uid}/memberships/{tournamentId}` — "My Tournaments"
 
@@ -329,6 +366,30 @@ Fields: `tournamentName`, `slug`, `season`, `gameId`, `finalPosition`, `played`,
 `wins`, `draws`, `losses`, `goalsFor`, `goalsAgainst`, `wonTitle`,
 `completedAt`. Written by the server when a tournament is completed. Public
 read, never deleted.
+
+### 3.21 `platformSettings/main` — platform configuration
+
+The single settings document. Document id is always `main`.
+
+| Field                              | Type      | Notes                                                        |
+| ---------------------------------- | --------- | ------------------------------------------------------------ |
+| `maintenanceMode`                  | boolean   | When true, non-Super-Admin writes return 503                 |
+| `maintenanceMessage`               | string    | Max 300 characters; shown on the banner and in 503 responses |
+| `registrationsOpen`                | boolean   | Default `true`; when false, registration is rejected clearly |
+| `maxActiveTournamentsPerOrganiser` | number    | Integer 1–20, default 3                                      |
+| `applicationCooldownDays`          | number    | Integer 0–90, default 7                                      |
+| `updatedBy`                        | string    | UID of the acting Super Admin                                |
+| `updatedAt`                        | Timestamp | Server-written                                               |
+
+**Writer:** `PATCH /api/super-admin/settings` only, after the shared guard.
+**Readers:** Super Admin only by Security Rules. Public pages never read the
+document; `src/lib/platform/settings.ts` returns only `maintenanceMode`,
+`maintenanceMessage` and `registrationsOpen` through the Admin SDK. Missing
+documents fall back to the defaults above.
+
+Every other state-changing route calls `assertPlatformWritable(user)` first, so
+maintenance mode is enforced in one place. `assertRegistrationsOpen()` adds the
+registration-specific rejection. The Super Admin is never blocked.
 
 ## 4. Relationships
 
@@ -353,41 +414,56 @@ tournaments/{id}
 
 adminApplications/{id} ── uid ── users/{uid}
 auditLogs/{id} ── actorUid ── users/{uid}
+auditLogs/{id} ── targetType/targetId ── users/{uid} or announcements/{id}
+announcements/{id} ── authorUid ── users/{uid}
+platformSettings/main ── updatedBy ── users/{uid}
 hallOfFame/{id} ── tournamentId ── tournaments/{id}
 ```
 
 ## 5. Composite indexes
 
-`firestore.indexes.json` declares:
+`firestore.indexes.json` declares 38 composite indexes:
 
-| Collection group    | Fields                                                                | Use                                                  |
-| ------------------- | --------------------------------------------------------------------- | ---------------------------------------------------- |
-| `matches`           | `participants` ARRAY_CONTAINS + `matchday` ASC                        | A participant's fixtures by matchday                 |
-| `matches`           | `participants` ARRAY_CONTAINS + `scheduledAt` ASC                     | A participant's schedule                             |
-| `matches`           | `participants` ARRAY_CONTAINS + `updatedAt` DESC                      | A player's match history                             |
-| `matches`           | `tournamentId` ASC + `participants` ARRAY_CONTAINS + `updatedAt` DESC | Scoped player history that rules can prove is public |
-| `matches`           | `status` ASC + `matchday` ASC                                         | Operations queues                                    |
-| `tournaments`       | `status` ASC + `startsAt` ASC                                         | Public discovery                                     |
-| `tournaments`       | `ownerUid` ASC + `updatedAt` DESC                                     | Organiser dashboard                                  |
-| `registrations`     | `status` ASC + `registeredAt` ASC                                     | Registration review                                  |
-| `registrations`     | `tournamentId` ASC + `registeredAt` DESC                              | Scoped player registration history                   |
-| `notifications`     | `createdAt` DESC                                                      | User notification feed                               |
-| `auditLogs`         | `createdAt` DESC                                                      | Audit log viewer                                     |
-| `auditLogs`         | `actorUid` ASC + `createdAt` DESC                                     | Actor history                                        |
-| `adminApplications` | `status` ASC + `createdAt` DESC                                       | Review queue                                         |
-| `standings`         | `position` ASC                                                        | Public table                                         |
+| Collection group    | Fields                                                                                                       | Use                                                             |
+| ------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
+| `matches`           | `participants` ARRAY_CONTAINS + `matchday` ASC                                                               | A participant's fixtures by matchday                            |
+| `matches`           | `participants` ARRAY_CONTAINS + `scheduledAt` ASC                                                            | A participant's schedule                                        |
+| `matches`           | `participants` ARRAY_CONTAINS + `updatedAt` DESC                                                             | A player's match history                                        |
+| `matches`           | `tournamentId` ASC + `participants` ARRAY_CONTAINS + `updatedAt` DESC                                        | Scoped player history that rules can prove is public            |
+| `matches`           | `status` ASC + `matchday` ASC                                                                                | Operations queues                                               |
+| `tournaments`       | `status` ASC + `startsAt` ASC                                                                                | Public discovery                                                |
+| `tournaments`       | `ownerUid` ASC + `updatedAt` DESC                                                                            | Organiser dashboard                                             |
+| `tournaments`       | `status` ASC + `createdAt` DESC                                                                              | Super Admin tournament list, newest first                       |
+| `tournaments`       | `status` ASC + `name` ASC                                                                                    | Super Admin tournament name search                              |
+| `registrations`     | `status` ASC + `registeredAt` ASC                                                                            | Registration review                                             |
+| `registrations`     | `tournamentId` ASC + `registeredAt` DESC                                                                     | Scoped player registration history                              |
+| `users`             | Any non-empty subset of `role`, `status`, `country`, `preferredGame` in that fixed order, + `createdAt` DESC | Super Admin user list and every filter combination (15 indexes) |
+| `auditLogs`         | `action` / `actorUid` / `targetType` singly or in combination, + `createdAt` DESC                            | Audit viewer filters (7 indexes)                                |
+| `auditLogs`         | `targetType` ASC + `targetId` ASC + `createdAt` DESC                                                         | User-detail audit history                                       |
+| `announcements`     | `deletedAt` ASC + `createdAt` DESC                                                                           | Admin announcement list                                         |
+| `announcements`     | `deletedAt` ASC + `publishedAt` DESC                                                                         | Public announcement list                                        |
+| `adminApplications` | `status` ASC + `createdAt` DESC                                                                              | Review queue (Phase 6)                                          |
+| `adminApplications` | `uid` ASC + `createdAt` DESC                                                                                 | Applicant history (Phase 6)                                     |
 
-Add an index only with the query that needs it. Deploy with
-`firebase deploy --only firestore:indexes`.
+The user-filter queries must include equality fields in canonical order
+(`role`, `status`, `country`, `preferredGame`) followed by `createdAt DESC`;
+`src/lib/super-admin/users.ts` builds the query in that order. Single-field
+indexes such as `notifications.createdAt` and `standings.position` are created
+automatically by Firestore and are not declared here.
+
+Add an index only with the query that needs it. Deploy rules and indexes with
+`npm run rules:deploy`.
 
 ## 6. Security Rules summary
 
 - Default deny. `allow write: if false` for every document.
-- Public reads: `publicProfiles` (including `history` subcollection), platform
-  `announcements`, `hallOfFame`.
+- Public reads: `publicProfiles` (including `history` subcollection), published
+  and unexpired platform `announcements`, `hallOfFame`.
+- Draft, expired and soft-deleted platform announcements are readable only by
+  the Super Admin.
 - Private reads: `users` (owner/Super Admin), notifications and memberships
-  (owner), `adminApplications` (applicant/Super Admin), `auditLogs` and
-  `platformStats` (Super Admin).
+  (owner), `adminApplications` (applicant/Super Admin), `auditLogs`,
+  `platformStats` and `platformSettings` (Super Admin).
 - `gamerTags` and `rateLimits` have no client read at all.
 - Tournaments and their subcollections are hidden while `draft` or `suspended`.
 - Fixture drafts are owner/Super Admin only.
@@ -403,18 +479,19 @@ Add an index only with the query that needs it. Deploy with
 
 ## 7. Planned write boundaries
 
-| Phase | Server write                                                        |
-| ----- | ------------------------------------------------------------------- |
-| 2     | Session exchange, role/status administration, audit and rate limits |
-| 4     | Atomic registration, profile edit, avatar upload/removal            |
-| 6     | Admin application submission/review                                 |
-| 8     | Tournament create/update/publish, registration, membership snapshot |
-| 9     | Draw generation, admin shuffle, confirmation                        |
-| 10    | Fixture draft generation and publication                            |
-| 11    | Admin-only result entry, corrections, result-report decisions       |
-| 12    | Standings recomputation and snapshots                               |
-| 13    | Knockout progression                                                |
-| 16    | Notifications and announcements                                     |
-| 17    | Hall of Fame induction, profile stats and history snapshots         |
+| Phase | Server write                                                                                     |
+| ----- | ------------------------------------------------------------------------------------------------ |
+| 2     | Session exchange, role/status administration, audit and rate limits                              |
+| 4     | Atomic registration, profile edit, avatar upload/removal                                         |
+| 5     | Platform settings, account status/role actions, contact reveal, announcements, analytics refresh |
+| 6     | Admin application submission/review                                                              |
+| 8     | Tournament create/update/publish, registration, membership snapshot                              |
+| 9     | Draw generation, admin shuffle, confirmation                                                     |
+| 10    | Fixture draft generation and publication                                                         |
+| 11    | Admin-only result entry, corrections, result-report decisions                                    |
+| 12    | Standings recomputation and snapshots                                                            |
+| 13    | Knockout progression                                                                             |
+| 16    | Notifications and announcements                                                                  |
+| 17    | Hall of Fame induction, profile stats and history snapshots                                      |
 
 No client write path exists in any phase.

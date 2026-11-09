@@ -49,12 +49,24 @@ export async function setUserRole(
   const currentClaims = target.customClaims ?? {};
   const previousRole = isUserRole(currentClaims.role) ? currentClaims.role : null;
 
+  // Defence in depth: never let a manual role action touch a Super Admin,
+  // including the caller. Only the configured account may hold that claim, and
+  // it is never changed from the console.
+  if (previousRole === "super_admin" || isSuperAdminEmail(target.email, env.SUPER_ADMIN_EMAIL)) {
+    throw new AuthorizationError("A Super Admin account cannot be changed here.");
+  }
+
   // Remove the legacy boolean claim so there is exactly one role authority.
   const nextClaims: Record<string, unknown> = { ...currentClaims, role };
   delete nextClaims.superAdmin;
 
   await auth.setCustomUserClaims(targetUid, nextClaims);
   await auth.revokeRefreshTokens(targetUid);
+
+  // Keep the display-only users.role field in step with the claim.
+  await getFirebaseAdminFirestore()
+    .doc(paths.user(targetUid))
+    .set({ role, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
 
   await writeAuditLog({
     actorUid: actor.userId,
@@ -103,27 +115,42 @@ export async function setAccountStatus(
   const auth = getFirebaseAdminAuth();
   const firestore = getFirebaseAdminFirestore();
   const target = await auth.getUser(targetUid);
+  const targetClaims = target.customClaims ?? {};
+  const targetRole = isUserRole(targetClaims.role) ? targetClaims.role : null;
 
-  if (isSuperAdminEmail(target.email, env.SUPER_ADMIN_EMAIL) && status !== "active") {
+  if (targetRole === "super_admin" || isSuperAdminEmail(target.email, env.SUPER_ADMIN_EMAIL)) {
     throw new AuthorizationError(
       "The configured Super Admin account cannot be suspended or banned.",
     );
   }
 
   const userReference = firestore.doc(paths.user(targetUid));
-  const beforeSnapshot = await userReference.get();
+  const publicReference = firestore.doc(paths.publicProfile(targetUid));
+  const [beforeSnapshot, publicSnapshot] = await Promise.all([
+    userReference.get(),
+    publicReference.get(),
+  ]);
   const beforeStatus = beforeSnapshot.exists ? (beforeSnapshot.data()?.status ?? null) : null;
 
-  await auth.updateUser(targetUid, { disabled: status !== "active" });
-  await auth.revokeRefreshTokens(targetUid);
-
-  await userReference.set(
+  const batch = firestore.batch();
+  batch.set(
+    userReference,
     {
       status,
       updatedAt: FieldValue.serverTimestamp(),
     },
     { merge: true },
   );
+
+  // The public document mirrors only the status so the public profile can show
+  // "Profile unavailable" without exposing anything private.
+  if (publicSnapshot.exists) {
+    batch.set(publicReference, { status }, { merge: true });
+  }
+
+  await auth.updateUser(targetUid, { disabled: status !== "active" });
+  await auth.revokeRefreshTokens(targetUid);
+  await batch.commit();
 
   await writeAuditLog({
     actorUid: actor.userId,

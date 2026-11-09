@@ -1,6 +1,7 @@
 // GCC - public site shell: accessible skip link, session-aware header and footer.
 import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
+import { SiteNotices } from "@/components/shared/site-notices";
 import { getCurrentUser } from "@/lib/auth/guards";
 import type { Viewer } from "@/lib/auth/viewer";
 
@@ -23,6 +24,7 @@ export default async function PublicLayout({
         Skip to main content
       </a>
       <SiteHeader viewer={viewer} />
+      <SiteNotices />
       <main id="main-content" className="flex-1">
         {children}
       </main>

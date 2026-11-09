@@ -348,6 +348,41 @@ async function seed(): Promise<void> {
         body: "Hello",
         authorUid: "root",
         publishedAt: now,
+        expiresAt: null,
+        deletedAt: null,
+      }),
+      setDoc(doc(db, "announcements/platform-draft"), {
+        title: "Draft news",
+        body: "Not published",
+        authorUid: "root",
+        publishedAt: null,
+        expiresAt: null,
+        deletedAt: null,
+      }),
+      setDoc(doc(db, "announcements/platform-expired"), {
+        title: "Old news",
+        body: "Expired",
+        authorUid: "root",
+        publishedAt: Timestamp.fromMillis(now.toMillis() - 60_000),
+        expiresAt: Timestamp.fromMillis(now.toMillis() - 1_000),
+        deletedAt: null,
+      }),
+      setDoc(doc(db, "announcements/platform-deleted"), {
+        title: "Deleted news",
+        body: "Soft deleted",
+        authorUid: "root",
+        publishedAt: now,
+        expiresAt: null,
+        deletedAt: now,
+      }),
+      setDoc(doc(db, "platformSettings/main"), {
+        maintenanceMode: false,
+        maintenanceMessage: "",
+        registrationsOpen: true,
+        maxActiveTournamentsPerOrganiser: 3,
+        applicationCooldownDays: 7,
+        updatedBy: "root",
+        updatedAt: now,
       }),
       setDoc(doc(db, "hallOfFame/h1"), {
         tournamentId: "public",
@@ -457,6 +492,25 @@ describe("public reads", () => {
     await assertSucceeds(getDoc(doc(db, "publicProfiles/alice/history/public")));
     await assertSucceeds(getDoc(doc(db, "announcements/platform-a1")));
     await assertSucceeds(getDoc(doc(db, "hallOfFame/h1")));
+  });
+
+  it("hides draft, expired and soft-deleted platform announcements from the public", async () => {
+    const db = anonymous();
+
+    await assertFails(getDoc(doc(db, "announcements/platform-draft")));
+    await assertFails(getDoc(doc(db, "announcements/platform-expired")));
+    await assertFails(getDoc(doc(db, "announcements/platform-deleted")));
+  });
+
+  it("lets the Super Admin read draft and deleted announcements", async () => {
+    const root = user("root", "super_admin");
+
+    await assertSucceeds(getDoc(doc(root, "announcements/platform-a1")));
+    await assertSucceeds(getDoc(doc(root, "announcements/platform-draft")));
+    await assertSucceeds(getDoc(doc(root, "announcements/platform-deleted")));
+    await assertFails(
+      getDoc(doc(user("organiser-a", "organiser"), "announcements/platform-draft")),
+    );
   });
 
   it("lets the public read non-draft tournaments and their public subcollections", async () => {
@@ -621,6 +675,13 @@ describe("audit and platform operations", () => {
     await assertFails(getDoc(doc(organiser, "auditLogs/log1")));
     await assertFails(getDoc(doc(organiser, "platformStats/summary")));
   });
+
+  it("exposes platform settings only to the Super Admin", async () => {
+    await assertSucceeds(getDoc(doc(user("root", "super_admin"), "platformSettings/main")));
+    await assertFails(getDoc(doc(user("alice"), "platformSettings/main")));
+    await assertFails(getDoc(doc(user("organiser-a", "organiser"), "platformSettings/main")));
+    await assertFails(getDoc(doc(anonymous(), "platformSettings/main")));
+  });
 });
 
 describe("client writes", () => {
@@ -643,10 +704,14 @@ describe("client writes", () => {
       "tournaments/public/knockoutTies/t1",
       "tournaments/public/announcements/a1",
       "announcements/platform-a1",
+      "announcements/platform-draft",
+      "announcements/platform-expired",
+      "announcements/platform-deleted",
       "hallOfFame/h1",
       "auditLogs/log1",
       "rateLimits/key",
       "platformStats/summary",
+      "platformSettings/main",
     ];
 
     for (const db of [

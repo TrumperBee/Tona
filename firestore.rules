@@ -167,9 +167,27 @@ service cloud.firestore {
       }
     }
 
-    // Platform-wide announcements.
+    // Platform-wide announcements. Public readers see only published,
+    // unexpired, non-deleted notices. Drafts and soft-deleted records remain
+    // Super-Admin-readable for the console (which uses the Admin SDK anyway).
     match /announcements/{announcementId} {
-      allow read: if true;
+      allow read: if isSuperAdmin() ||
+        (
+          (!('deletedAt' in resource.data) || resource.data.deletedAt == null) &&
+          resource.data.publishedAt != null &&
+          resource.data.publishedAt <= request.time &&
+          (
+            !('expiresAt' in resource.data) ||
+            resource.data.expiresAt == null ||
+            resource.data.expiresAt > request.time
+          )
+        );
+    }
+
+    // The single platform settings document is Super Admin-only. Public pages
+    // receive the three safe fields through a server helper, never a client read.
+    match /platformSettings/{documentId} {
+      allow read: if isSuperAdmin();
     }
 
     // Permanent champions and records.

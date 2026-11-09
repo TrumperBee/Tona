@@ -1,9 +1,9 @@
 # GCC — Roadmap
 
-> Phases 1, 1B, 2, 3, 3B and 4 are done. Phase 4 delivered real registration,
-> email verification, sign-in, password reset, player profiles, avatar upload and
-> public player search. A phase starts only when the previous phase is reviewed
-> and accepted.
+> Phases 1, 1B, 2, 3, 3B, 4 and 5 are done. Phase 5 delivered the Super Admin
+> console: platform settings and maintenance mode, overview, user management,
+> audit viewer, announcements, analytics and a read-only tournament list. A phase
+> starts only when the previous phase is reviewed and accepted.
 
 | #   | Phase                                              | Primary deliverables                                                                                                     | Status      |
 | --- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ----------- |
@@ -13,7 +13,7 @@
 | 3   | Design system                                      | Brand identity, home page, about/contact/legal pages, public discovery shell                                             | Done        |
 | 3B  | Patch                                              | Admin-only results, result reports, profile stats/history, redirect and same-origin hardening, security headers, CI/docs | Done        |
 | 4   | Accounts and profiles                              | Sign-up, email verification, sign-in, password reset, profiles, avatars                                                  | Done        |
-| 5   | Super Admin dashboard                              | Platform overview, users, tournaments, analytics, settings, audit log viewer                                             | Not started |
+| 5   | Super Admin dashboard                              | Overview, users, read-only tournaments, analytics, settings/maintenance, audit viewer, announcements                     | Done        |
 | 6   | Organiser application and approval                 | Application form, review queue, approval/rejection with audit entries                                                    | Not started |
 | 7   | Organiser dashboard                                | Organiser shell, owned-tournament management, ownership guards                                                           | Not started |
 | 8   | Tournament creation and registration               | Create/edit/publish tournaments, registrations, participant lists                                                        | Not started |

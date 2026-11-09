@@ -20,6 +20,7 @@ const footerNavigation = [
     heading: "Community",
     links: [
       { href: "/players", label: "Players" },
+      { href: "/announcements", label: "Announcements" },
       { href: "/about", label: "About GCC" },
       { href: "/contact", label: "Contact" },
     ],

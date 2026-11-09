@@ -111,6 +111,7 @@ export async function updatePlayerProfile(
       favouriteClub,
       preferredGame,
       platform,
+      status: current.status ?? "active",
     };
 
     if (publicSnapshot.exists) {

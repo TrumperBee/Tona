@@ -6,6 +6,10 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
 import { BrandLockup } from "@/components/brand/logo";
+import { SiteNotices } from "@/components/shared/site-notices";
+
+// Notices read Firestore on every request, so the account shell is dynamic.
+export const dynamic = "force-dynamic";
 
 export default function AuthLayout({
   children,
@@ -32,6 +36,8 @@ export default function AuthLayout({
           </Link>
         </div>
       </header>
+
+      <SiteNotices />
 
       <main className="relative flex flex-1 items-center justify-center overflow-hidden px-4 py-12">
         <div

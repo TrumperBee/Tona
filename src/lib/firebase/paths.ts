@@ -16,6 +16,7 @@ export const COLLECTIONS = {
   auditLogs: "auditLogs",
   rateLimits: "rateLimits",
   platformStats: "platformStats",
+  platformSettings: "platformSettings",
 } as const;
 
 export const SUBCOLLECTIONS = {
@@ -34,6 +35,7 @@ export const SUBCOLLECTIONS = {
 
 export const DOCUMENTS = {
   current: "current",
+  main: "main",
   summary: "summary",
 } as const;
 
@@ -146,6 +148,9 @@ export const paths = {
 
   platformStats: () => COLLECTIONS.platformStats,
   platformStatsSummary: () => documentPath(COLLECTIONS.platformStats, DOCUMENTS.summary),
+
+  platformSettings: () => COLLECTIONS.platformSettings,
+  platformSettingsMain: () => documentPath(COLLECTIONS.platformSettings, DOCUMENTS.main),
 } as const;
 
 /** Returns a stable document path for a user notification. */

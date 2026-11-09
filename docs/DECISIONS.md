@@ -622,3 +622,104 @@ stores the uppercase code.
 **Consequences.** The picker is localised by the browser without a runtime package. The
 default is a product choice, not a restriction. Country names and flags are presentation
 only; the stored value is the stable ISO code.
+
+---
+
+## ADR-030 — Platform settings live in one Super-Admin-only document
+
+**Date:** 2026-11-09
+**Status:** Accepted
+
+**Context.** Maintenance mode, registration availability and organiser limits must be
+changed at runtime without a deploy. Exposing the whole settings document to the browser
+would reveal operational policy and make client reads a trust boundary.
+
+**Decision.** Store configuration in `platformSettings/main`, readable only by the Super
+Admin through Security Rules. Server code reads it with the Admin SDK. Public pages receive
+only `maintenanceMode`, `maintenanceMessage` and `registrationsOpen` through
+`src/lib/platform/settings.ts`; the other fields never leave the server. A missing document
+or read failure falls back to the documented defaults.
+
+**Consequences.** There is one settings document and one validation schema. Reading settings
+is a server concern, so pages that render the banner are dynamic. Changing the settings
+document shape means updating the defaults, schema, public helper and rules tests together.
+
+---
+
+## ADR-031 — One shared maintenance gate for every write
+
+**Date:** 2026-11-09
+**Status:** Accepted
+
+**Context.** Checking maintenance mode in each route invites drift: one route forgets the
+check and becomes a write path during an outage.
+
+**Decision.** `assertPlatformWritable(user)` is the single gate. It returns 503 with the
+configured message when maintenance is on, except for the Super Admin. Registration adds
+`assertRegistrationsOpen()`. Every non-Super-Admin mutation calls the gate before writing,
+and every Super Admin mutation calls it through `guardSuperAdminMutation()` after
+authentication and rate limiting.
+
+**Consequences.** The gate is unit-tested against defaults, custom messages and the Super
+Admin exemption. A future write route that omits it is a review failure. The Super Admin can
+always turn maintenance off because the gate exempts them.
+
+---
+
+## ADR-032 — Super Admin mutations share one guard sequence
+
+**Date:** 2026-11-09
+**Status:** Accepted
+
+**Context.** Phase 5 adds many privileged endpoints. Individually ordered checks are easy to
+get wrong, especially origin checks before reading a body and the maintenance exemption.
+
+**Decision.** Every `/api/super-admin/*` mutation calls `guardSuperAdminMutation()`:
+same-origin → `requireSuperAdmin()` → rate limit → `assertPlatformWritable(user)`. Each route
+then parses a strict Zod schema and writes with the Admin SDK. Account actions cannot target
+the actor or another Super Admin.
+
+**Consequences.** Origin checks always run before a body is read. Authorisation is always
+server-side, and UI hiding is cosmetic. Integration tests call every route as a participant
+(403) and without a session (401), so a new route without the guard fails the suite.
+
+---
+
+## ADR-033 — Announcements are soft-deleted and publicly filtered
+
+**Date:** 2026-11-09
+**Status:** Accepted
+
+**Context.** Platform notices must be visible to everyone while published, hidden while
+drafted, and retained after removal for accountability. Allowing public reads of the whole
+collection would leak drafts and deleted notices.
+
+**Decision.** `announcements/{id}` stores title, body, severity, pinned, `publishedAt`,
+optional `expiresAt`, author, timestamps and `deletedAt`. Rules allow public reads only when
+`publishedAt` is set and in the past, `deletedAt` is null and `expiresAt` is null or future.
+Create, edit, publish, unpublish and delete are separate server routes, all audited. Delete
+sets `deletedAt` and clears `publishedAt`.
+
+**Consequences.** The console reads drafts and deleted notices with the Admin SDK. The public
+page and banner are server-rendered and cursor-paginated. Expiry is filtered in the query
+layer and by rules. There is no hard-delete path.
+
+---
+
+## ADR-034 — Analytics are computed in-house from Firestore aggregates and a bounded sample
+
+**Date:** 2026-11-09
+**Status:** Accepted
+
+**Context.** Adding a chart library increases bundle size and often assumes fake demo data.
+The Spark plan has no Cloud Functions, and no unbounded collection reads are permitted.
+
+**Decision.** Build accessible SVG charts in `src/components/super-admin/charts.tsx` with no
+chart dependency. Totals use Firestore `count()` aggregations. Breakdowns (country, game,
+platform, daily signups) sample at most 1000 user documents; the sample size is stored and
+shown. Results are cached in `platformStats/summary` for five minutes with a manual Refresh
+action. Empty states are honest when there are no tournaments or matches yet.
+
+**Consequences.** Most figures are exact, while breakdowns are labelled as sampled. Refresh
+costs a bounded number of reads. A future scale-up can replace sampling with maintained
+aggregates without changing the page contracts.

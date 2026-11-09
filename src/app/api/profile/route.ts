@@ -7,6 +7,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { AuthenticationError, requireUser } from "@/lib/auth/guards";
 import { clientIdentifier, jsonError } from "@/lib/http/respond";
+import { assertPlatformWritable, PlatformWriteBlockedError } from "@/lib/platform/settings";
 import { ProfileUpdateError, updatePlayerProfile } from "@/lib/profile/update";
 import { checkRateLimit, rateLimitPolicy } from "@/lib/rate-limit";
 import { assertSameOrigin, SameOriginError } from "@/lib/security/same-origin";
@@ -32,6 +33,16 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   } catch (error) {
     if (error instanceof AuthenticationError) {
       return jsonError("Sign in to update your profile.", 401);
+    }
+
+    throw error;
+  }
+
+  try {
+    await assertPlatformWritable(user);
+  } catch (error) {
+    if (error instanceof PlatformWriteBlockedError) {
+      return jsonError(error.message, 503);
     }
 
     throw error;

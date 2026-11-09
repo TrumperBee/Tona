@@ -1,9 +1,10 @@
 # GCC — Security Requirements
 
-> **Status: Phase 4 implemented.** Firestore rules, session exchange, guards,
+> **Status: Phase 5 implemented.** Firestore rules, session exchange, guards,
 > registration, email verification, password reset, profile editing, avatar upload,
 > role/status administration, audit logging, rate limiting, same-origin checks,
-> security headers, rules tests and emulator integration tests exist. CSP and App
+> security headers, the Super Admin console, platform settings/maintenance mode,
+> announcements, rules tests and emulator integration tests exist. CSP and App
 > Check remain Phase 18.
 
 ## 1. Security model
@@ -75,6 +76,11 @@ registrations, announcements or client-readable collections.
   Admin.
 - `publicProfiles`, `registrations` and match display snapshots contain gamer
   tags and countries only, never phone numbers or emails.
+- The Super Admin user detail shows a masked number (`maskPhoneNumber`, e.g.
+  `+254 7•• ••• 678`). The full number is returned only by
+  `POST /api/super-admin/users/[uid]/contact`, which is rate-limited, restricted
+  to the Super Admin and writes a `user.contact_revealed` audit entry that does
+  **not** contain the number.
 - Opponent contact is exposed later through a server route that authorises the
   request and returns only the necessary link/number.
 - Rules tests assert public documents are readable without exposing the private
@@ -127,8 +133,9 @@ session after role/status changes or sign-out.
 - Sign-out revokes refresh tokens and clears the cookie.
 - Role and account-status changes revoke the target's refresh tokens.
 - Account status (`suspended`, `banned`) disables the Firebase Auth user, revokes
-  refresh tokens and is mirrored to `users/{uid}.status`; the session route
-  rejects non-active accounts.
+  refresh tokens and is mirrored to `users/{uid}.status` and
+  `publicProfiles/{uid}.status` in one batch; the session route rejects
+  non-active accounts.
 - The client never stores Admin credentials.
 - Security headers are set in `next.config.ts`: `X-Content-Type-Options:
 nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options:
@@ -150,7 +157,7 @@ different error messages, public profiles or collection reads.
   does not reveal whether an account exists.
 - Account-status rejections do not disclose role or admin-application details.
 - Private collections (`users`, `gamerTags`, `adminApplications`, `auditLogs`,
-  `rateLimits`, `platformStats`) have no broad public read.
+  `rateLimits`, `platformStats`, `platformSettings`) have no broad public read.
 - `publicProfiles` contains only intentionally public display data.
 - Guards check authentication before loading records; not-found and forbidden
   responses are kept distinct only where the caller already has a legitimate
@@ -168,11 +175,14 @@ different error messages, public profiles or collection reads.
   them, nobody can write or delete them from a client.
 - **Gamer-tag enumeration:** `gamerTags` is server-only.
 - **Owner lockout:** the configured Super Admin cannot be suspended, banned or
-  demoted, and an actor cannot change their own status.
+  demoted, and an actor cannot change their own status. `setAccountStatus` and
+  `setUserRole` reject any target whose role is `super_admin`, and the routes
+  reject `uid === actor`.
 - **Rate-limit bypass:** counters use Firestore transactions, not per-instance
   memory. Limitations are documented in `src/lib/rate-limit/index.ts`.
 - **No hard deletes:** rules deny deletes and the server uses status/archive
-  changes. Competition records are retained.
+  changes. Competition records are retained. Announcements are soft-deleted
+  (`deletedAt`) rather than removed.
 
 ### 2.9 Avatar upload abuse
 
@@ -194,6 +204,47 @@ type, or injects an arbitrary remote URL into the profile.
   asset is destroyed on removal. The rate limit is 5 changes per hour per user.
 - If Cloudinary is not configured, the avatar route returns 503 while the rest of
   the account and profile continue to work.
+
+### 2.10 Maintenance-mode bypass
+
+**Threat:** someone writes through a route that forgot to check maintenance
+mode, or the Super Admin is locked out by their own switch.
+
+**Controls:**
+
+- `assertPlatformWritable(user)` is the single shared gate. It reads one
+  settings document, treats a missing document or read failure as "writable"
+  defaults, and returns 503 with the configured message (or a safe default) when
+  `maintenanceMode` is on.
+- Every non-Super-Admin state-changing route calls it before writing:
+  registration, session exchange, profile edit, avatar upload and all
+  `/api/super-admin/*` mutations. The Super Admin is explicitly exempt.
+- `assertRegistrationsOpen()` rejects `/api/auth/register` with a clear 403 when
+  registrations are closed.
+- A site-wide banner is rendered in the public, auth, dashboard, organiser and
+  Super Admin layouts. The banner is informational; the server gate is the
+  enforcement.
+- The settings document is never exposed to clients. Only the three public
+  fields are read through the server helper.
+
+### 2.11 Privileged console route order
+
+**Threat:** a Super Admin route reads a body or writes before checking origin,
+authentication, authorisation, rate limits or maintenance state.
+
+**Controls:**
+
+- Every `/api/super-admin/*` mutation calls `guardSuperAdminMutation()` in this
+  order: same-origin check → `requireSuperAdmin()` → rate limit → maintenance
+  gate.
+- The role and configured verified email are both checked; a stale claim alone is
+  insufficient.
+- Every route re-validates a strict Zod schema (`super-admin`, platform-settings
+  and announcement schemas) and rejects unknown fields.
+- Routes never trust a client-supplied actor, role, target role or timestamps.
+- Every write is audited with before/after values and, where relevant, a reason.
+- Integration tests call each route as a participant and assert 403, and assert
+  401 with no session.
 
 ## 3. Authentication and sessions
 
@@ -238,7 +289,11 @@ type, or injects an arbitrary remote URL into the profile.
 - Collection-group queries for `matches` and `registrations` require the query
   to constrain `tournamentId`; the rules resolve the parent tournament and deny
   draft/suspended results.
-- Audit logs and platform stats are Super Admin only.
+- Audit logs, platform stats and platform settings are Super Admin only.
+- Platform announcements are readable by anyone only while `publishedAt` is set
+  and in the past, `deletedAt` is null or absent, and `expiresAt` is null or in
+  the future. Drafts, expired notices and soft-deleted records are Super Admin
+  only.
 - `gamerTags` and `rateLimits` have no client read.
 - Rules are versioned in `firestore.rules`; indexes in
   `firestore.indexes.json`.
@@ -247,16 +302,20 @@ type, or injects an arbitrary remote URL into the profile.
   Tests cover anonymous denial, owner-only reads, memberships, public history,
   draft isolation, organiser ownership, result-report access, broad
   collection-group denial for history/memberships/result reports,
-  collection-group leakage for matches and registrations, Super Admin audit
-  access and the deny-all write matrix for user, organiser and Super Admin
-  clients.
+  collection-group leakage for matches and registrations, announcement
+  visibility (published vs draft/expired/deleted), platform settings privacy,
+  Super Admin audit access and the deny-all write matrix for user, organiser and
+  Super Admin clients.
 
 ## 5. Server-side role enforcement
 
 - Every protected read and write verifies the session, role and ownership on the
   server.
 - `Super Admin` means the configured email plus the `super_admin` role claim.
-- `Organiser` may act only on tournaments they own; ownership is loaded from
+- Super Admin console reads and writes call `requireSuperAdmin()` server-side;
+  hiding a link or a button is never the control. Every console page is inside a
+  layout that calls `requirePageSuperAdmin()`.
+- Organiser may act only on tournaments they own; ownership is loaded from
   Firestore.
 - Participant permissions are scoped to their own registrations, result reports,
   profile, memberships and notifications.
@@ -280,8 +339,15 @@ type, or injects an arbitrary remote URL into the profile.
 
 - Every server action and route handler parses input with a Zod schema.
 - Payload schemas cover registration, profiles, admin applications, tournament
-  create/update, admin result entry/corrections, result reports, role changes and
-  account status.
+  create/update, admin result entry/corrections, result reports, role changes,
+  account status, platform settings and announcements.
+- Platform-settings input is strict: boolean flags, maintenance message ≤ 300
+  characters (required when maintenance is on), 1–20 active tournaments, 0–90
+  cooldown days and a 5–300 character reason.
+- Announcement input is strict: title ≤ 100, body ≤ 2000 plain text, severity
+  `info` or `important`, optional expiry, and an explicit publish decision.
+- Account actions require a 5–300 character reason. A restore also requires one.
+- The audit reason and before/after payloads are redacted before display.
 - Profile PATCH accepts only `fullName`, `community`, `favouriteClub`,
   `whatsapp`, `country`, `preferredGame` and `platform`. Gamer tag, email, role,
   status, avatar URLs and statistics are rejected by the strict schema.
@@ -299,8 +365,10 @@ type, or injects an arbitrary remote URL into the profile.
 - Firestore-backed fixed-window counters run in transactions, so all serverless
   instances share the budget.
 - Sensitive endpoints: session exchange, registration, gamer-tag lookup, player
-  search, profile edits and avatar changes (implemented); password reset, admin
-  result entry, result-report creation and admin application (later phases).
+  search, profile edits, avatar changes, every Super Admin mutation, settings
+  saves, contact reveal and analytics refresh (implemented); password reset,
+  admin result entry, result-report creation and admin application (later
+  phases).
 - Limitations: fixed windows allow boundary bursts; transactions add latency;
   counter documents need eventual cleanup; keys must be scoped carefully.
 - Rate limiting is abuse control, not a WAF or a replacement for Firebase Auth
@@ -308,13 +376,16 @@ type, or injects an arbitrary remote URL into the profile.
 
 ## 9. Audit logging
 
-- Append-only entries for role grants, account-status changes, admin decisions,
-  tournament changes, pot draws/shuffles, fixture generation, admin result
-  entry/corrections, result-report decisions, announcements and archive actions.
+- Append-only entries for sign-in/role grants, account-status changes, admin
+  decisions, tournament changes, pot draws/shuffles, fixture generation, admin
+  result entry/corrections, result-report decisions, platform settings updates,
+  contact reveals and announcement transitions.
 - Each entry records actor UID, actor role, action, target type/id, optional
   tournament id, before/after values, reason and server timestamp.
 - Written only by `src/lib/audit/log.ts` with the Admin SDK; readable only by
-  Super Admin.
+  Super Admin. The console viewer is read-only.
+- Audit payloads are redacted before display; secrets, tokens and phone numbers
+  are never written or shown.
 
 ## 10. Data permanence
 

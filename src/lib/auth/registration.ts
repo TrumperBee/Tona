@@ -124,6 +124,7 @@ export async function registerPlayer(input: RegistrationInput): Promise<Register
         photoUrl: null,
         avatarUrl: null,
         avatarPublicId: null,
+        status: "active",
         stats: EMPTY_PROFILE_STATS,
       });
     });

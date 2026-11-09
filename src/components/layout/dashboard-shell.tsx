@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils/cn";
 
 interface DashboardShellProps {
   readonly viewer: Viewer;
+  readonly notices?: React.ReactNode;
   readonly children: React.ReactNode;
 }
 
@@ -68,7 +69,7 @@ function NavigationList({
   );
 }
 
-export function DashboardShell({ viewer, children }: DashboardShellProps) {
+export function DashboardShell({ viewer, notices, children }: DashboardShellProps) {
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const displayName = viewerName(viewer);
@@ -158,6 +159,8 @@ export function DashboardShell({ viewer, children }: DashboardShellProps) {
             </IconButton>
           </div>
         </header>
+
+        {notices}
 
         <main className="mx-auto w-full max-w-6xl px-4 pb-28 pt-6 sm:px-6 lg:px-8 lg:pb-12">
           {children}

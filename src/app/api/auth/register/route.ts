@@ -6,6 +6,12 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { RegistrationError, registerPlayer } from "@/lib/auth/registration";
 import { clientIdentifier, jsonError } from "@/lib/http/respond";
+import {
+  assertPlatformWritable,
+  assertRegistrationsOpen,
+  PlatformWriteBlockedError,
+  RegistrationsClosedError,
+} from "@/lib/platform/settings";
 import { checkRateLimit, rateLimitPolicy } from "@/lib/rate-limit";
 import { assertSameOrigin, SameOriginError } from "@/lib/security/same-origin";
 import { registrationSchema } from "@/lib/validation/registration";
@@ -68,6 +74,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return jsonError("Too many registration attempts for this email. Try again later.", 429, {
       "Retry-After": String(emailLimit.retryAfterSeconds),
     });
+  }
+
+  try {
+    await assertPlatformWritable(null);
+    await assertRegistrationsOpen();
+  } catch (error) {
+    if (error instanceof PlatformWriteBlockedError) {
+      return jsonError(error.message, 503);
+    }
+
+    if (error instanceof RegistrationsClosedError) {
+      return jsonError("Registration is currently closed. Check back soon.", 403);
+    }
+
+    throw error;
   }
 
   try {

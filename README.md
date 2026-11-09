@@ -9,15 +9,17 @@ knockouts and preserves champions, player statistics and a Hall of Fame.
 
 GCC is **not affiliated with UEFA** and never uses UEFA logos or branding.
 
-> **Project status: Phase 4 - accounts and profiles.**
+> **Project status: Phase 5 - Super Admin console.**
 > Phase 1 delivered the scaffold. Phase 1B migrated the database stack to Firebase.
 > Phase 2 implemented the Firestore data model, Security Rules, rules tests and server auth
 > infrastructure. Phase 3 delivered the public design system and site skeleton. Phase 3B
 > made result handling admin-only and hardened redirects, same-origin checks and headers.
-> Phase 4 implements real registration, email verification, sign-in, password reset,
-> player profiles, avatar upload via Cloudinary and public player search. Tournament
-> creation, fixtures and results remain later phases. There is no fake data and no
-> decorative functionality.
+> Phase 4 implemented real registration, email verification, sign-in, password reset,
+> player profiles, avatar upload via Cloudinary and public player search. Phase 5 adds a
+> guarded Super Admin console: platform settings and maintenance mode, overview, user
+> management, audit viewer, announcements, analytics and a read-only tournament list.
+> Tournament creation, fixtures and results remain later phases. There is no fake data and
+> no decorative functionality.
 
 ## Architecture principle: clients read, the server writes
 
@@ -128,6 +130,25 @@ Firestore rules deny all client writes and allow reads only where documented in
 | `PATCH /api/profile`         | Strict edit of the signed-in player's profile                |
 | `POST /api/profile/avatar`   | Upload and store a verified avatar                           |
 | `DELETE /api/profile/avatar` | Remove the avatar and its Cloudinary asset                   |
+
+## Super Admin endpoints
+
+All routes below require the configured Super Admin, a same-origin request, a
+rate-limit budget and a writable platform (maintenance mode exempts the Super
+Admin). Every write is validated with Zod and audited.
+
+| Endpoint                                             | Purpose                               |
+| ---------------------------------------------------- | ------------------------------------- |
+| `PATCH /api/super-admin/settings`                    | Save platform settings                |
+| `POST /api/super-admin/users/[uid]/status`           | Suspend, ban or restore an account    |
+| `POST /api/super-admin/users/[uid]/role`             | Revoke organiser privileges           |
+| `POST /api/super-admin/users/[uid]/contact`          | Reveal a WhatsApp number (audited)    |
+| `POST /api/super-admin/announcements`                | Create an announcement                |
+| `PATCH /api/super-admin/announcements/[id]`          | Edit an announcement                  |
+| `POST /api/super-admin/announcements/[id]/publish`   | Publish an announcement               |
+| `POST /api/super-admin/announcements/[id]/unpublish` | Unpublish an announcement             |
+| `DELETE /api/super-admin/announcements/[id]`         | Soft-delete an announcement           |
+| `POST /api/super-admin/analytics/refresh`            | Recompute the cached platform summary |
 
 Every state-changing route rejects cross-origin requests with `assertSameOrigin()` from
 `src/lib/security/same-origin.ts`, validates its body with Zod and applies the Firestore

@@ -32,6 +32,7 @@ export type WorkspaceVariant = "organiser" | "super-admin";
 interface WorkspaceShellProps {
   readonly variant: WorkspaceVariant;
   readonly viewer: Viewer;
+  readonly notices?: React.ReactNode;
   readonly children: React.ReactNode;
 }
 
@@ -80,7 +81,7 @@ function NavigationLinks({
   );
 }
 
-export function WorkspaceShell({ variant, viewer, children }: WorkspaceShellProps) {
+export function WorkspaceShell({ variant, viewer, notices, children }: WorkspaceShellProps) {
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const isOrganiser = variant === "organiser";
@@ -273,6 +274,8 @@ export function WorkspaceShell({ variant, viewer, children }: WorkspaceShellProp
             </IconButton>
           </div>
         </header>
+
+        {notices}
 
         <main className="mx-auto w-full max-w-7xl px-4 pb-28 pt-6 sm:px-6 lg:px-8 lg:pb-12">
           {children}

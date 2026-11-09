@@ -3,6 +3,7 @@
 // verification is NOT required here: unverified players may still view their
 // own profile, but tournament entry uses requireVerifiedUser on the server.
 import { DashboardShell } from "@/components/layout/dashboard-shell";
+import { SiteNotices } from "@/components/shared/site-notices";
 import { requirePageSignedIn } from "@/lib/auth/page-access";
 import type { Viewer } from "@/lib/auth/viewer";
 import { getOwnProfile } from "@/lib/profile/server";
@@ -26,5 +27,9 @@ export default async function DashboardLayout({
     avatarUrl: profile?.user.avatarUrl ?? null,
   };
 
-  return <DashboardShell viewer={viewer}>{children}</DashboardShell>;
+  return (
+    <DashboardShell viewer={viewer} notices={<SiteNotices />}>
+      {children}
+    </DashboardShell>
+  );
 }

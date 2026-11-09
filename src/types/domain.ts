@@ -165,6 +165,11 @@ export interface PublicProfileDocument {
   readonly photoUrl: string | null;
   readonly avatarUrl: string | null;
   readonly avatarPublicId: string | null;
+  /**
+   * Mirrors the private account status so a suspended or banned player's
+   * public page can show "Profile unavailable" without exposing anything else.
+   */
+  readonly status: AccountStatus;
   readonly stats: ProfileStats;
 }
 
@@ -372,11 +377,25 @@ export interface TournamentAnnouncementDocument {
   readonly publishedAt: Timestamp;
 }
 
+export const ANNOUNCEMENT_SEVERITIES = ["info", "important"] as const;
+export type AnnouncementSeverity = (typeof ANNOUNCEMENT_SEVERITIES)[number];
+
+/**
+ * Platform-wide announcement. Server-written; published, non-deleted entries
+ * are publicly readable. Deletion is soft: `deletedAt` is set and the record is
+ * retained.
+ */
 export interface PlatformAnnouncementDocument {
   readonly title: string;
   readonly body: string;
+  readonly severity: AnnouncementSeverity;
+  readonly publishedAt: Timestamp | null;
+  readonly expiresAt: Timestamp | null;
+  readonly pinned: boolean;
   readonly authorUid: string;
-  readonly publishedAt: Timestamp;
+  readonly createdAt: Timestamp;
+  readonly updatedAt: Timestamp;
+  readonly deletedAt: Timestamp | null;
 }
 
 export interface NotificationDocument {
@@ -437,6 +456,27 @@ export interface PlatformStatsDocument {
   readonly totalTournaments: number;
   readonly totalMatches: number;
   readonly activeTournaments: number;
+  readonly totalRegistrations: number;
+  readonly signupsByDay: ReadonlyArray<{ readonly date: string; readonly count: number }>;
+  readonly usersByCountry: ReadonlyArray<{ readonly key: string; readonly count: number }>;
+  readonly usersByGame: ReadonlyArray<{ readonly key: string; readonly count: number }>;
+  readonly usersByPlatform: ReadonlyArray<{ readonly key: string; readonly count: number }>;
+  readonly tournamentsByStatus: ReadonlyArray<{ readonly key: string; readonly count: number }>;
+  readonly usersSampled: number;
+  /** Maximum number of user documents sampled for the breakdown charts. */
+  readonly sampleCap: number;
+  readonly generatedAt: Timestamp;
+  readonly updatedAt: Timestamp;
+}
+
+/** Server-written platform configuration. Only the Super Admin may read the document. */
+export interface PlatformSettingsDocument {
+  readonly maintenanceMode: boolean;
+  readonly maintenanceMessage: string;
+  readonly registrationsOpen: boolean;
+  readonly maxActiveTournamentsPerOrganiser: number;
+  readonly applicationCooldownDays: number;
+  readonly updatedBy: string;
   readonly updatedAt: Timestamp;
 }
 
@@ -446,6 +486,12 @@ export function isUserRole(value: unknown): value is UserRole {
 
 export function isAccountStatus(value: unknown): value is AccountStatus {
   return typeof value === "string" && (ACCOUNT_STATUSES as readonly string[]).includes(value);
+}
+
+export function isAnnouncementSeverity(value: unknown): value is AnnouncementSeverity {
+  return (
+    typeof value === "string" && (ANNOUNCEMENT_SEVERITIES as readonly string[]).includes(value)
+  );
 }
 
 export function isTournamentStatus(value: unknown): value is TournamentStatus {

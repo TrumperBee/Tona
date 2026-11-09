@@ -14,6 +14,11 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      // Server modules import `server-only`, which throws outside a React
+      // Server Component bundle. Unit tests exercise that logic directly.
+      "server-only": fileURLToPath(
+        new URL("./tests/integration/server-only-stub.ts", import.meta.url),
+      ),
     },
   },
 });

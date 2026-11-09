@@ -14,6 +14,7 @@ import { syncSessionRole } from "@/lib/auth/role-sync";
 import { clearSessionCookie, createSessionCookie, setSessionCookie } from "@/lib/auth/session";
 import { getFirebaseAdminAuth, getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
+import { assertPlatformWritable, PlatformWriteBlockedError } from "@/lib/platform/settings";
 import { checkRateLimit, rateLimitPolicy } from "@/lib/rate-limit";
 import { assertSameOrigin, SameOriginError } from "@/lib/security/same-origin";
 import { sessionExchangeSchema } from "@/lib/validation/auth";
@@ -93,6 +94,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const synced = await syncSessionRole(user.uid);
+
+    // Maintenance mode blocks the session exchange for everyone except the
+    // configured Super Admin. The role comes from the server-side claim sync,
+    // never from the request body.
+    try {
+      await assertPlatformWritable({ role: synced.role });
+    } catch (error) {
+      if (error instanceof PlatformWriteBlockedError) {
+        return jsonError(error.message, 503);
+      }
+
+      throw error;
+    }
 
     if (synced.revoked) {
       return NextResponse.json({

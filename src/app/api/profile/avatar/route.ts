@@ -7,6 +7,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { AuthenticationError, requireUser } from "@/lib/auth/guards";
 import { jsonError } from "@/lib/http/respond";
+import { assertPlatformWritable, PlatformWriteBlockedError } from "@/lib/platform/settings";
 import { CloudinaryConfigError, destroyAvatar, uploadAvatar } from "@/lib/profile/cloudinary";
 import { detectImageType, MAX_AVATAR_BYTES } from "@/lib/profile/image";
 import {
@@ -39,10 +40,15 @@ async function authorisedUser(
 
   try {
     const user = await requireUser();
+    await assertPlatformWritable(user);
     return { ok: true, uid: user.userId };
   } catch (error) {
     if (error instanceof AuthenticationError) {
       return { ok: false, response: jsonError("Sign in to change your avatar.", 401) };
+    }
+
+    if (error instanceof PlatformWriteBlockedError) {
+      return { ok: false, response: jsonError(error.message, 503) };
     }
 
     throw error;
