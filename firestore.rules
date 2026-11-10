@@ -28,7 +28,8 @@ service cloud.firestore {
         'league_phase',
         'knockout',
         'completed',
-        'archived'
+        'archived',
+        'cancelled'
       ];
     }
 
@@ -38,7 +39,8 @@ service cloud.firestore {
         'league_phase',
         'knockout',
         'completed',
-        'archived'
+        'archived',
+        'cancelled'
       ];
     }
 
@@ -91,6 +93,12 @@ service cloud.firestore {
       match /history/{tournamentId} {
         allow read: if true;
       }
+    }
+
+    // Public organiser identity. Created and edited by the server only, so the
+    // owner cannot bypass validation or invent another organiser's profile.
+    match /organiserProfiles/{uid} {
+      allow read: if true;
     }
 
     // Gamer-tag reservation: server-only on both read and write.

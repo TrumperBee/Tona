@@ -68,6 +68,12 @@ export const TOURNAMENT_STATUS_META: Record<TournamentStatus, TournamentStatusMe
     description: "This season is preserved in the archives.",
     live: false,
   },
+  cancelled: {
+    label: "Cancelled",
+    tone: "danger",
+    description: "The organiser cancelled this competition before it finished.",
+    live: false,
+  },
   suspended: {
     label: "Suspended",
     tone: "danger",

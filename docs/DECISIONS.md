@@ -824,3 +824,127 @@ the notice text is never taken from the URL.
 **Consequences.** Approval and role changes get a friendly explanation without
 an injectable message channel. Any future redirect reason must be added to the
 fixed mapping, never passed through as raw query text.
+
+---
+
+## ADR-039 - `cancelled` is a public terminal status that keeps its records
+
+**Date:** 2026-11-10
+**Status:** Accepted
+
+**Context.** Organisers need a way to stop a competition that will never be
+played. Deleting the document would break registrations, membership snapshots
+and audit history; hiding it would strand entrants who already registered.
+
+**Decision.** `cancelled` is a first-class status in `TOURNAMENT_STATUSES`. Any
+non-terminal stage may transition to it, and `cancelled` itself has no outgoing
+transitions in `canTransition` (like `completed` and `archived`, it is
+terminal). Security Rules list it in `isPublicTournamentStatus`, so a cancelled
+competition and its registrations stay publicly readable; it is excluded from
+`isPublishedTournamentStatus`, so matches/standings stay hidden. The workspace
+stepper treats it as `setup done, everything else locked`, and the
+Registrations tab stays available because entrants keep their records.
+
+**Consequences.** A cancelled competition remains on public listing and organiser
+pages with an honest "cancelled" badge, never resumes, and occupies no active
+tournament slot. Rules tests cover public visibility of both the document and
+its registrations.
+
+---
+
+## ADR-040 - `organiserProfiles` is server-written, publicly readable, honestly prefilled
+
+**Date:** 2026-11-10
+**Status:** Accepted
+
+**Context.** Tournament pages need an "Organised by" attribution and each
+organiser needs a public page, but no organiser has typed an organisation name
+yet. Inventing a name or blocking the page until one exists were both worse
+than an honest bootstrap.
+
+**Decision.** One document per organiser at `organiserProfiles/{uid}`, written
+only by `src/lib/organiser/profile.ts` through the Admin SDK and editable only
+via `PATCH /api/organiser/profile` behind the strict Zod schema, same-origin
+check, rate limit, maintenance gate and an `organiser_profile.updated` audit
+entry. Rules grant public read and deny every write. `ensureOrganiserProfile`
+creates the document idempotently, prefilling `organisationName` from the
+latest approved application's `communityName`, falling back to the public
+`gamerTag`; if neither exists it returns null and the settings page collects
+the name on first save. Application approval calls it best-effort so approval
+never fails from profile creation.
+
+**Consequences.** Attribution and `/organisers/{uid}` show real data from day
+one without fabrication. Logos can only be uploaded once the profile exists,
+so a public page never renders an unnamed organisation. The uid, logo
+references and timestamps are never accepted from a request body.
+
+---
+
+## ADR-041 - The tournament workspace renders 404, not 403, for non-owners
+
+**Date:** 2026-11-10
+**Status:** Accepted
+
+**Context.** The organiser workspace URL pattern is guessable
+(`/organiser/tournaments/{id}`). A 403 for another organiser's competition
+would confirm that the competition exists - enumeration across organisers.
+
+**Decision.** `requireTournamentOwnerOrSuperAdmin(id)` throws
+`AuthorizationError` for a signed-in non-owner and `NotFoundError` for a
+missing id, but the workspace layout catches both and calls `notFound()`. A
+non-owner sees the branded 404 page identical to the one for a non-existent
+tournament. The Super Admin is exempt because the console already lists every
+tournament.
+
+**Consequences.** One organiser cannot discover another organiser's competition
+ids through the workspace. The distinction remains only inside the guard for
+callers with a legitimate relationship (API routes still answer 403/404
+precisely for the owner and Super Admin). Integration tests pin both guard
+outcomes and the layout maps them to the single 404.
+
+---
+
+## ADR-042 - The public organiser page pages forward only
+
+**Date:** 2026-11-10
+**Status:** Accepted
+
+**Context.** Authenticated lists paginate with bidirectional Firestore cursors,
+which need stable `startAt` snapshots. Public pages are cached and share
+cursors between visitors, so a "back" cursor captured by one visitor can be
+replayed by another once documents shift.
+
+**Decision.** `getPublicTournamentsByOwner(uid, after)` exposes only a forward
+cursor: page size 9, ordered by `startsAt` desc then id, with `?after={id}`
+as an opaque "Show older" link. Going back is a plain link to page one
+("Back to latest competitions"). An unknown cursor yields an honest empty
+page rather than an error.
+
+**Consequences.** Public pagination is trivially cacheable and cannot leak a
+stale snapshot; visitors cannot construct arbitrary cursors. Navigating to an
+older page then back costs one reload of page one, which is acceptable for a
+public archive.
+
+---
+
+## ADR-043 - An active tournament slot runs from registration open to knockout
+
+**Date:** 2026-11-10
+**Status:** Accepted
+
+**Context.** `maxActiveTournamentsPerOrganiser` needs one honest definition of
+"active" for the dashboard slot counter and the future creation guard
+(Phase 8). Counting every owned document would punish archival; counting only
+registration-open would let a league-phase competition evade the limit.
+
+**Decision.** A competition occupies a slot while its status is
+`registration_open`, `registration_closed`, `pots_confirmed`,
+`fixtures_published`, `league_phase` or `knockout` - i.e. published and
+running. `draft`, `suspended`, `completed`, `archived` and `cancelled` do not.
+The Super Admin is exempt from the limit and the dashboard says so.
+
+**Consequences.** The dashboard's "Active tournament slots: X of N" and the
+Phase 8 creation guard agree by construction. Suspension frees the slot while
+the competition is hidden, which matches the intent of the limit (concurrent
+live operations), and the disabled create CTA explains the blocked state
+without a server write.

@@ -5,6 +5,7 @@ import { ArrowLeft, ClipboardCheck, ListChecks, UserCheck } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { OrganisedBy } from "@/components/tournament/organised-by";
 import { PageHeader } from "@/components/shared/page-header";
 import { buttonStyles } from "@/components/ui/button-styles";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -92,6 +93,10 @@ export default async function TournamentRegisterPage({ params }: RegisterPagePro
             <Badge tone="neutral">
               {tournament.registrationCount} / {tournament.maxParticipants} registered
             </Badge>
+          </div>
+
+          <div className="mt-4">
+            <OrganisedBy ownerUid={tournament.ownerUid} />
           </div>
         </div>
       </section>

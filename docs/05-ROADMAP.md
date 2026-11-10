@@ -1,8 +1,9 @@
 # GCC — Roadmap
 
-> Phases 1, 1B, 2, 3, 3B, 4, 5 and 6 are done. Phase 6 delivered the organiser
-> application and approval flow (form, review queue, approve/reject/withdraw,
-> cooldown, audit) plus in-app notifications. A phase starts only when the
+> Phases 1, 1B, 2, 3, 3B, 4, 5, 6 and 7 are done. Phase 7 delivered the
+> organiser workspace: public organiser profiles, the organiser dashboard,
+> the owned-tournament list and the per-tournament workspace with its
+> lifecycle stepper and `cancelled` status. A phase starts only when the
 > previous phase is reviewed and accepted.
 
 | #   | Phase                                              | Primary deliverables                                                                                                     | Status      |
@@ -15,7 +16,7 @@
 | 4   | Accounts and profiles                              | Sign-up, email verification, sign-in, password reset, profiles, avatars                                                  | Done        |
 | 5   | Super Admin dashboard                              | Overview, users, read-only tournaments, analytics, settings/maintenance, audit viewer, announcements                     | Done        |
 | 6   | Organiser application and approval                 | Application form, organiser code page, review queue, approve/reject/withdraw with cooldown, audit, in-app notifications  | Done        |
-| 7   | Organiser dashboard                                | Organiser shell, owned-tournament management, ownership guards                                                           | Not started |
+| 7   | Organiser workspace                                | Organiser profile + settings, public organiser page, dashboard, owned-tournament list, tournament workspace, cancelled   | Done        |
 | 8   | Tournament creation and registration               | Create/edit/publish tournaments, registrations, participant lists                                                        | Not started |
 | 9   | Pot allocation (manual + shuffle)                  | Plain pots (no country restrictions), seeded draw, admin shuffle, audit trail                                            | Not started |
 | 10  | Fixture engine                                     | Pure constraint-based generator, validator, matchdays, fixture UI                                                        | Not started |

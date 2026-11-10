@@ -24,6 +24,7 @@ export const TOURNAMENT_STATUSES = [
   "knockout",
   "completed",
   "archived",
+  "cancelled",
   "suspended",
 ] as const;
 export type TournamentStatus = (typeof TOURNAMENT_STATUSES)[number];
@@ -81,20 +82,26 @@ export const NOTIFICATION_TYPES = [
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
-/** Allowed tournament status transitions. `archived` is terminal. */
+/**
+ * Allowed tournament status transitions. `completed`, `archived` and `cancelled`
+ * are terminal. A competition that has not reached a terminal status may be
+ * cancelled at any time; it may also be suspended for a Super Admin review.
+ */
 export const TOURNAMENT_TRANSITIONS: Readonly<
   Record<TournamentStatus, readonly TournamentStatus[]>
 > = {
-  draft: ["registration_open", "suspended"],
-  registration_open: ["registration_closed", "suspended"],
-  registration_closed: ["pots_confirmed", "suspended"],
-  pots_confirmed: ["fixtures_published", "suspended"],
-  fixtures_published: ["league_phase", "suspended"],
-  league_phase: ["knockout", "completed", "suspended"],
-  knockout: ["completed", "suspended"],
+  draft: ["registration_open", "suspended", "cancelled"],
+  registration_open: ["registration_closed", "suspended", "cancelled"],
+  registration_closed: ["pots_confirmed", "suspended", "cancelled"],
+  pots_confirmed: ["fixtures_published", "suspended", "cancelled"],
+  fixtures_published: ["league_phase", "suspended", "cancelled"],
+  league_phase: ["knockout", "completed", "suspended", "cancelled"],
+  knockout: ["completed", "suspended", "cancelled"],
   completed: ["archived"],
   archived: [],
-  // A suspended tournament may be resumed at any non-archived stage after a
+  // A cancelled competition never resumes. Entrants keep their records.
+  cancelled: [],
+  // A suspended tournament may be resumed at any non-terminal stage after a
   // Super Admin review. The exact prior state is restored by server code.
   suspended: [
     "draft",
@@ -105,6 +112,7 @@ export const TOURNAMENT_TRANSITIONS: Readonly<
     "league_phase",
     "knockout",
     "completed",
+    "cancelled",
   ],
 };
 
@@ -265,6 +273,29 @@ export interface ApplicationStateDocument {
   readonly lastApplicationAt: Timestamp | null;
   readonly lastRejectedAt: Timestamp | null;
   readonly lastApprovedAt: Timestamp | null;
+  readonly updatedAt: Timestamp;
+}
+
+/** A labelled outbound link on a public organiser profile. */
+export interface OrganiserProfileLink {
+  readonly label: string;
+  readonly url: string;
+}
+
+/**
+ * Public organiser identity, one document per organiser. The server creates it
+ * idempotently when an application is approved or when the organiser first
+ * enters the organiser area; the owner edits it through a server route only.
+ */
+export interface OrganiserProfileDocument {
+  readonly uid: string;
+  /** Prefilled from the approved application's communityName. */
+  readonly organisationName: string;
+  readonly bio: string | null;
+  readonly logoUrl: string | null;
+  readonly logoPublicId: string | null;
+  readonly links: readonly OrganiserProfileLink[];
+  readonly createdAt: Timestamp;
   readonly updatedAt: Timestamp;
 }
 

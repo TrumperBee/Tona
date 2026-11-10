@@ -24,6 +24,7 @@ const tournamentTone: Record<TournamentStatus, BadgeTone> = {
   knockout: "success",
   completed: "gold",
   archived: "neutral",
+  cancelled: "danger",
   suspended: "danger",
 };
 

@@ -22,12 +22,38 @@ describe("canTransition", () => {
 
   it("allows suspension from every active pre-completion stage", () => {
     for (const from of TOURNAMENT_STATUSES) {
-      if (from === "completed" || from === "archived" || from === "suspended") {
+      if (
+        from === "completed" ||
+        from === "archived" ||
+        from === "cancelled" ||
+        from === "suspended"
+      ) {
         continue;
       }
 
       expect(canTransition(from, "suspended"), `${from} -> suspended`).toBe(true);
     }
+  });
+
+  it("allows cancellation from every non-terminal stage", () => {
+    for (const from of TOURNAMENT_STATUSES) {
+      if (from === "completed" || from === "archived" || from === "cancelled") {
+        continue;
+      }
+
+      expect(canTransition(from, "cancelled"), `${from} -> cancelled`).toBe(true);
+    }
+  });
+
+  it("treats cancelled as terminal", () => {
+    for (const to of TOURNAMENT_STATUSES) {
+      expect(canTransition("cancelled", to), `cancelled -> ${to}`).toBe(false);
+    }
+  });
+
+  it("never moves a terminal tournament back into the lifecycle", () => {
+    expect(canTransition("completed", "cancelled")).toBe(false);
+    expect(canTransition("archived", "cancelled")).toBe(false);
   });
 
   it("allows a suspended tournament to resume at a non-archived stage", () => {

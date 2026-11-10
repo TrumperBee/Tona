@@ -1,38 +1,21 @@
 // GCC - Knockout.
-// Honest Phase 3 state: real heading and guidance, no mock data or controls.
-import { FeatureNotice } from "@/components/shared/feature-notice";
+//
+// The workspace layout above renders the guard, header, lifecycle stepper and
+// tabs. Honest Phase 7 state: real explanation, no mock data or controls.
 import { Swords } from "lucide-react";
+
+import { WorkspaceToolNotice } from "@/components/organiser/workspace-tool-notice";
 
 export const metadata = { title: "Knockout" };
 
-interface PageProps {
-  params: Promise<{ id: string }>;
-}
-
-export default async function KnockoutPage({ params }: PageProps) {
-  const { id } = await params;
-
+export default function KnockoutPage() {
   return (
-    <FeatureNotice
-      eyebrow="Tournament workspace"
-      title="Knockout"
-      description={
-        <>
-          Advance qualifiers into the play-offs and knockout rounds after the league phase. This
-          workspace is scoped to tournament <span className="font-mono text-grey-200">{id}</span>.
-          Every action applies to this competition only.
-        </>
-      }
-      breadcrumbs={[
-        { label: "Home", href: "/" },
-        { label: "Organiser", href: "/organiser" },
-        { label: "Tournaments", href: "/organiser/tournaments" },
-        { label: id },
-        { label: "Knockout" },
-      ]}
-      availabilityTitle="No knockout ties yet"
-      availabilityDescription="Knockout ties are generated from final league positions, not selected by hand. The bracket opens after matchday 8 is verified."
+    <WorkspaceToolNotice
       icon={Swords}
+      title="Knockout"
+      description="Advance qualifiers into the play-offs and knockout rounds after the league phase. Every action here applies to this competition only."
+      availabilityTitle="The bracket is not built yet"
+      availabilityDescription="Qualifiers advance only after every league-phase result is recorded. Each knockout tie and its outcome will be written by the server with an audit entry."
     />
   );
 }

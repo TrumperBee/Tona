@@ -1,8 +1,9 @@
-// GCC - Cloudinary avatar storage (server only).
+// GCC - Cloudinary image storage (server only).
 //
 // The browser uploads bytes to our route; the route validates them and sends
 // them to Cloudinary with the server credentials. The client never receives an
-// API key, a signature or a client-supplied URL.
+// API key, a signature or a client-supplied URL. Player avatars and organiser
+// logos both flow through this module with separate public-id namespaces.
 import "server-only";
 
 import { v2 as cloudinary, type UploadApiResponse } from "cloudinary";
@@ -48,16 +49,13 @@ export interface StoredAvatar {
   readonly url: string;
 }
 
-/** Replaces (or creates) the avatar for a UID. */
-export async function uploadAvatar(
-  uid: string,
+function uploadImage(
+  client: ReturnType<typeof getCloudinary>,
+  publicId: string,
   bytes: Buffer,
   mimeType: string,
-): Promise<StoredAvatar> {
-  const client = getCloudinary();
-  const publicId = `gcc/avatars/${uid}`;
-
-  const result = await new Promise<UploadApiResponse>((resolve, reject) => {
+): Promise<UploadApiResponse> {
+  return new Promise<UploadApiResponse>((resolve, reject) => {
     const stream = client.uploader.upload_stream(
       {
         public_id: publicId,
@@ -78,14 +76,42 @@ export async function uploadAvatar(
 
     stream.end(bytes);
   });
+}
 
-  return {
-    publicId: result.public_id,
-    url: client.url(result.public_id, {
-      secure: true,
-      transformation: [{ fetch_format: "auto", quality: "auto" }],
-    }),
-  };
+function deliveryUrl(client: ReturnType<typeof getCloudinary>, publicId: string): string {
+  return client.url(publicId, {
+    secure: true,
+    transformation: [{ fetch_format: "auto", quality: "auto" }],
+  });
+}
+
+/** Replaces (or creates) the avatar for a UID. */
+export async function uploadAvatar(
+  uid: string,
+  bytes: Buffer,
+  mimeType: string,
+): Promise<StoredAvatar> {
+  const client = getCloudinary();
+  const publicId = `gcc/avatars/${uid}`;
+  const result = await uploadImage(client, publicId, bytes, mimeType);
+
+  return { publicId: result.public_id, url: deliveryUrl(client, result.public_id) };
+}
+
+/**
+ * Replaces (or creates) the public organisation logo for a UID. Logos live in
+ * their own folder so access and cleanup policies stay separable from avatars.
+ */
+export async function uploadOrganiserLogo(
+  uid: string,
+  bytes: Buffer,
+  mimeType: string,
+): Promise<StoredAvatar> {
+  const client = getCloudinary();
+  const publicId = `gcc/organisers/${uid}`;
+  const result = await uploadImage(client, publicId, bytes, mimeType);
+
+  return { publicId: result.public_id, url: deliveryUrl(client, result.public_id) };
 }
 
 /** Best-effort removal. A missing asset is treated as success. */

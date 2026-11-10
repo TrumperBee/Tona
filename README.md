@@ -9,7 +9,7 @@ knockouts and preserves champions, player statistics and a Hall of Fame.
 
 GCC is **not affiliated with UEFA** and never uses UEFA logos or branding.
 
-> **Project status: Phase 6 - Organiser applications and notifications.**
+> **Project status: Phase 7 - Organiser workspace.**
 > Phase 1 delivered the scaffold. Phase 1B migrated the database stack to Firebase.
 > Phase 2 implemented the Firestore data model, Security Rules, rules tests and server auth
 > infrastructure. Phase 3 delivered the public design system and site skeleton. Phase 3B
@@ -18,11 +18,14 @@ GCC is **not affiliated with UEFA** and never uses UEFA logos or branding.
 > player profiles, avatar upload via Cloudinary and public player search. Phase 5 added a
 > guarded Super Admin console: platform settings and maintenance mode, overview, user
 > management, audit viewer, announcements, analytics and a read-only tournament list.
-> Phase 6 delivers the organiser application form and organiser code of conduct, the
+> Phase 6 delivered the organiser application form and organiser code of conduct, the
 > Super Admin review queue with approve/reject/withdraw, a rejection cooldown, and real
-> in-app notifications with an inbox and header bell. Tournament creation, fixtures and
-> results remain later phases. There is no fake data and
-> no decorative functionality.
+> in-app notifications with an inbox and header bell. Phase 7 delivers the organiser
+> workspace: a public organiser profile with logo upload, a public organiser page, the
+> organiser dashboard with active-slot counting, the owned-tournament list, and the
+> per-tournament workspace with its lifecycle stepper and a terminal `cancelled` status.
+> Tournament creation, fixtures and results remain later phases. There is no fake data
+> and no decorative functionality.
 
 ## Architecture principle: clients read, the server writes
 
@@ -101,21 +104,21 @@ Never paste secrets into chat or commit them.
 
 ## Scripts
 
-| Script                     | Description                                                                          |
-| -------------------------- | ------------------------------------------------------------------------------------ |
-| `npm run dev`              | Start the development server                                                         |
-| `npm run build`            | Production build                                                                     |
-| `npm run start`            | Serve the production build                                                           |
-| `npm run lint`             | ESLint                                                                               |
-| `npm run typecheck`        | TypeScript, no emit                                                                  |
-| `npm run test`             | Vitest unit tests (no emulator or Java required)                                     |
-| `npm run test:watch`       | Vitest in watch mode                                                                 |
-| `npm run emulators`        | Start the Firebase Emulator Suite (Auth 9099, Firestore 8080, UI enabled)            |
-| `npm run test:rules`       | Run Firestore rules tests against the emulators (requires Java 21)                   |
-| `npm run test:integration` | Run registration and role integration tests against the emulators (requires Java 21) |
-| `npm run rules:deploy`     | Deploy Firestore rules and indexes to the default project                            |
-| `npm run format`           | Prettier write                                                                       |
-| `npm run format:check`     | Prettier check                                                                       |
+| Script                     | Description                                                                                     |
+| -------------------------- | ----------------------------------------------------------------------------------------------- |
+| `npm run dev`              | Start the development server                                                                    |
+| `npm run build`            | Production build                                                                                |
+| `npm run start`            | Serve the production build                                                                      |
+| `npm run lint`             | ESLint                                                                                          |
+| `npm run typecheck`        | TypeScript, no emit                                                                             |
+| `npm run test`             | Vitest unit tests (no emulator or Java required)                                                |
+| `npm run test:watch`       | Vitest in watch mode                                                                            |
+| `npm run emulators`        | Start the Firebase Emulator Suite (Auth 9099, Firestore 8080, UI enabled)                       |
+| `npm run test:rules`       | Run Firestore rules tests against the emulators (requires Java 21)                              |
+| `npm run test:integration` | Run registration, role and organiser integration tests against the emulators (requires Java 21) |
+| `npm run rules:deploy`     | Deploy Firestore rules and indexes to the default project                                       |
+| `npm run format`           | Prettier write                                                                                  |
+| `npm run format:check`     | Prettier check                                                                                  |
 
 Firestore rules deny all client writes and allow reads only where documented in
 `docs/02-DATA-MODEL.md`. Rules tests live in `tests/rules/` and are documented in
@@ -135,6 +138,9 @@ Firestore rules deny all client writes and allow reads only where documented in
 | `DELETE /api/profile/avatar`                 | Remove the avatar and its Cloudinary asset                       |
 | `POST /api/admin-applications`               | Submit an organiser application (one pending, cooldown enforced) |
 | `POST /api/admin-applications/[id]/withdraw` | Withdraw the caller's own pending application                    |
+| `PATCH /api/organiser/profile`               | Strict edit of the caller's public organiser profile             |
+| `POST /api/organiser/logo`                   | Upload and store a verified organiser logo                       |
+| `DELETE /api/organiser/logo`                 | Remove the logo and its Cloudinary asset                         |
 | `POST /api/notifications/read`               | Mark the caller's own notifications read (ids or all)            |
 
 ## Super Admin endpoints
@@ -174,6 +180,7 @@ src/
     firebase/     Browser SDK, Admin SDK (server-only), collection paths
     auth/         Roles, session cookie, guards, role/status administration, audit
     applications/ Organiser application submission, review and cooldown
+    organiser/    Organiser profile, dashboard overview, owned-tournament list, workspace access
     notifications/ Server-written in-app notifications, inbox and bell
     validation/   Zod schemas
     audit/        Append-only audit log writer

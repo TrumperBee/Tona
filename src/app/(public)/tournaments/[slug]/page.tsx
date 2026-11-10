@@ -19,6 +19,7 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 
 import { EHubMarketPromo } from "@/components/marketplace/ehubmarket-promo";
+import { OrganisedBy } from "@/components/tournament/organised-by";
 import { PageHeader } from "@/components/shared/page-header";
 import { buttonStyles } from "@/components/ui/button-styles";
 import { Badge, Card, CardContent, CardHeader, CardTitle, StatusPill } from "@/components/ui/card";
@@ -140,6 +141,9 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
             {format ? <Badge tone="info">{format.participants} teams</Badge> : null}
           </div>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-grey-400">{meta.description}</p>
+          <div className="mt-4">
+            <OrganisedBy ownerUid={tournament.ownerUid} />
+          </div>
         </div>
       </section>
 

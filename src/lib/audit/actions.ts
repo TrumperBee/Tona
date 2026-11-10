@@ -22,6 +22,7 @@ export const AUDIT_ACTIONS: readonly AuditActionDefinition[] = [
   { action: "application.approved", label: "Organiser application approved" },
   { action: "application.rejected", label: "Organiser application rejected" },
   { action: "application.revoked", label: "Organiser application revoked" },
+  { action: "organiser_profile.updated", label: "Organiser profile updated" },
   { action: "tournament.created", label: "Tournament created" },
   { action: "tournament.status.set", label: "Tournament status changed" },
   { action: "draw.confirmed", label: "Draw confirmed" },

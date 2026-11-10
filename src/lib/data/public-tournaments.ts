@@ -5,6 +5,8 @@
 // than fake content or a crashed page.
 import "server-only";
 
+import type { Query } from "firebase-admin/firestore";
+
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 import { isGameId, type GameId } from "@/lib/config/games";
@@ -19,9 +21,15 @@ const PUBLIC_STATUSES: readonly TournamentStatus[] = [
   "knockout",
   "completed",
   "archived",
+  "cancelled",
 ];
 
 const publicStatusSet = new Set<TournamentStatus>(PUBLIC_STATUSES);
+
+/** True when a tournament with this status is visible to the public. */
+export function isPubliclyListedStatus(status: TournamentStatus): boolean {
+  return publicStatusSet.has(status);
+}
 
 export interface PublicTournamentSummary {
   readonly id: string;
@@ -33,6 +41,7 @@ export interface PublicTournamentSummary {
   readonly startsAt: string | null;
   readonly registrationCount: number;
   readonly maxParticipants: number;
+  readonly ownerUid: string;
 }
 
 export interface PublicTournamentDetail extends PublicTournamentSummary {
@@ -95,6 +104,7 @@ function mapSummary(id: string, data: Record<string, unknown>): PublicTournament
     startsAt: toIsoString(data.startsAt),
     registrationCount: typeof data.registrationCount === "number" ? data.registrationCount : 0,
     maxParticipants: typeof data.maxParticipants === "number" ? data.maxParticipants : 36,
+    ownerUid: readString(data.ownerUid),
   };
 }
 
@@ -166,5 +176,61 @@ export async function getPublicTournamentBySlug(
     return mapDetail(document.id, document.data());
   } catch {
     return null;
+  }
+}
+
+export interface PublicTournamentPage {
+  readonly rows: readonly PublicTournamentSummary[];
+  readonly hasMore: boolean;
+  readonly firstId: string | null;
+  readonly lastId: string | null;
+}
+
+const OWNER_PAGE_SIZE = 9;
+
+/**
+ * Returns one organiser's public tournaments, newest start first, one opaque
+ * forward cursor at a time (`after` is a tournament id). Never throws.
+ */
+export async function getPublicTournamentsByOwner(
+  ownerUid: string,
+  after?: string | null,
+): Promise<PublicTournamentPage> {
+  if (ownerUid.trim().length === 0) {
+    return { rows: [], hasMore: false, firstId: null, lastId: null };
+  }
+
+  try {
+    const firestore = getFirebaseAdminFirestore();
+    let query: Query = firestore
+      .collection(paths.tournaments())
+      .where("ownerUid", "==", ownerUid)
+      .where("status", "in", PUBLIC_STATUSES)
+      .orderBy("startsAt", "desc");
+
+    if (after) {
+      const cursor = await firestore.doc(paths.tournament(after)).get();
+
+      if (!cursor.exists) {
+        return { rows: [], hasMore: false, firstId: null, lastId: null };
+      }
+
+      query = query.startAfter(cursor);
+    }
+
+    const snapshot = await query.limit(OWNER_PAGE_SIZE + 1).get();
+    const docs = snapshot.docs.slice(0, OWNER_PAGE_SIZE);
+    const rows = docs
+      .map((document) => mapSummary(document.id, document.data()))
+      .filter((tournament): tournament is PublicTournamentSummary => tournament !== null);
+
+    return {
+      rows,
+      hasMore: snapshot.docs.length > OWNER_PAGE_SIZE,
+      firstId: docs[0]?.id ?? null,
+      lastId: docs[docs.length - 1]?.id ?? null,
+    };
+  } catch {
+    return { rows: [], hasMore: false, firstId: null, lastId: null };
   }
 }

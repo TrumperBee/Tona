@@ -1,38 +1,21 @@
 // GCC - Fixtures.
-// Honest Phase 3 state: real heading and guidance, no mock data or controls.
-import { FeatureNotice } from "@/components/shared/feature-notice";
+//
+// The workspace layout above renders the guard, header, lifecycle stepper and
+// tabs. Honest Phase 7 state: real explanation, no mock data or controls.
 import { CalendarDays } from "lucide-react";
+
+import { WorkspaceToolNotice } from "@/components/organiser/workspace-tool-notice";
 
 export const metadata = { title: "Fixtures" };
 
-interface PageProps {
-  params: Promise<{ id: string }>;
-}
-
-export default async function FixturesPage({ params }: PageProps) {
-  const { id } = await params;
-
+export default function FixturesPage() {
   return (
-    <FeatureNotice
-      eyebrow="Tournament workspace"
-      title="Fixtures"
-      description={
-        <>
-          Generate and publish the eight-matchday league phase for this tournament. This workspace
-          is scoped to tournament <span className="font-mono text-grey-200">{id}</span>. Every
-          action applies to this competition only.
-        </>
-      }
-      breadcrumbs={[
-        { label: "Home", href: "/" },
-        { label: "Organiser", href: "/organiser" },
-        { label: "Tournaments", href: "/organiser/tournaments" },
-        { label: id },
-        { label: "Fixtures" },
-      ]}
-      availabilityTitle="No fixtures generated yet"
-      availabilityDescription="Fixture generation requires a confirmed draw. When it runs, the schedule is validated against every format constraint before publication."
+    <WorkspaceToolNotice
       icon={CalendarDays}
+      title="Fixtures"
+      description="Generate and publish the eight-matchday league phase for this tournament. Every action here applies to this competition only."
+      availabilityTitle="Fixture generation is not open yet"
+      availabilityDescription="The schedule is generated from the confirmed pots, and publishing it moves the competition to the league phase — a recorded status change, never a silent edit."
     />
   );
 }

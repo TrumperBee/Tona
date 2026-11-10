@@ -11,6 +11,7 @@ export const COLLECTIONS = {
   gamerTags: "gamerTags",
   adminApplications: "adminApplications",
   applicationState: "applicationState",
+  organiserProfiles: "organiserProfiles",
   tournaments: "tournaments",
   announcements: "announcements",
   hallOfFame: "hallOfFame",
@@ -92,6 +93,9 @@ export const paths = {
 
   applicationStates: () => COLLECTIONS.applicationState,
   applicationState: (uid: string) => documentPath(COLLECTIONS.applicationState, uid),
+
+  organiserProfiles: () => COLLECTIONS.organiserProfiles,
+  organiserProfile: (uid: string) => documentPath(COLLECTIONS.organiserProfiles, uid),
 
   tournaments: () => COLLECTIONS.tournaments,
   tournament: (tournamentId: string) => documentPath(COLLECTIONS.tournaments, tournamentId),

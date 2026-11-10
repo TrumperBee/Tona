@@ -45,6 +45,7 @@
 | `gamerTags/{gamerTagLower}`                   | `{ uid, createdAt }` uniqueness reservation                                                                                                                                                            | Nobody (server only)                                             |
 | `adminApplications/{id}`                      | uid, gamerTag and email snapshots, communityName, communityType, communityLink, expectedPlayers, gamesPlanned, experience, motivation, agreesToRules, status, reviewer fields, timestamps              | Applicant, Super Admin                                           |
 | `applicationState/{uid}`                      | Per-applicant marker: status, currentApplicationId, lastApplicationAt, lastRejectedAt, lastApprovedAt                                                                                                  | Nobody (server only)                                             |
+| `organiserProfiles/{uid}`                     | uid, organisationName, bio, logoUrl, logoPublicId, links (up to 3), createdAt, updatedAt                                                                                                               | Anyone                                                           |
 | `tournaments/{id}`                            | ownerUid, slug, name, description, gameId, formatId, coverImageUrl, rules, matchDurationMinutes, timezone, registration/starts dates, maxParticipants, registrationCount, status, season, timestamps   | Public unless `draft`/`suspended`; owner and Super Admin always  |
 | `tournaments/{id}/registrations/{uid}`        | tournamentId, gamerTag, country, photoUrl, status, registeredAt                                                                                                                                        | Public with a public tournament; owner and Super Admin always    |
 | `tournaments/{id}/draw/current`               | pots `{1:[uid…],2:[…],3:[…],4:[…]}`, method, shuffleSeed, confirmedAt, confirmedBy                                                                                                                     | Owner/Super Admin before confirmation; public after              |
@@ -233,7 +234,10 @@ fixtures_published → league_phase → knockout → completed → archived
 ```
 
 Any non-completed, non-archived stage may be suspended. A suspended tournament
-may resume at a non-archived stage. `archived` is terminal.
+may resume at a non-archived stage or be cancelled. Any non-terminal stage
+(`completed`, `archived` and `cancelled` are terminal) may be cancelled; a
+cancelled competition never resumes but stays publicly listed with its
+records. `archived` is terminal.
 
 **Writers:** owner server routes and Super Admin actions. **Readers:** public when
 the status is not `draft` or `suspended`; owner and Super Admin always.
@@ -443,6 +447,36 @@ Every other state-changing route calls `assertPlatformWritable(user)` first, so
 maintenance mode is enforced in one place. `assertRegistrationsOpen()` adds the
 registration-specific rejection. The Super Admin is never blocked.
 
+### 3.22 `organiserProfiles/{uid}` — public organiser identity
+
+Document id: UID. One public document per organiser, created idempotently by the
+server when an application is approved (prefilled with its `communityName`) or
+when the organiser first enters the organiser area. Owners edit it through
+`PATCH /api/organiser/profile`; a logo upload (`POST`/`DELETE
+/api/organiser/logo`) stores Cloudinary references the same way avatars work.
+
+| Field                     | Type           | Notes                                                 |
+| ------------------------- | -------------- | ----------------------------------------------------- |
+| `uid`                     | string         | Matches the document id; server-written only          |
+| `organisationName`        | string         | 2–60 characters, required; prefill rules below        |
+| `bio`                     | string \| null | Max 300 characters                                    |
+| `logoUrl`                 | string \| null | Cloudinary delivery URL                               |
+| `logoPublicId`            | string \| null | Cloudinary public id under `gcc/organisers/{uid}`     |
+| `links`                   | array          | Up to 3 `{ label, url }`, each url must be `https://` |
+| `createdAt` / `updatedAt` | Timestamp      | Server-written                                        |
+
+**Writers:** `src/lib/organiser/profile.ts` only (server). The uid, logo
+references and timestamps are never accepted from a request body; every edit
+runs the strict Zod schema and is audited as `organiser_profile.updated`.
+**Readers:** anyone (Security Rules `allow read: if true`). Public tournament
+pages read it for the "Organised by" attribution and `/organisers/{uid}` lists
+the organiser's publicly visible competitions.
+
+The initial organisation name resolves honestly, without inventing data: the
+latest approved application's `communityName`, falling back to the public
+`gamerTag`. When neither exists the profile is not created until the owner
+saves a name, so the public page and attributions simply show nothing.
+
 ## 4. Relationships
 
 ```text
@@ -465,6 +499,8 @@ tournaments/{id}
   └── announcements/{id}
 
 adminApplications/{id} ── uid ── users/{uid}
+organiserProfiles/{uid} ── uid ── users/{uid}
+tournaments/{id} ── ownerUid ── organiserProfiles/{uid}
 auditLogs/{id} ── actorUid ── users/{uid}
 auditLogs/{id} ── targetType/targetId ── users/{uid} or announcements/{id}
 announcements/{id} ── authorUid ── users/{uid}
@@ -474,7 +510,7 @@ hallOfFame/{id} ── tournamentId ── tournaments/{id}
 
 ## 5. Composite indexes
 
-`firestore.indexes.json` declares 39 composite indexes:
+`firestore.indexes.json` declares 44 composite indexes:
 
 | Collection group    | Fields                                                                                                       | Use                                                             |
 | ------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
@@ -484,14 +520,19 @@ hallOfFame/{id} ── tournamentId ── tournaments/{id}
 | `matches`           | `tournamentId` ASC + `participants` ARRAY_CONTAINS + `updatedAt` DESC                                        | Scoped player history that rules can prove is public            |
 | `matches`           | `status` ASC + `matchday` ASC                                                                                | Operations queues                                               |
 | `tournaments`       | `status` ASC + `startsAt` ASC                                                                                | Public discovery                                                |
-| `tournaments`       | `ownerUid` ASC + `updatedAt` DESC                                                                            | Organiser dashboard                                             |
+| `tournaments`       | `ownerUid` ASC + `updatedAt` DESC                                                                            | Organiser dashboard and owned-tournament list                   |
 | `tournaments`       | `status` ASC + `createdAt` DESC                                                                              | Super Admin tournament list, newest first                       |
 | `tournaments`       | `status` ASC + `name` ASC                                                                                    | Super Admin tournament name search                              |
+| `tournaments`       | `ownerUid` ASC + `status` ASC + `updatedAt` DESC                                                             | Owned-tournament list filtered by status (Phase 7)              |
+| `tournaments`       | `ownerUid` ASC + `name` ASC                                                                                  | Owned-tournament name search (Phase 7)                          |
+| `tournaments`       | `ownerUid` ASC + `status` ASC + `name` ASC                                                                   | Owned-tournament search with status filter (Phase 7)            |
+| `tournaments`       | `ownerUid` ASC + `status` ASC + `startsAt` DESC                                                              | Public organiser page listing (Phase 7)                         |
 | `registrations`     | `status` ASC + `registeredAt` ASC                                                                            | Registration review                                             |
 | `registrations`     | `tournamentId` ASC + `registeredAt` DESC                                                                     | Scoped player registration history                              |
 | `users`             | Any non-empty subset of `role`, `status`, `country`, `preferredGame` in that fixed order, + `createdAt` DESC | Super Admin user list and every filter combination (15 indexes) |
 | `auditLogs`         | `action` / `actorUid` / `targetType` singly or in combination, + `createdAt` DESC                            | Audit viewer filters (7 indexes)                                |
 | `auditLogs`         | `targetType` ASC + `targetId` ASC + `createdAt` DESC                                                         | User-detail audit history                                       |
+| `auditLogs`         | `tournamentId` ASC + `createdAt` DESC                                                                        | Organiser workspace audit trail (Phase 7)                       |
 | `announcements`     | `deletedAt` ASC + `createdAt` DESC                                                                           | Admin announcement list                                         |
 | `announcements`     | `deletedAt` ASC + `publishedAt` DESC                                                                         | Public announcement list                                        |
 | `adminApplications` | `status` ASC + `createdAt` DESC                                                                              | Review queue, newest first (non-pending tabs)                   |
@@ -510,8 +551,9 @@ Add an index only with the query that needs it. Deploy rules and indexes with
 ## 6. Security Rules summary
 
 - Default deny. `allow write: if false` for every document.
-- Public reads: `publicProfiles` (including `history` subcollection), published
-  and unexpired platform `announcements`, `hallOfFame`.
+- Public reads: `publicProfiles` (including `history` subcollection),
+  `organiserProfiles`, published and unexpired platform `announcements`,
+  `hallOfFame`.
 - Draft, expired and soft-deleted platform announcements are readable only by
   the Super Admin.
 - Private reads: `users` (owner/Super Admin), notifications and memberships
@@ -538,6 +580,7 @@ Add an index only with the query that needs it. Deploy rules and indexes with
 | 4     | Atomic registration, profile edit, avatar upload/removal                                         |
 | 5     | Platform settings, account status/role actions, contact reveal, announcements, analytics refresh |
 | 6     | Admin application submission/review, in-app notifications                                        |
+| 7     | Organiser profile edit, logo upload/removal, organiser profile bootstrap on approval             |
 | 8     | Tournament create/update/publish, registration, membership snapshot                              |
 | 9     | Draw generation, admin shuffle, confirmation                                                     |
 | 10    | Fixture draft generation and publication                                                         |

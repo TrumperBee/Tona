@@ -49,7 +49,10 @@ export async function requirePageSignedIn(nextPath: string): Promise<SessionUser
     return await requireUser();
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      redirectToSignIn(nextPath);
+      // `redirect()` throws, and the throw must propagate through this
+      // promise; calling it without `return` would drop the redirect and
+      // re-throw the original authentication error instead.
+      return redirectToSignIn(nextPath);
     }
 
     throw error;
@@ -66,7 +69,10 @@ export async function requirePageUser(nextPath: string): Promise<SessionUser> {
     return await requireVerifiedUser();
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      redirectToSignIn(nextPath);
+      // Same control-flow rule as requirePageSignedIn: the redirect throw must
+      // propagate, otherwise a signed-out visitor would fall through to the
+      // verification-page redirect below.
+      return redirectToSignIn(nextPath);
     }
 
     redirect("/verify-email");

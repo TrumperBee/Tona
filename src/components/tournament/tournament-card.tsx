@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { ArrowRight, CalendarDays, Users } from "lucide-react";
 
+import { OrganisedBy } from "@/components/tournament/organised-by";
 import { Badge, Card, StatusPill } from "@/components/ui/card";
 import { getGame } from "@/lib/config/games";
 import { TOURNAMENT_STATUS_META } from "@/lib/config/tournament-status";
@@ -51,6 +52,12 @@ export function TournamentCard({ tournament }: { readonly tournament: PublicTour
             <dt className="sr-only">Registration</dt>
             <dd>
               {tournament.registrationCount} / {tournament.maxParticipants} registered
+            </dd>
+          </div>
+          <div className="flex items-center gap-2">
+            <dt className="sr-only">Organiser</dt>
+            <dd>
+              <OrganisedBy ownerUid={tournament.ownerUid} />
             </dd>
           </div>
         </dl>

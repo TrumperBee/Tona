@@ -95,6 +95,13 @@ export const organiserNavigation: readonly NavigationItem[] = [
     icon: Plus,
     exact: true,
   },
+  {
+    href: "/organiser/settings",
+    label: "Organiser profile",
+    description: "Public organisation page",
+    icon: User,
+    exact: true,
+  },
 ];
 
 interface TournamentWorkspaceItem {

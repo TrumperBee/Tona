@@ -1,38 +1,21 @@
 // GCC - Announcements.
-// Honest Phase 3 state: real heading and guidance, no mock data or controls.
-import { FeatureNotice } from "@/components/shared/feature-notice";
+//
+// The workspace layout above renders the guard, header, lifecycle stepper and
+// tabs. Honest Phase 7 state: real explanation, no mock data or controls.
 import { Megaphone } from "lucide-react";
+
+import { WorkspaceToolNotice } from "@/components/organiser/workspace-tool-notice";
 
 export const metadata = { title: "Announcements" };
 
-interface PageProps {
-  params: Promise<{ id: string }>;
-}
-
-export default async function AnnouncementsPage({ params }: PageProps) {
-  const { id } = await params;
-
+export default function AnnouncementsPage() {
   return (
-    <FeatureNotice
-      eyebrow="Tournament workspace"
-      title="Announcements"
-      description={
-        <>
-          Publish operational updates to the participants in this competition. This workspace is
-          scoped to tournament <span className="font-mono text-grey-200">{id}</span>. Every action
-          applies to this competition only.
-        </>
-      }
-      breadcrumbs={[
-        { label: "Home", href: "/" },
-        { label: "Organiser", href: "/organiser" },
-        { label: "Tournaments", href: "/organiser/tournaments" },
-        { label: id },
-        { label: "Announcements" },
-      ]}
-      availabilityTitle="No announcements published"
-      availabilityDescription="Announcements will be delivered to registered participants through the platform. No message is sent from this placeholder."
+    <WorkspaceToolNotice
       icon={Megaphone}
+      title="Announcements"
+      description="Publish operational updates to the participants in this competition. Every action here applies to this competition only."
+      availabilityTitle="Announcements are not publishable yet"
+      availabilityDescription="Announcing arrives with the organiser tools. A published announcement is written by the server, delivered to participants and never editable after the fact."
     />
   );
 }

@@ -163,6 +163,10 @@ different error messages, public profiles or collection reads.
 - Guards check authentication before loading records; not-found and forbidden
   responses are kept distinct only where the caller already has a legitimate
   relationship (for example tournament ownership).
+- The organiser tournament workspace renders the branded 404 for a
+  non-existent id and for a competition the caller does not own. There is no
+  403 branch, so one organiser cannot discover that another organiser's
+  competition exists.
 - Rate limiting reduces brute-force account and session probing.
 
 ### 2.8 Other abuse
@@ -205,6 +209,11 @@ type, or injects an arbitrary remote URL into the profile.
   asset is destroyed on removal. The rate limit is 5 changes per hour per user.
 - If Cloudinary is not configured, the avatar route returns 503 while the rest of
   the account and profile continue to work.
+- Organiser logos mirror the avatar controls with two differences: the client
+  contain-fits the image inside a 512×512 canvas (no crop, because logos are not
+  square) and uploads go to the server-only `gcc/organisers/{uid}` folder. A logo
+  can only be stored after the organiser profile document exists, so a public
+  page never renders an unnamed organisation.
 
 ### 2.10 Maintenance-mode bypass
 
@@ -380,14 +389,15 @@ notification carries an off-site link.
 - Tests use `@firebase/rules-unit-testing` against the emulator. The emulator
   requires Java 21. Run `npm run test:rules`; plain `npm test` never needs Java.
   Tests cover anonymous denial, owner-only reads, memberships, public history,
-  draft isolation, organiser ownership, result-report access, broad
+  draft isolation, organiser ownership, cancelled-tournament visibility,
+  public `organiserProfiles` reads, result-report access, broad
   collection-group denial for history/memberships/result reports,
   collection-group leakage for matches and registrations, announcement
   visibility (published vs draft/expired/deleted), platform settings privacy,
   application reads (applicant/Super Admin) and the server-only
   `applicationState` marker, notification owner-only reads, Super Admin audit
   access and the deny-all write matrix for user, organiser and
-  Super Admin clients.
+  Super Admin clients (including `organiserProfiles` and tournaments).
 
 ## 5. Server-side role enforcement
 
@@ -439,6 +449,11 @@ notification carries an off-site link.
 - Announcement input is strict: title ≤ 100, body ≤ 2000 plain text, severity
   `info` or `important`, optional expiry, and an explicit publish decision.
 - Account actions require a 5–300 character reason. A restore also requires one.
+- Organiser profile PATCH accepts only `organisationName` (2–60 characters,
+  required), an optional `bio` ≤ 300 characters and up to three links, each with
+  a label ≤ 40 characters and an `https://` url ≤ 300 characters. The uid, logo
+  references and timestamps are rejected by the strict schema and written only
+  by the server.
 - The audit reason and before/after payloads are redacted before display.
 - Profile PATCH accepts only `fullName`, `community`, `favouriteClub`,
   `whatsapp`, `country`, `preferredGame` and `platform`. Gamer tag, email, role,
@@ -457,11 +472,12 @@ notification carries an off-site link.
 - Firestore-backed fixed-window counters run in transactions, so all serverless
   instances share the budget.
 - Sensitive endpoints: session exchange, registration, gamer-tag lookup, player
-  search, profile edits, avatar changes, organiser application submission (5
-  per hour) and withdrawal, notification read marking, every Super Admin
-  mutation, settings saves, contact reveal and analytics refresh (implemented);
-  password reset, admin result entry and result-report creation (later
-  phases).
+  search, profile edits, avatar changes, organiser profile edits (20 per 10
+  minutes), organiser logo uploads and removals (5 per hour), organiser
+  application submission (5 per hour) and withdrawal, notification read marking,
+  every Super Admin mutation, settings saves, contact reveal and analytics
+  refresh (implemented); password reset, admin result entry and result-report
+  creation (later phases).
 - Limitations: fixed windows allow boundary bursts; transactions add latency;
   counter documents need eventual cleanup; keys must be scoped carefully.
 - Rate limiting is abuse control, not a WAF or a replacement for Firebase Auth
@@ -471,8 +487,8 @@ notification carries an off-site link.
 
 - Append-only entries for sign-in/role grants, account-status changes, admin
   decisions, organiser application transitions (submitted, withdrawn, approved,
-  rejected, revoked), tournament changes, pot draws/shuffles, fixture
-  generation, admin
+  rejected, revoked), organiser profile updates, tournament changes, pot
+  draws/shuffles, fixture generation, admin
   result entry/corrections, result-report decisions, platform settings updates,
   contact reveals and announcement transitions.
 - Each entry records actor UID, actor role, action, target type/id, optional

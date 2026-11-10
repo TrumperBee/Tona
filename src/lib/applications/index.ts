@@ -14,6 +14,7 @@ import { setUserRole } from "@/lib/auth/management";
 import { getServerEnv } from "@/lib/config/env.server";
 import { getFirebaseAdminAuth, getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
+import { ensureOrganiserProfile } from "@/lib/organiser/profile";
 import { createNotification } from "@/lib/notifications";
 import { getPlatformSettings } from "@/lib/platform/settings";
 import type { AdminApplicationSubmitInput } from "@/lib/validation/admin-application";
@@ -634,6 +635,12 @@ export async function approveApplication(
     after: { status: "approved", note },
     reason: note,
   });
+
+  // Best effort: the public organiser profile is also ensured on first entry to
+  // the organiser area, so a failure here must never fail the approval itself.
+  await ensureOrganiserProfile(initial.uid, {
+    organisationName: initial.communityName,
+  }).catch(() => null);
 
   await createNotification(initial.uid, {
     type: "application",

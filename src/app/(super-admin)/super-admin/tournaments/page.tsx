@@ -100,6 +100,19 @@ export default async function TournamentsPage({ searchParams }: TournamentsPageP
         </span>
       ),
     },
+    {
+      key: "workspace",
+      header: "Workspace",
+      render: (row) => (
+        <Link
+          href={`/organiser/tournaments/${row.id}`}
+          className="inline-flex items-center gap-1.5 rounded text-xs font-semibold uppercase tracking-eyebrow text-electric-300 underline-offset-4 transition-colors hover:text-electric-200 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-400"
+        >
+          Open in organiser workspace
+          <span className="sr-only">for {row.name}</span>
+        </Link>
+      ),
+    },
   ];
 
   const hasFilters = Boolean(filters.search || filters.status);

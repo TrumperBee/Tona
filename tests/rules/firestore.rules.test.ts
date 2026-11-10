@@ -191,6 +191,32 @@ async function seed(): Promise<void> {
         startsAt: now,
         updatedAt: now,
       }),
+      setDoc(doc(db, "tournaments/cancelled"), {
+        ownerUid: "organiser-a",
+        slug: "cancelled-cup",
+        name: "Cancelled Cup",
+        status: "cancelled",
+        startsAt: now,
+        updatedAt: now,
+      }),
+      setDoc(doc(db, "tournaments/cancelled/registrations/alice"), {
+        tournamentId: "cancelled",
+        gamerTag: "Alice",
+        country: "NG",
+        photoUrl: null,
+        status: "registered",
+        registeredAt: now,
+      }),
+      setDoc(doc(db, "organiserProfiles/organiser-a"), {
+        uid: "organiser-a",
+        organisationName: "A Community",
+        bio: "We run grassroots cups.",
+        logoUrl: null,
+        logoPublicId: null,
+        links: [{ label: "Community", url: "https://example.com" }],
+        createdAt: now,
+        updatedAt: now,
+      }),
       setDoc(doc(db, "users/alice/memberships/public"), {
         tournamentId: "public",
         slug: "public-cup",
@@ -510,6 +536,23 @@ describe("public reads", () => {
     await assertSucceeds(getDoc(doc(db, "hallOfFame/h1")));
   });
 
+  it("lets anyone read a public organiser profile, including its links", async () => {
+    const db = anonymous();
+
+    await assertSucceeds(getDoc(doc(db, "organiserProfiles/organiser-a")));
+    await assertSucceeds(getDoc(doc(user("bob"), "organiserProfiles/organiser-a")));
+    await assertSucceeds(
+      getDoc(doc(user("organiser-a", "organiser"), "organiserProfiles/organiser-a")),
+    );
+  });
+
+  it("keeps a cancelled competition and its registrations visible to the public", async () => {
+    const db = anonymous();
+
+    await assertSucceeds(getDoc(doc(db, "tournaments/cancelled")));
+    await assertSucceeds(getDoc(doc(db, "tournaments/cancelled/registrations/alice")));
+  });
+
   it("hides draft, expired and soft-deleted platform announcements from the public", async () => {
     const db = anonymous();
 
@@ -711,7 +754,9 @@ describe("client writes", () => {
       "gamerTags/alice",
       "adminApplications/app1",
       "applicationState/alice",
+      "organiserProfiles/organiser-a",
       "tournaments/public",
+      "tournaments/cancelled",
       "tournaments/public/registrations/alice",
       "tournaments/public/draw/current",
       "tournaments/public/fixtureDrafts/current",
