@@ -13,7 +13,14 @@ import { assertRoleAssignmentAllowed, isSuperAdminEmail } from "@/lib/auth/roles
 import { getServerEnv } from "@/lib/config/env.server";
 import { getFirebaseAdminAuth, getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
-import { isAccountStatus, isUserRole, type AccountStatus, type UserRole } from "@/types/domain";
+import { createNotification } from "@/lib/notifications";
+import {
+  isAccountStatus,
+  isUserRole,
+  type AccountStatus,
+  type AdminApplicationDocument,
+  type UserRole,
+} from "@/types/domain";
 
 export interface RoleAssignmentResult {
   readonly uid: string;
@@ -78,6 +85,52 @@ export async function setUserRole(
     after: { role },
     reason: reason ?? null,
   });
+
+  // Revoking an organiser is also a review outcome. Mark their latest approved
+  // application so the application history reflects why the role ended.
+  if (previousRole === "organiser" && role === "user") {
+    const applications = await getFirebaseAdminFirestore()
+      .collection(paths.adminApplications())
+      .where("uid", "==", targetUid)
+      .orderBy("createdAt", "desc")
+      .limit(10)
+      .get();
+    const approved = applications.docs.find(
+      (document) => (document.data() as AdminApplicationDocument).status === "approved",
+    );
+
+    if (approved) {
+      await approved.ref.update({
+        status: "revoked",
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+
+      await writeAuditLog({
+        actorUid: actor.userId,
+        actorRole: actor.role,
+        action: "application.revoked",
+        targetType: "adminApplication",
+        targetId: approved.id,
+        before: { status: "approved" },
+        after: { status: "revoked" },
+        reason: reason ?? null,
+      });
+
+      try {
+        await createNotification(targetUid, {
+          type: "application",
+          title: "Organiser permissions revoked",
+          body: reason?.trim()
+            ? `Your organiser role was revoked: ${reason.trim()}`
+            : "Your organiser role was revoked by the Super Admin.",
+          link: "/dashboard/apply-admin",
+        });
+      } catch {
+        // The role change is already complete; notification failure must not
+        // make the console retry a destructive action.
+      }
+    }
+  }
 
   return { uid: targetUid, role };
 }

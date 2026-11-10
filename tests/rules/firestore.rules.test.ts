@@ -142,6 +142,15 @@ async function seed(): Promise<void> {
         createdAt: now,
         updatedAt: now,
       }),
+      setDoc(doc(db, "applicationState/alice"), {
+        uid: "alice",
+        status: "pending",
+        currentApplicationId: "app1",
+        lastApplicationAt: now,
+        lastRejectedAt: null,
+        lastApprovedAt: null,
+        updatedAt: now,
+      }),
       setDoc(doc(db, "tournaments/public"), {
         ownerUid: "organiser-a",
         slug: "public-cup",
@@ -461,6 +470,7 @@ describe("private collections", () => {
       "auditLogs/log1",
       "rateLimits/key",
       "adminApplications/app1",
+      "applicationState/alice",
     ]) {
       await assertFails(getDoc(doc(db, path)));
     }
@@ -481,6 +491,12 @@ describe("private collections", () => {
     await assertSucceeds(getDoc(doc(user("alice"), "adminApplications/app1")));
     await assertFails(getDoc(doc(user("bob"), "adminApplications/app1")));
     await assertSucceeds(getDoc(doc(user("root", "super_admin"), "adminApplications/app1")));
+  });
+
+  it("keeps the application state marker server-only", async () => {
+    await assertFails(getDoc(doc(user("alice"), "applicationState/alice")));
+    await assertFails(getDoc(doc(user("root", "super_admin"), "applicationState/alice")));
+    await assertFails(getDoc(doc(anonymous(), "applicationState/alice")));
   });
 });
 
@@ -694,6 +710,7 @@ describe("client writes", () => {
       "publicProfiles/alice/history/public",
       "gamerTags/alice",
       "adminApplications/app1",
+      "applicationState/alice",
       "tournaments/public",
       "tournaments/public/registrations/alice",
       "tournaments/public/draw/current",

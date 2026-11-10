@@ -723,3 +723,104 @@ action. Empty states are honest when there are no tournaments or matches yet.
 **Consequences.** Most figures are exact, while breakdowns are labelled as sampled. Refresh
 costs a bounded number of reads. A future scale-up can replace sampling with maintained
 aggregates without changing the page contracts.
+
+---
+
+## ADR-035 — A per-applicant state marker makes application rules race-safe
+
+**Date:** 2026-11-09
+**Status:** Accepted
+
+**Context.** "One pending application per user" and "wait out the rejection
+cooldown" can be enforced two ways: scan the application history, or keep a
+small marker. Scanning invites read-then-write races — two concurrent
+submissions both see "no pending application" and both succeed.
+
+**Decision.** Store `applicationState/{uid}` with `status`, `currentApplicationId`,
+`lastApplicationAt`, `lastRejectedAt` and `lastApprovedAt`. Submission and every
+review transition read and write the marker inside the same Firestore
+transaction as the application document, so the one-pending and cooldown rules
+are atomic. `lastRejectedAt` feeds the pure `applicationCooldown()` helper with
+`applicationCooldownDays` from platform settings. The collection is
+server-only: rules deny every client read and write.
+
+**Consequences.** One extra document per applicant, updated transactionally. The
+dashboard status page reads one marker plus one query instead of scanning
+history. The application history itself stays append-only and is never used for
+enforcement, only for review context.
+
+---
+
+## ADR-036 — Approval is the only organiser-granting path, with claim rollback
+
+**Date:** 2026-11-09
+**Status:** Accepted
+
+**Context.** Approving an application must grant the `organiser` custom claim and
+flip the application status. Firestore cannot write Auth claims, so the two
+writes cannot be one atomic operation; a failure between them could leave an
+approved application with no claim, or a queue that lies about a review that
+happened.
+
+**Decision.** Approval pre-validates the applicant (Auth exists, enabled, email
+verified, account not suspended/banned), then commits `approved` plus reviewer
+fields in a transaction that re-checks the status is `pending`. Only after the
+transaction does it call `setUserRole(uid, "organiser")`, which revokes the
+target's refresh tokens. If the claim write fails, a compensating transaction
+restores the application to `pending` (clearing reviewer fields) and resets the
+state marker, and the route returns 500. A repeated approval of an
+already-approved application is a no-op success (idempotent); anything that is
+not `pending` returns 409. The `organiser` role has no other granting route
+besides the Super Admin email rule for `super_admin`.
+
+**Consequences.** The applicant's old session is revoked by design; the login page
+explains the redirect with a fixed `?reason=permissions` notice. A failed claim
+leaves the application honestly pending for re-review. Integration tests cover
+idempotency, the 409 paths, the rollback and the organiser-route lockout for
+rejected applicants.
+
+---
+
+## ADR-037 — In-app notifications are server-written, owner-read and counted
+
+**Date:** 2026-11-09
+**Status:** Accepted
+
+**Context.** Phase 6 needs real notifications (application transitions) without
+building Phase 16's email system. The header bell must not add a per-page
+read of a whole subcollection.
+
+**Decision.** `createNotification(uid, {type, title, body, link})` writes
+`users/{uid}/notifications/{id}`; `createNotifications` batches many recipients
+in chunks of 500 (Firestore's batch limit). Types come from a closed union
+(`system`, `tournament`, `fixture`, `result`, `result_report`,
+`announcement`, `application`). Content is trimmed and capped (title 120, body 1000) and `link` is normalised by `safeRedirectPath()`. The bell runs two
+queries per request for signed-in users only — the five newest plus a `count()`
+aggregation of unread — memoised within a render with React `cache()`.
+`POST /api/notifications/read` marks up to 50 named ids or all unread items,
+resolved strictly under the session owner's path.
+
+**Consequences.** No client write path exists; rules keep notifications
+owner-read only. Unread counts are exact and cheap. Email delivery, digesting
+and preferences stay in Phase 16.
+
+---
+
+## ADR-038 — Revoked-session redirects use a fixed `reason=permissions` flag
+
+**Date:** 2026-11-09
+**Status:** Accepted
+
+**Context.** After an approval or role change the old session cookie is revoked.
+The user lands on `/login` with no explanation, and the obvious fix — echoing a
+message through the URL — would let anyone craft the login page's notice text.
+
+**Decision.** Page access helpers detect "cookie present but session no longer
+validates" and redirect to `/login?next=…&reason=permissions`. The login page maps
+that fixed flag to a constant "Your permissions changed, please sign in again"
+notice. The `next` parameter is still sanitised with `safeRedirectPath()`, and
+the notice text is never taken from the URL.
+
+**Consequences.** Approval and role changes get a friendly explanation without
+an injectable message channel. Any future redirect reason must be added to the
+fixed mapping, never passed through as raw query text.

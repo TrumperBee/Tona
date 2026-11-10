@@ -51,6 +51,20 @@ function roleFromToken(decoded: DecodedIdToken): UserRole {
 }
 
 /**
+ * True when the browser presented a session cookie. A cookie that fails
+ * verification is treated as a revoked or expired session, which lets the login
+ * page explain a permission change without trusting any user-supplied value.
+ */
+export async function hasSessionCookie(): Promise<boolean> {
+  try {
+    const cookieStore = await cookies();
+    return Boolean(cookieStore.get(SESSION_COOKIE_NAME)?.value);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Returns the current user, or null when there is no valid, unrevoked session.
  * Disabled Firebase Auth users are treated as signed out.
  */

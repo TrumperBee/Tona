@@ -10,6 +10,7 @@ export const COLLECTIONS = {
   publicProfiles: "publicProfiles",
   gamerTags: "gamerTags",
   adminApplications: "adminApplications",
+  applicationState: "applicationState",
   tournaments: "tournaments",
   announcements: "announcements",
   hallOfFame: "hallOfFame",
@@ -88,6 +89,9 @@ export const paths = {
   adminApplications: () => COLLECTIONS.adminApplications,
   adminApplication: (applicationId: string) =>
     documentPath(COLLECTIONS.adminApplications, applicationId),
+
+  applicationStates: () => COLLECTIONS.applicationState,
+  applicationState: (uid: string) => documentPath(COLLECTIONS.applicationState, uid),
 
   tournaments: () => COLLECTIONS.tournaments,
   tournament: (tournamentId: string) => documentPath(COLLECTIONS.tournaments, tournamentId),

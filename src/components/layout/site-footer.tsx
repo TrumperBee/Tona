@@ -22,6 +22,7 @@ const footerNavigation = [
       { href: "/players", label: "Players" },
       { href: "/announcements", label: "Announcements" },
       { href: "/about", label: "About GCC" },
+      { href: "/organiser-code", label: "Organiser code" },
       { href: "/contact", label: "Contact" },
     ],
   },

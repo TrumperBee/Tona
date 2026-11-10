@@ -8,8 +8,11 @@ export type { Role } from "@/lib/auth/roles";
 export type {
   AccountStatus,
   AdminApplicationDocument,
+  ApplicationStateDocument,
   ApplicationStatus,
   AuditLogDocument,
+  CommunityType,
+  ExpectedPlayerRange,
   DrawDocument,
   FixtureDraftDocument,
   GameProfileStats,

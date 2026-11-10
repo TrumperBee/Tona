@@ -7,7 +7,12 @@ import "server-only";
 
 import { redirect } from "next/navigation";
 
-import { AuthenticationError, requireUser, requireVerifiedUser } from "@/lib/auth/guards";
+import {
+  AuthenticationError,
+  hasSessionCookie,
+  requireUser,
+  requireVerifiedUser,
+} from "@/lib/auth/guards";
 import { hasRoleAtLeast } from "@/lib/auth/roles";
 import { safeRedirectPath } from "@/lib/security/redirect";
 import type { SessionUser } from "@/lib/auth/session";
@@ -16,6 +21,22 @@ import type { UserRole } from "@/types/domain";
 function loginPath(nextPath: string): string {
   const safeNext = safeRedirectPath(nextPath) ?? "/";
   return `/login?next=${encodeURIComponent(safeNext)}`;
+}
+
+/**
+ * Sends an unauthenticated visitor to sign-in. A cookie that is present but no
+ * longer verifies means the session was revoked (for example after a role
+ * change); the fixed `reason=permissions` flag lets the login page show a
+ * friendly, non-injectable explanation.
+ */
+async function redirectToSignIn(nextPath: string): Promise<never> {
+  const safeNext = safeRedirectPath(nextPath) ?? "/";
+
+  if (await hasSessionCookie()) {
+    redirect(`/login?next=${encodeURIComponent(safeNext)}&reason=permissions`);
+  }
+
+  redirect(loginPath(nextPath));
 }
 
 /**
@@ -28,7 +49,7 @@ export async function requirePageSignedIn(nextPath: string): Promise<SessionUser
     return await requireUser();
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      redirect(loginPath(nextPath));
+      redirectToSignIn(nextPath);
     }
 
     throw error;
@@ -45,7 +66,7 @@ export async function requirePageUser(nextPath: string): Promise<SessionUser> {
     return await requireVerifiedUser();
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      redirect(loginPath(nextPath));
+      redirectToSignIn(nextPath);
     }
 
     redirect("/verify-email");

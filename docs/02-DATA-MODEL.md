@@ -1,6 +1,6 @@
 # GCC — Firestore Data Model
 
-> **Status: implemented through Phase 5.** Document shapes live in
+> **Status: implemented through Phase 6.** Document shapes live in
 > `src/types/domain.ts`, path builders in `src/lib/firebase/paths.ts`, Zod input
 > schemas in `src/lib/validation/`, and Security Rules in `firestore.rules`.
 >
@@ -43,7 +43,8 @@
 | `publicProfiles/{uid}`                        | gamerTag, gamerTagLower, country, preferredGame, platform, community, favouriteClub, photoUrl, avatarUrl, avatarPublicId, status, typed stats                                                          | Anyone                                                           |
 | `publicProfiles/{uid}/history/{tournamentId}` | tournamentName, slug, season, gameId, finalPosition, played, wins, draws, losses, goalsFor, goalsAgainst, wonTitle, completedAt                                                                        | Anyone                                                           |
 | `gamerTags/{gamerTagLower}`                   | `{ uid, createdAt }` uniqueness reservation                                                                                                                                                            | Nobody (server only)                                             |
-| `adminApplications/{id}`                      | uid, communityName, experience, motivation, expectedPlayers, contact details, status, reviewer fields, timestamps                                                                                      | Applicant, Super Admin                                           |
+| `adminApplications/{id}`                      | uid, gamerTag and email snapshots, communityName, communityType, communityLink, expectedPlayers, gamesPlanned, experience, motivation, agreesToRules, status, reviewer fields, timestamps              | Applicant, Super Admin                                           |
+| `applicationState/{uid}`                      | Per-applicant marker: status, currentApplicationId, lastApplicationAt, lastRejectedAt, lastApprovedAt                                                                                                  | Nobody (server only)                                             |
 | `tournaments/{id}`                            | ownerUid, slug, name, description, gameId, formatId, coverImageUrl, rules, matchDurationMinutes, timezone, registration/starts dates, maxParticipants, registrationCount, status, season, timestamps   | Public unless `draft`/`suspended`; owner and Super Admin always  |
 | `tournaments/{id}/registrations/{uid}`        | tournamentId, gamerTag, country, photoUrl, status, registeredAt                                                                                                                                        | Public with a public tournament; owner and Super Admin always    |
 | `tournaments/{id}/draw/current`               | pots `{1:[uid…],2:[…],3:[…],4:[…]}`, method, shuffleSeed, confirmedAt, confirmedBy                                                                                                                     | Owner/Super Admin before confirmation; public after              |
@@ -155,20 +156,56 @@ Gamer tags are immutable after creation. `PATCH /api/profile` rejects the field.
 
 ### 3.4 `adminApplications/{id}` — Tournament Admin applications
 
-| Field                                    | Type                              |
-| ---------------------------------------- | --------------------------------- |
-| `uid`                                    | applicant UID                     |
-| `communityName`                          | string                            |
-| `experience`, `motivation`               | string                            |
-| `expectedPlayers`                        | number                            |
-| `contactEmail`                           | string                            |
-| `contactWhatsappE164`                    | string \| null                    |
-| `status`                                 | `pending`, `approved`, `rejected` |
-| `reviewedBy`, `reviewedAt`, `reviewNote` | reviewer audit data               |
-| `createdAt`, `updatedAt`                 | Timestamp                         |
+Document id: server-generated. Identity fields are snapshotted at submission
+time so a record stays meaningful if the profile changes later.
 
-**Writers:** applicant submission and Super Admin review through server code.
-**Readers:** the applicant (`resource.data.uid == request.auth.uid`) and Super Admin.
+| Field                                    | Type                  | Notes                                                                               |
+| ---------------------------------------- | --------------------- | ----------------------------------------------------------------------------------- |
+| `uid`                                    | string                | Applicant UID                                                                       |
+| `gamerTag`, `email`                      | string                | Snapshots of the applicant's identity at submission                                 |
+| `communityName`                          | string                | 2–60 characters                                                                     |
+| `communityType`                          | `CommunityType`       | `university_club`, `online_community`, `friends_group`, `streamer_creator`, `other` |
+| `communityLink`                          | string \| null        | Optional https URL                                                                  |
+| `expectedPlayers`                        | `ExpectedPlayerRange` | `under 36`, `36-72`, `73-150`, `150+`                                               |
+| `gamesPlanned`                           | `GameId[]`            | At least one supported game, no duplicates                                          |
+| `experience`, `motivation`               | string                | 50–1000 characters each                                                             |
+| `agreesToRules`                          | boolean               | Always `true`; the form requires agreeing to the organiser code                     |
+| `status`                                 | `ApplicationStatus`   | `pending`, `approved`, `rejected`, `withdrawn`, `revoked`                           |
+| `reviewedBy`, `reviewedAt`, `reviewNote` | reviewer audit data   | `reviewedBy` is the Super Admin UID                                                 |
+| `createdAt`, `updatedAt`                 | Timestamp             | Server-written                                                                      |
+
+Only a signed-in, email-verified participant with the `user` role may submit.
+Submission snapshots `gamerTag`/`email`, creates the document with `pending`
+status, notifies the Super Admin and writes an `application.submitted` audit
+entry. Approval grants the organiser claim (and revokes the applicant's
+tokens); a claim failure rolls the application back to `pending`. Revoking an
+organiser (Phase 5 role action) also marks their latest approved application
+`revoked` for history.
+
+**Writers:** applicant submission/withdrawal and Super Admin review through
+server code. **Readers:** the applicant (`resource.data.uid == request.auth.uid`)
+and Super Admin.
+
+#### Application state marker — `applicationState/{uid}`
+
+```text
+{
+  uid: string,
+  status: "none" | "pending",
+  currentApplicationId: string | null,
+  lastApplicationAt: Timestamp | null,
+  lastRejectedAt: Timestamp | null,
+  lastApprovedAt: Timestamp | null,
+  updatedAt: Timestamp
+}
+```
+
+One server-written marker per applicant. It makes "one pending application at
+a time" and the post-rejection cooldown race-safe without scanning the
+application history: submission and review update it in the same Firestore
+transaction as the application document. `lastRejectedAt` feeds
+`applicationCooldown()` with `applicationCooldownDays` from platform settings.
+Server-only; rules deny every client read and write.
 
 ### 3.5 `tournaments/{id}` — tournament
 
@@ -306,8 +343,19 @@ awayGoals }`, `winnerUid`, `status` (`scheduled`, `in_progress`, `completed`).
 
 ### 3.14 `users/{uid}/notifications/{id}` — notifications
 
-Fields: `type`, `title`, `body`, `link`, `read`, `createdAt`. Only the owner can
-read. A server route marks notifications read (Phase 16).
+Fields: `type` (`system`, `tournament`, `fixture`, `result`, `result_report`,
+`announcement`, `application`), `title` (≤ 120), `body` (≤ 1000), `link`
+(sanitised same-origin relative path or null), `read`, `createdAt`. Only the
+owner can read them.
+
+Implemented in Phase 6: `createNotification(uid, input)` writes one document,
+`createNotifications(uids, input)` batches the same message for many recipients
+(chunked at Firestore's 500-operation limit). `/dashboard/notifications` is the
+paginated owner inbox; `POST /api/notifications/read` marks up to 50 named ids
+or all unread notifications as read, owner-only. The header bell renders the
+five newest plus an exact unread count from a `count()` aggregation, computed
+per request only for signed-in users (React `cache()` deduplicates it within a
+render). Email delivery arrives in Phase 16.
 
 ### 3.15 `hallOfFame/{id}` — permanent champions
 
@@ -324,7 +372,11 @@ Fields: `actorUid`, `actorRole`, `action`, `targetType`, `targetId`,
 Phase 5 actions: `user.status.set`, `user.role.set`, `user.contact_revealed`,
 `platform.settings.updated`, `announcement.created`, `announcement.updated`,
 `announcement.published`, `announcement.unpublished` and
-`announcement.deleted`. `src/lib/audit/actions.ts` is the register of known
+`announcement.deleted`. Phase 6 adds `application.submitted`,
+`application.withdrawn`, `application.approved`, `application.rejected` and
+`application.revoked` (written by the role-revocation path when an organiser's
+latest approved application is marked `revoked`).
+`src/lib/audit/actions.ts` is the register of known
 actions and their human-readable labels. Payloads are redacted before display
 (see `src/lib/audit/redact.ts`); phone numbers are never written to an audit
 entry. `user.contact_revealed` records only that a reveal happened, not the
@@ -422,7 +474,7 @@ hallOfFame/{id} ── tournamentId ── tournaments/{id}
 
 ## 5. Composite indexes
 
-`firestore.indexes.json` declares 38 composite indexes:
+`firestore.indexes.json` declares 39 composite indexes:
 
 | Collection group    | Fields                                                                                                       | Use                                                             |
 | ------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
@@ -442,7 +494,8 @@ hallOfFame/{id} ── tournamentId ── tournaments/{id}
 | `auditLogs`         | `targetType` ASC + `targetId` ASC + `createdAt` DESC                                                         | User-detail audit history                                       |
 | `announcements`     | `deletedAt` ASC + `createdAt` DESC                                                                           | Admin announcement list                                         |
 | `announcements`     | `deletedAt` ASC + `publishedAt` DESC                                                                         | Public announcement list                                        |
-| `adminApplications` | `status` ASC + `createdAt` DESC                                                                              | Review queue (Phase 6)                                          |
+| `adminApplications` | `status` ASC + `createdAt` DESC                                                                              | Review queue, newest first (non-pending tabs)                   |
+| `adminApplications` | `status` ASC + `createdAt` ASC                                                                               | Review queue, oldest pending first (Phase 6)                    |
 | `adminApplications` | `uid` ASC + `createdAt` DESC                                                                                 | Applicant history (Phase 6)                                     |
 
 The user-filter queries must include equality fields in canonical order
@@ -464,7 +517,7 @@ Add an index only with the query that needs it. Deploy rules and indexes with
 - Private reads: `users` (owner/Super Admin), notifications and memberships
   (owner), `adminApplications` (applicant/Super Admin), `auditLogs`,
   `platformStats` and `platformSettings` (Super Admin).
-- `gamerTags` and `rateLimits` have no client read at all.
+- `gamerTags`, `rateLimits` and `applicationState` have no client read at all.
 - Tournaments and their subcollections are hidden while `draft` or `suspended`.
 - Fixture drafts are owner/Super Admin only.
 - Result reports are readable by the reporter, the tournament owner and the
@@ -484,14 +537,14 @@ Add an index only with the query that needs it. Deploy rules and indexes with
 | 2     | Session exchange, role/status administration, audit and rate limits                              |
 | 4     | Atomic registration, profile edit, avatar upload/removal                                         |
 | 5     | Platform settings, account status/role actions, contact reveal, announcements, analytics refresh |
-| 6     | Admin application submission/review                                                              |
+| 6     | Admin application submission/review, in-app notifications                                        |
 | 8     | Tournament create/update/publish, registration, membership snapshot                              |
 | 9     | Draw generation, admin shuffle, confirmation                                                     |
 | 10    | Fixture draft generation and publication                                                         |
 | 11    | Admin-only result entry, corrections, result-report decisions                                    |
 | 12    | Standings recomputation and snapshots                                                            |
 | 13    | Knockout progression                                                                             |
-| 16    | Notifications and announcements                                                                  |
+| 16    | Email notifications and delivery preferences (in-app inbox delivered in Phase 6)                 |
 | 17    | Hall of Fame induction, profile stats and history snapshots                                      |
 
 No client write path exists in any phase.

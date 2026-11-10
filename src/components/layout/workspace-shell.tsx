@@ -4,13 +4,14 @@
 //
 // The two variants share mechanics but have distinct accents, labels and
 // navigation so an operator always knows which workspace they are in.
-import { Bell, ChevronRight, Lock, Menu } from "lucide-react";
+import { ChevronRight, Lock, Menu } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 import { SignOutButton } from "@/components/auth/sign-out-button";
 import { BrandLockup, BrandMark } from "@/components/brand/logo";
+import { NotificationBell } from "@/components/layout/notification-bell";
 import { Badge } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/data-display";
 import { Drawer } from "@/components/ui/dialog";
@@ -24,6 +25,7 @@ import {
   tournamentIdFromOrganiserPath,
   type NavigationItem,
 } from "@/lib/config/navigation";
+import type { NotificationBellData } from "@/lib/notifications/types";
 import { viewerDisplayName, type Viewer } from "@/lib/auth/viewer";
 import { cn } from "@/lib/utils/cn";
 
@@ -32,6 +34,7 @@ export type WorkspaceVariant = "organiser" | "super-admin";
 interface WorkspaceShellProps {
   readonly variant: WorkspaceVariant;
   readonly viewer: Viewer;
+  readonly notificationBell: NotificationBellData;
   readonly notices?: React.ReactNode;
   readonly children: React.ReactNode;
 }
@@ -81,7 +84,13 @@ function NavigationLinks({
   );
 }
 
-export function WorkspaceShell({ variant, viewer, notices, children }: WorkspaceShellProps) {
+export function WorkspaceShell({
+  variant,
+  viewer,
+  notificationBell,
+  notices,
+  children,
+}: WorkspaceShellProps) {
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const isOrganiser = variant === "organiser";
@@ -254,15 +263,7 @@ export function WorkspaceShell({ variant, viewer, notices, children }: Workspace
           </div>
 
           <div className="flex items-center gap-1.5">
-            {!isOrganiser ? (
-              <Link
-                href="/super-admin/announcements"
-                aria-label="Platform announcements"
-                className="inline-flex h-10 w-10 items-center justify-center rounded-md text-grey-300 transition-colors hover:bg-white/[0.07] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-400"
-              >
-                <Bell aria-hidden="true" className="h-5 w-5" />
-              </Link>
-            ) : null}
+            <NotificationBell data={notificationBell} />
             <Avatar name={displayName} size="sm" />
             <IconButton
               label={`Open ${workspaceLabel} menu`}

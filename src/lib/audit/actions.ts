@@ -17,9 +17,11 @@ export const AUDIT_ACTIONS: readonly AuditActionDefinition[] = [
   { action: "announcement.published", label: "Announcement published" },
   { action: "announcement.unpublished", label: "Announcement unpublished" },
   { action: "announcement.deleted", label: "Announcement deleted" },
-  // Later phases. Listed here so the filter can find them once they exist.
+  { action: "application.submitted", label: "Organiser application submitted" },
+  { action: "application.withdrawn", label: "Organiser application withdrawn" },
   { action: "application.approved", label: "Organiser application approved" },
   { action: "application.rejected", label: "Organiser application rejected" },
+  { action: "application.revoked", label: "Organiser application revoked" },
   { action: "tournament.created", label: "Tournament created" },
   { action: "tournament.status.set", label: "Tournament status changed" },
   { action: "draw.confirmed", label: "Draw confirmed" },

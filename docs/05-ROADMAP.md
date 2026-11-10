@@ -1,9 +1,9 @@
 # GCC — Roadmap
 
-> Phases 1, 1B, 2, 3, 3B, 4 and 5 are done. Phase 5 delivered the Super Admin
-> console: platform settings and maintenance mode, overview, user management,
-> audit viewer, announcements, analytics and a read-only tournament list. A phase
-> starts only when the previous phase is reviewed and accepted.
+> Phases 1, 1B, 2, 3, 3B, 4, 5 and 6 are done. Phase 6 delivered the organiser
+> application and approval flow (form, review queue, approve/reject/withdraw,
+> cooldown, audit) plus in-app notifications. A phase starts only when the
+> previous phase is reviewed and accepted.
 
 | #   | Phase                                              | Primary deliverables                                                                                                     | Status      |
 | --- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ----------- |
@@ -14,7 +14,7 @@
 | 3B  | Patch                                              | Admin-only results, result reports, profile stats/history, redirect and same-origin hardening, security headers, CI/docs | Done        |
 | 4   | Accounts and profiles                              | Sign-up, email verification, sign-in, password reset, profiles, avatars                                                  | Done        |
 | 5   | Super Admin dashboard                              | Overview, users, read-only tournaments, analytics, settings/maintenance, audit viewer, announcements                     | Done        |
-| 6   | Organiser application and approval                 | Application form, review queue, approval/rejection with audit entries                                                    | Not started |
+| 6   | Organiser application and approval                 | Application form, organiser code page, review queue, approve/reject/withdraw with cooldown, audit, in-app notifications  | Done        |
 | 7   | Organiser dashboard                                | Organiser shell, owned-tournament management, ownership guards                                                           | Not started |
 | 8   | Tournament creation and registration               | Create/edit/publish tournaments, registrations, participant lists                                                        | Not started |
 | 9   | Pot allocation (manual + shuffle)                  | Plain pots (no country restrictions), seeded draw, admin shuffle, audit trail                                            | Not started |
@@ -24,7 +24,7 @@
 | 13  | Knockout stages                                    | Play-off pairings, bracket, progression, final                                                                           | Not started |
 | 14  | WhatsApp contact                                   | E.164 handling, templates, click-to-chat links, reminders                                                                | Not started |
 | 15  | Graphics                                           | HTML/SVG templates for fixtures, results, standings, shareable profile card; PNG export                                  | Not started |
-| 16  | Notifications and email                            | In-app notifications, announcements, email delivery preferences                                                          | Not started |
+| 16  | Email notifications                                | Email delivery and preferences; the in-app inbox and bell shipped with Phase 6                                           | Not started |
 | 17  | Stats, ratings, rankings, Hall of Fame             | Career stats, ratings, rankings, archives, champions, Hall of Fame                                                       | Not started |
 | 18  | Security audit, CSP, App Check, deployment         | Security review, CSP, App Check, rules and E2E tests, performance, backups, production deployment                        | Not started |
 

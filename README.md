@@ -9,16 +9,19 @@ knockouts and preserves champions, player statistics and a Hall of Fame.
 
 GCC is **not affiliated with UEFA** and never uses UEFA logos or branding.
 
-> **Project status: Phase 5 - Super Admin console.**
+> **Project status: Phase 6 - Organiser applications and notifications.**
 > Phase 1 delivered the scaffold. Phase 1B migrated the database stack to Firebase.
 > Phase 2 implemented the Firestore data model, Security Rules, rules tests and server auth
 > infrastructure. Phase 3 delivered the public design system and site skeleton. Phase 3B
 > made result handling admin-only and hardened redirects, same-origin checks and headers.
 > Phase 4 implemented real registration, email verification, sign-in, password reset,
-> player profiles, avatar upload via Cloudinary and public player search. Phase 5 adds a
+> player profiles, avatar upload via Cloudinary and public player search. Phase 5 added a
 > guarded Super Admin console: platform settings and maintenance mode, overview, user
 > management, audit viewer, announcements, analytics and a read-only tournament list.
-> Tournament creation, fixtures and results remain later phases. There is no fake data and
+> Phase 6 delivers the organiser application form and organiser code of conduct, the
+> Super Admin review queue with approve/reject/withdraw, a rejection cooldown, and real
+> in-app notifications with an inbox and header bell. Tournament creation, fixtures and
+> results remain later phases. There is no fake data and
 > no decorative functionality.
 
 ## Architecture principle: clients read, the server writes
@@ -120,16 +123,19 @@ Firestore rules deny all client writes and allow reads only where documented in
 
 ## Session endpoints
 
-| Endpoint                     | Purpose                                                      |
-| ---------------------------- | ------------------------------------------------------------ |
-| `POST /api/auth/session`     | Exchange a Firebase ID token for an http-only session cookie |
-| `DELETE /api/auth/session`   | Clear the cookie and revoke refresh tokens                   |
-| `POST /api/auth/register`    | Atomic player registration (Auth user + tag + profiles)      |
-| `GET /api/gamer-tags/check`  | Gamer-tag availability lookup                                |
-| `GET /api/players/search`    | Public gamer-tag prefix search                               |
-| `PATCH /api/profile`         | Strict edit of the signed-in player's profile                |
-| `POST /api/profile/avatar`   | Upload and store a verified avatar                           |
-| `DELETE /api/profile/avatar` | Remove the avatar and its Cloudinary asset                   |
+| Endpoint                                     | Purpose                                                          |
+| -------------------------------------------- | ---------------------------------------------------------------- |
+| `POST /api/auth/session`                     | Exchange a Firebase ID token for an http-only session cookie     |
+| `DELETE /api/auth/session`                   | Clear the cookie and revoke refresh tokens                       |
+| `POST /api/auth/register`                    | Atomic player registration (Auth user + tag + profiles)          |
+| `GET /api/gamer-tags/check`                  | Gamer-tag availability lookup                                    |
+| `GET /api/players/search`                    | Public gamer-tag prefix search                                   |
+| `PATCH /api/profile`                         | Strict edit of the signed-in player's profile                    |
+| `POST /api/profile/avatar`                   | Upload and store a verified avatar                               |
+| `DELETE /api/profile/avatar`                 | Remove the avatar and its Cloudinary asset                       |
+| `POST /api/admin-applications`               | Submit an organiser application (one pending, cooldown enforced) |
+| `POST /api/admin-applications/[id]/withdraw` | Withdraw the caller's own pending application                    |
+| `POST /api/notifications/read`               | Mark the caller's own notifications read (ids or all)            |
 
 ## Super Admin endpoints
 
@@ -143,6 +149,8 @@ Admin). Every write is validated with Zod and audited.
 | `POST /api/super-admin/users/[uid]/status`           | Suspend, ban or restore an account    |
 | `POST /api/super-admin/users/[uid]/role`             | Revoke organiser privileges           |
 | `POST /api/super-admin/users/[uid]/contact`          | Reveal a WhatsApp number (audited)    |
+| `POST /api/super-admin/applications/[id]/approve`    | Approve an organiser application      |
+| `POST /api/super-admin/applications/[id]/reject`     | Reject an organiser application       |
 | `POST /api/super-admin/announcements`                | Create an announcement                |
 | `PATCH /api/super-admin/announcements/[id]`          | Edit an announcement                  |
 | `POST /api/super-admin/announcements/[id]/publish`   | Publish an announcement               |
@@ -165,11 +173,13 @@ src/
     engine/       PURE competition engine (no framework, no database)
     firebase/     Browser SDK, Admin SDK (server-only), collection paths
     auth/         Roles, session cookie, guards, role/status administration, audit
+    applications/ Organiser application submission, review and cooldown
+    notifications/ Server-written in-app notifications, inbox and bell
     validation/   Zod schemas
     audit/        Append-only audit log writer
     rate-limit/   Firestore-backed fixed-window limiter
     config/       Validated env, site identity, games, formats, countries, reserved tags
-    ...           whatsapp, profile, http, graphics, notifications, utils
+    ...           whatsapp, profile, http, graphics, super-admin, platform, utils
   types/          Shared domain types and Firestore document types
   proxy.ts        Next.js 16 proxy: cookie-presence navigation guard only
 firebase.json     Firestore rules/indexes and emulator ports

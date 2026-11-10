@@ -4,6 +4,7 @@ import { WorkspaceShell } from "@/components/layout/workspace-shell";
 import { SiteNotices } from "@/components/shared/site-notices";
 import { requirePageSuperAdmin } from "@/lib/auth/page-access";
 import type { Viewer } from "@/lib/auth/viewer";
+import { getNotificationBell } from "@/lib/notifications/bell";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,7 @@ export default async function SuperAdminLayout({
   children: React.ReactNode;
 }>) {
   const user = await requirePageSuperAdmin("/super-admin");
+  const notificationBell = await getNotificationBell(user.userId);
   const viewer: Viewer = {
     email: user.email,
     role: user.role,
@@ -20,7 +22,12 @@ export default async function SuperAdminLayout({
   };
 
   return (
-    <WorkspaceShell variant="super-admin" viewer={viewer} notices={<SiteNotices />}>
+    <WorkspaceShell
+      variant="super-admin"
+      viewer={viewer}
+      notificationBell={notificationBell}
+      notices={<SiteNotices />}
+    >
       {children}
     </WorkspaceShell>
   );

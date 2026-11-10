@@ -37,8 +37,29 @@ export type MatchStatus = (typeof MATCH_STATUSES)[number];
 export const STAGE_TYPES = ["league", "playoff", "r16", "qf", "sf", "final"] as const;
 export type StageType = (typeof STAGE_TYPES)[number];
 
-export const APPLICATION_STATUSES = ["pending", "approved", "rejected"] as const;
+export const APPLICATION_STATUSES = [
+  "pending",
+  "approved",
+  "rejected",
+  "withdrawn",
+  "revoked",
+] as const;
 export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number];
+
+export const APPLICATION_STATE_STATUSES = ["none", "pending"] as const;
+export type ApplicationStateStatus = (typeof APPLICATION_STATE_STATUSES)[number];
+
+export const COMMUNITY_TYPES = [
+  "university_club",
+  "online_community",
+  "friends_group",
+  "streamer_creator",
+  "other",
+] as const;
+export type CommunityType = (typeof COMMUNITY_TYPES)[number];
+
+export const EXPECTED_PLAYER_RANGES = ["under 36", "36-72", "73-150", "150+"] as const;
+export type ExpectedPlayerRange = (typeof EXPECTED_PLAYER_RANGES)[number];
 
 export const RESULT_REPORT_STATUSES = ["open", "resolved", "dismissed"] as const;
 export type ResultReportStatus = (typeof RESULT_REPORT_STATUSES)[number];
@@ -56,6 +77,7 @@ export const NOTIFICATION_TYPES = [
   "result",
   "result_report",
   "announcement",
+  "application",
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -208,19 +230,41 @@ export interface GamerTagReservation {
   readonly createdAt: Timestamp;
 }
 
+/**
+ * Server-written organiser application. Identity fields are snapshotted at
+ * submission time so the record stays meaningful if the profile changes later.
+ */
 export interface AdminApplicationDocument {
   readonly uid: string;
+  readonly gamerTag: string;
+  readonly email: string;
   readonly communityName: string;
+  readonly communityType: CommunityType;
+  readonly communityLink: string | null;
+  readonly expectedPlayers: ExpectedPlayerRange;
+  readonly gamesPlanned: readonly GameId[];
   readonly experience: string;
   readonly motivation: string;
-  readonly expectedPlayers: number;
-  readonly contactEmail: string;
-  readonly contactWhatsappE164: string | null;
+  readonly agreesToRules: boolean;
   readonly status: ApplicationStatus;
   readonly reviewedBy: string | null;
   readonly reviewedAt: Timestamp | null;
   readonly reviewNote: string | null;
   readonly createdAt: Timestamp;
+  readonly updatedAt: Timestamp;
+}
+
+/**
+ * One server-written marker per applicant. It makes "one pending application"
+ * and the post-rejection cooldown race-safe without scanning applications.
+ */
+export interface ApplicationStateDocument {
+  readonly uid: string;
+  readonly status: ApplicationStateStatus;
+  readonly currentApplicationId: string | null;
+  readonly lastApplicationAt: Timestamp | null;
+  readonly lastRejectedAt: Timestamp | null;
+  readonly lastApprovedAt: Timestamp | null;
   readonly updatedAt: Timestamp;
 }
 
@@ -486,6 +530,22 @@ export function isUserRole(value: unknown): value is UserRole {
 
 export function isAccountStatus(value: unknown): value is AccountStatus {
   return typeof value === "string" && (ACCOUNT_STATUSES as readonly string[]).includes(value);
+}
+
+export function isApplicationStatus(value: unknown): value is ApplicationStatus {
+  return typeof value === "string" && (APPLICATION_STATUSES as readonly string[]).includes(value);
+}
+
+export function isCommunityType(value: unknown): value is CommunityType {
+  return typeof value === "string" && (COMMUNITY_TYPES as readonly string[]).includes(value);
+}
+
+export function isExpectedPlayerRange(value: unknown): value is ExpectedPlayerRange {
+  return typeof value === "string" && (EXPECTED_PLAYER_RANGES as readonly string[]).includes(value);
+}
+
+export function isNotificationType(value: unknown): value is NotificationType {
+  return typeof value === "string" && (NOTIFICATION_TYPES as readonly string[]).includes(value);
 }
 
 export function isAnnouncementSeverity(value: unknown): value is AnnouncementSeverity {

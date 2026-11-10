@@ -2,13 +2,14 @@
 
 // GCC - participant dashboard shell.
 // Desktop sidebar, mobile bottom navigation and a full mobile drawer.
-import { Bell, Menu, Shield } from "lucide-react";
+import { Menu, Shield } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 import { SignOutButton } from "@/components/auth/sign-out-button";
 import { BrandLockup, BrandMark } from "@/components/brand/logo";
+import { NotificationBell } from "@/components/layout/notification-bell";
 import { Avatar } from "@/components/ui/data-display";
 import { Drawer } from "@/components/ui/dialog";
 import { IconButton } from "@/components/ui/icon-button";
@@ -17,11 +18,13 @@ import {
   isNavigationItemActive,
   type NavigationItem,
 } from "@/lib/config/navigation";
+import type { NotificationBellData } from "@/lib/notifications/types";
 import { viewerName, type Viewer } from "@/lib/auth/viewer";
 import { cn } from "@/lib/utils/cn";
 
 interface DashboardShellProps {
   readonly viewer: Viewer;
+  readonly notificationBell: NotificationBellData;
   readonly notices?: React.ReactNode;
   readonly children: React.ReactNode;
 }
@@ -69,7 +72,12 @@ function NavigationList({
   );
 }
 
-export function DashboardShell({ viewer, notices, children }: DashboardShellProps) {
+export function DashboardShell({
+  viewer,
+  notificationBell,
+  notices,
+  children,
+}: DashboardShellProps) {
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const displayName = viewerName(viewer);
@@ -135,13 +143,7 @@ export function DashboardShell({ viewer, notices, children }: DashboardShellProp
           </div>
 
           <div className="flex items-center gap-1.5">
-            <Link
-              href="/dashboard/notifications"
-              aria-label="Notifications"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-md text-grey-300 transition-colors hover:bg-white/[0.07] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-400"
-            >
-              <Bell aria-hidden="true" className="h-5 w-5" />
-            </Link>
+            <NotificationBell data={notificationBell} />
             <Link
               href="/dashboard/profile"
               aria-label="Your profile"

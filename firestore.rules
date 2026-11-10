@@ -104,6 +104,12 @@ service cloud.firestore {
         (resource.data.uid == request.auth.uid || isSuperAdmin());
     }
 
+    // One server-written marker per applicant. It enforces the one-pending and
+    // rejection-cooldown rules, so no client may read or write it.
+    match /applicationState/{uid} {
+      allow read: if false;
+    }
+
     // Tournaments are public once they leave draft and are not suspended.
     // Owners and the Super Admin always see their own records.
     match /tournaments/{tournamentId} {
