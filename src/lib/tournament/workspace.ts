@@ -34,7 +34,6 @@ export interface WorkspaceStep {
 export interface WorkspaceTab {
   readonly segment: string;
   readonly label: string;
-  readonly icon: (typeof organiserTournamentWorkspace)[number]["icon"];
   readonly available: boolean;
   /** Present only when the tab is not available yet. */
   readonly notice: string | null;
@@ -222,6 +221,10 @@ const TAB_AVAILABILITY: Readonly<
  * Returns the ten workspace tabs with an honest availability flag and, when a
  * tab is not usable yet, the exact condition that unlocks it. Overview and
  * Settings are always available; a suspended tournament keeps only them.
+ *
+ * The result is plain serialisable data: it crosses the Server/Client boundary
+ * into `WorkspaceTabs`, so it must never carry component references. Labels and
+ * icons are resolved from the shared navigation model inside the client.
  */
 export function getWorkspaceTabs(
   tournament: Pick<TournamentDocument, "status">,
@@ -230,21 +233,22 @@ export function getWorkspaceTabs(
 
   return organiserTournamentWorkspace.map((item) => {
     const availability = TAB_AVAILABILITY[item.segment];
+    const base = { segment: item.segment, label: item.label };
 
     if (item.segment === "" || item.segment === "settings") {
-      return { ...item, available: true, notice: null };
+      return { ...base, available: true, notice: null };
     }
 
     if (status === "suspended") {
-      return { ...item, available: false, notice: SUSPENDED_REASON };
+      return { ...base, available: false, notice: SUSPENDED_REASON };
     }
 
     if (status === "cancelled" && item.segment !== "registrations") {
-      return { ...item, available: false, notice: CANCELLED_REASON };
+      return { ...base, available: false, notice: CANCELLED_REASON };
     }
 
     const available = availability.statuses.includes(status);
 
-    return { ...item, available, notice: available ? null : availability.notice };
+    return { ...base, available, notice: available ? null : availability.notice };
   });
 }

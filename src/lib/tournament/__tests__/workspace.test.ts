@@ -227,4 +227,25 @@ describe("getWorkspaceTabs", () => {
     expect(tabs).toHaveLength(10);
     expect(new Set(tabs.map((tab) => tab.segment)).size).toBe(10);
   });
+
+  it("returns only plain serialisable data for the client component", () => {
+    for (const status of TOURNAMENT_STATUSES) {
+      const tabs = getWorkspaceTabs(tournament(status));
+
+      expect(JSON.parse(JSON.stringify(tabs)), status).toEqual(tabs);
+
+      for (const tab of tabs) {
+        expect(Object.keys(tab).sort(), status).toEqual([
+          "available",
+          "label",
+          "notice",
+          "segment",
+        ]);
+        expect(
+          Object.values(tab).some((value) => typeof value === "function"),
+          status,
+        ).toBe(false);
+      }
+    }
+  });
 });
