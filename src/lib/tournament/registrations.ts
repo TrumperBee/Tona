@@ -19,7 +19,7 @@ import { paths } from "@/lib/firebase/paths";
 import { createNotification } from "@/lib/notifications";
 import { assertPlatformWritable } from "@/lib/platform/settings";
 import { TournamentMutationError } from "@/lib/tournament/errors";
-import { getRegistrationState } from "@/lib/tournament/registration-state";
+import { getRegistrationState, isFieldFull } from "@/lib/tournament/registration-state";
 import type { PublicProfileDocument, TournamentDocument } from "@/types/domain";
 import { playerRemovalReasonSchema } from "@/lib/validation/tournament";
 
@@ -228,7 +228,12 @@ export async function registerPlayer(tournamentId: string): Promise<void> {
     link: `/tournaments/${outcome.tournament.slug}`,
   }).catch(() => undefined);
 
-  if (outcome.count >= outcome.tournament.maxParticipants) {
+  if (
+    isFieldFull({
+      registrationCount: outcome.count,
+      maxParticipants: outcome.tournament.maxParticipants,
+    })
+  ) {
     await createNotification(outcome.tournament.ownerUid, {
       type: "tournament",
       title: "The field is full",
@@ -460,9 +465,7 @@ export async function addPlayer(tournamentId: string, uid: string): Promise<void
       );
     }
 
-    const count = Number(current.registrationCount ?? 0);
-
-    if (count >= current.maxParticipants) {
+    if (isFieldFull(current)) {
       throw new TournamentMutationError("The field is full.", 409);
     }
 

@@ -26,6 +26,7 @@ import { PLATFORMS } from "@/lib/config/games";
 import { TOURNAMENT_STATUS_META } from "@/lib/config/tournament-status";
 import { listTournamentRegistrations } from "@/lib/organiser/registrations";
 import { getTournamentWorkspace } from "@/lib/organiser/workspace-access";
+import { isFieldFull } from "@/lib/tournament/registration-state";
 import { formatDateTime } from "@/lib/utils/dates";
 import {
   REGISTRATION_STATUSES,
@@ -161,7 +162,10 @@ export default async function RegistrationsPage({ params, searchParams }: Regist
               </span>{" "}
               places taken ({statusMeta.label.toLowerCase()})
             </p>
-            {registered >= tournament.maxParticipants ? (
+            {isFieldFull({
+              registrationCount: registered,
+              maxParticipants: tournament.maxParticipants,
+            }) ? (
               <p className="text-xs font-semibold uppercase tracking-eyebrow text-success-soft">
                 Full field — pots can be confirmed
               </p>

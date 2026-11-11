@@ -91,7 +91,8 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
   const meta = TOURNAMENT_STATUS_META[tournament.status];
   const format = getTournamentFormat(tournament.formatId);
   const timezone = tournament.timezone;
-  const cancelled = tournament.status === "cancelled";
+  const state = getRegistrationState(tournament, new Date());
+  const cancelled = state === "cancelled";
 
   // A cancelled competition is reachable by direct link for the notice only.
   if (cancelled) {
@@ -133,7 +134,6 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
 
   const user = await getCurrentUser();
   const viewerRegistration = user ? await getViewerRegistration(tournament.id, user.userId) : null;
-  const state = getRegistrationState(tournament, new Date());
   const spotsLeft = Math.max(tournament.maxParticipants - tournament.registrationCount, 0);
   const fill = Math.min(
     100,

@@ -76,6 +76,21 @@ export function isTerminalEntryStatus(status: TournamentStatus): boolean {
 }
 
 /**
+ * True when the field has reached its capacity, regardless of the stored status
+ * or registration window. This is the single capacity predicate behind
+ * `getRegistrationState` and the organiser-only surfaces that manage a field
+ * outside the player window.
+ */
+export function isFieldFull(
+  tournament: Pick<RegistrationStateInput, "registrationCount" | "maxParticipants">,
+): boolean {
+  const count = Number.isFinite(tournament.registrationCount) ? tournament.registrationCount : 0;
+  const capacity = Number.isFinite(tournament.maxParticipants) ? tournament.maxParticipants : 0;
+
+  return count >= capacity;
+}
+
+/**
  * Computes the registration state of a tournament at a moment in time.
  *
  * - `not_published` — the competition is a draft.
@@ -110,10 +125,7 @@ export function getRegistrationState(
     return "closed";
   }
 
-  const count = Number.isFinite(tournament.registrationCount) ? tournament.registrationCount : 0;
-  const capacity = Number.isFinite(tournament.maxParticipants) ? tournament.maxParticipants : 0;
-
-  if (count >= capacity) {
+  if (isFieldFull(tournament)) {
     return "full";
   }
 

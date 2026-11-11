@@ -17,6 +17,7 @@ import { EmptyState } from "@/components/ui/data-display";
 import { AuthorizationError, NotFoundError } from "@/lib/auth/guards";
 import { TOURNAMENT_STATUS_META } from "@/lib/config/tournament-status";
 import { getTournamentWorkspace } from "@/lib/organiser/workspace-access";
+import { isFieldFull } from "@/lib/tournament/registration-state";
 import { formatDate, formatDateTime } from "@/lib/utils/dates";
 import type { TournamentDocument, TournamentStatus } from "@/types/domain";
 
@@ -70,10 +71,9 @@ function nextSteps(id: string, tournament: TournamentDocument): readonly Checkli
         {
           label: "Confirm the field and draw the pots",
           href: `${base}/pots`,
-          note:
-            tournament.registrationCount >= tournament.maxParticipants
-              ? `The field is complete: ${tournament.registrationCount} of ${tournament.maxParticipants} places taken. The pots tool is the next step.`
-              : `${tournament.registrationCount} of ${tournament.maxParticipants} places are taken. The pots tool is the next step; registration can be reopened below while the pots are not confirmed.`,
+          note: isFieldFull(tournament)
+            ? `The field is complete: ${tournament.registrationCount} of ${tournament.maxParticipants} places taken. The pots tool is the next step.`
+            : `${tournament.registrationCount} of ${tournament.maxParticipants} places are taken. The pots tool is the next step; registration can be reopened below while the pots are not confirmed.`,
         },
       ];
     case "pots_confirmed":

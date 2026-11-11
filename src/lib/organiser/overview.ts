@@ -11,6 +11,7 @@ import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 import { getOrganiserTournaments, type OrganiserTournamentRow } from "@/lib/organiser/tournaments";
 import { getPlatformSettings } from "@/lib/platform/settings";
+import { isFieldFull } from "@/lib/tournament/registration-state";
 import { TOURNAMENT_STATUSES, type TournamentStatus } from "@/types/domain";
 
 /**
@@ -67,7 +68,7 @@ function attentionItems(
   const items: OrganiserAttentionItem[] = [];
 
   for (const tournament of tournaments) {
-    const full = tournament.registrationCount >= tournament.maxParticipants;
+    const full = isFieldFull(tournament);
 
     if (tournament.status === "registration_open") {
       const closesIn = tournament.registrationClosesAt

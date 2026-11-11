@@ -75,7 +75,7 @@ export default async function TournamentRegisterPage({ params }: RegisterPagePro
 
   let gating: React.ReactNode | null = null;
 
-  if (tournament.status === "cancelled") {
+  if (state === "cancelled") {
     gating = unavailable(
       "This competition was cancelled",
       "The organiser cancelled this competition. It is not accepting entries.",

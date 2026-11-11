@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   getRegistrationState,
+  isFieldFull,
   isRegistrationOpen,
   isTerminalEntryStatus,
   nextCountdownTarget,
@@ -116,6 +117,21 @@ describe("getRegistrationState", () => {
     };
 
     expect(getRegistrationState(withIso, new Date())).toBe("open");
+  });
+});
+
+describe("isFieldFull", () => {
+  it("uses the same capacity boundary as getRegistrationState", () => {
+    expect(isFieldFull({ registrationCount: 35, maxParticipants: 36 })).toBe(false);
+    expect(isFieldFull({ registrationCount: 36, maxParticipants: 36 })).toBe(true);
+    expect(isFieldFull({ registrationCount: 40, maxParticipants: 36 })).toBe(true);
+    expect(getRegistrationState(tournament({ count: 35, capacity: 36 }), new Date())).toBe("open");
+    expect(getRegistrationState(tournament({ count: 36, capacity: 36 }), new Date())).toBe("full");
+  });
+
+  it("does not depend on status or the registration window", () => {
+    expect(isFieldFull(tournament({ status: "registration_closed", count: 36 }))).toBe(true);
+    expect(isFieldFull(tournament({ status: "draft", count: 0 }))).toBe(false);
   });
 });
 
