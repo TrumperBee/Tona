@@ -1,12 +1,12 @@
 # GCC — Security Requirements
 
-> **Status: Phase 6 implemented.** Firestore rules, session exchange, guards,
-> registration, email verification, password reset, profile editing, avatar upload,
+> **Status: Phase 8 implemented.** Firestore rules, session exchange, guards,
+> registration, password policy, password reset, profile editing, avatar upload,
 > role/status administration, audit logging, rate limiting, same-origin checks,
 > security headers, the Super Admin console, platform settings/maintenance mode,
 > announcements, the organiser application and approval flow, in-app
-> notifications, rules tests and emulator integration tests exist. CSP and App
-> Check remain Phase 18.
+> notifications, tournament creation and registration, rules tests and emulator
+> integration tests exist. CSP and App Check remain Phase 18.
 
 ## 1. Security model
 
@@ -35,17 +35,20 @@ an admin route, or exploits a stale claim after the owner changes.
   cookie's custom claim.
 - `setUserRole` is callable only after `requireSuperAdmin()` and re-checks the
   actor's role as defence in depth.
-- `assertRoleAssignmentAllowed` allows `super_admin` only for the configured,
-  **verified** `SUPER_ADMIN_EMAIL`, case-insensitively. The function is pure and
-  unit tested.
+- `assertRoleAssignmentAllowed` allows `super_admin` only when the target's
+  **email and uid** both match `SUPER_ADMIN_EMAIL` and `SUPER_ADMIN_UID`
+  (case-insensitive email, exact uid). The function is pure and unit tested.
+- A missing or blank `SUPER_ADMIN_UID` fails closed: the role is withheld from
+  everyone and the server logs one clear configuration error (ADR-047).
 - The configured owner account cannot be demoted.
 - The session exchange strips a stale `super_admin` claim and revokes refresh
-  tokens when the email no longer matches or is unverified.
-- `requireSuperAdmin()` also compares the verified email with the configured
-  owner email, so a stale claim alone is insufficient.
+  tokens when the email or uid no longer matches.
+- `requireSuperAdmin()` also compares both configured identifiers with the
+  session account, so a stale claim alone is insufficient.
 - Role changes revoke the target's refresh tokens. The old claim remains only
   until the ID token expires, never beyond the revocation check.
-- Security Rules check the `role` claim and a verified email.
+- Security Rules check the `role` claim only; email verification plays no part
+  (ADR-046).
 
 ### 2.2 Gamer-tag races
 
@@ -247,8 +250,8 @@ authentication, authorisation, rate limits or maintenance state.
 - Every `/api/super-admin/*` mutation calls `guardSuperAdminMutation()` in this
   order: same-origin check → `requireSuperAdmin()` → rate limit → maintenance
   gate.
-- The role and configured verified email are both checked; a stale claim alone is
-  insufficient.
+- The role, the configured email and the configured uid are all checked; a stale
+  claim alone is insufficient.
 - Every route re-validates a strict Zod schema (`super-admin`, platform-settings
   and announcement schemas) and rejects unknown fields.
 - Routes never trust a client-supplied actor, role, target role or timestamps.
@@ -272,7 +275,7 @@ concurrently so two pending applications slip past a "list the latest" check.
   transaction from `lastRejectedAt`; the API returns the exact reapply date.
 - `POST /api/admin-applications` is rate limited to 5 submissions per hour per
   user, and withdrawal shares the same fixed guard sequence (same-origin,
-  verified session, `user` role, rate limit, maintenance gate).
+  active session, `user` role, rate limit, maintenance gate).
 - Every transition writes an audit entry, so the queue cannot be spammed
   invisibly.
 
@@ -299,8 +302,9 @@ flow to launder a role.
   transaction, so two concurrent approvals cannot double-apply.
 - If the claim write fails, the application and its state marker are rolled
   back to `pending` and the API returns 500; the queue stays truthful.
-- Approval refuses applicants who are suspended, banned, unverified or disabled
-  (checked against Auth and the private user document before the transaction).
+- Approval refuses applicants who are suspended, banned or disabled (checked
+  against Auth and the private user document before the transaction). Email
+  verification is not a criterion (ADR-046).
 - Revoking an organiser through the Phase 5 role action also marks their
   latest approved application `revoked`, so history cannot show a current
   organiser entitlement that no longer exists.
@@ -337,7 +341,7 @@ contact details.
 **Controls:**
 
 - Every organiser tournament route calls `guardOrganiserMutation()` (same-origin
-  → signed-in **verified** session → `organiser` or higher → rate limit →
+  → signed-in active session → `organiser` or higher → rate limit →
   maintenance gate). The store then loads `ownerUid` from Firestore;
   `requireTournamentOwnerOrSuperAdmin` is applied for each document. A
   non-owner gets 404, not 403, so the route does not confirm the document.
@@ -376,9 +380,10 @@ contact details.
   http-only session cookie and returns the role so the client can force a token
   refresh when claims changed. `DELETE /api/auth/session` clears the cookie and
   revokes refresh tokens. Both reject cross-origin requests.
-- Email verification, password reset and email-change links use Firebase's
-  default hosted email action handler. The application has no `/auth/callback`
-  route and never handles Firebase action codes itself.
+- Password reset and email-change links use Firebase's default hosted email
+  action handler. The application has no `/auth/callback` route and never
+  handles Firebase action codes itself. Email verification is not part of the
+  product (ADR-046).
 - `src/proxy.ts` only checks for cookie presence and redirects to `/login`. It is
   a navigation guard, not authorisation. The `next` parameter is sanitised by
   `safeRedirectPath()`; only a same-origin relative path is accepted.
@@ -392,14 +397,17 @@ contact details.
   WhatsApp to E.164, creates the Firebase Auth user, then writes the tag
   reservation and both profiles in one Firestore transaction. Any failure deletes
   the Auth user. Registration never sets a custom claim.
+- The password policy is length only (6–128, no complexity rules, no trimming;
+  ADR-045). Sign-in accepts any non-empty password so existing accounts always
+  work, and the strength indicator is advisory.
 - Sign-in and password-reset responses are deliberately generic. The client never
   learns whether an email address has an account.
-- Unverified accounts may read their own dashboard and profile. Server-side
-  tournament registration uses `requireVerifiedUser`, so an unverified email
-  cannot enter a competition.
+- There is no email-verification gate. An active account may read its dashboard,
+  apply as an organiser and enter a tournament; suspended and banned accounts are
+  rejected by the session guard.
 - Server guards (`src/lib/auth/guards.ts`) are the authorisation boundary:
-  `getCurrentUser`, `requireUser`, `requireVerifiedUser`, `requireRole`,
-  `requireSuperAdmin`, `requireTournamentOwnerOrSuperAdmin`.
+  `getCurrentUser`, `requireUser`, `requireRole`, `requireSuperAdmin`,
+  `requireTournamentOwnerOrSuperAdmin`.
 - `requireRole` uses the hierarchy user < organiser < super_admin.
 - `requireTournamentOwnerOrSuperAdmin` loads `ownerUid` from Firestore; it never
   trusts a client-supplied owner.
@@ -446,16 +454,17 @@ contact details.
 
 - Every protected read and write verifies the session, role and ownership on the
   server.
-- `Super Admin` means the configured email plus the `super_admin` role claim.
+- `Super Admin` means the configured email **and** uid plus the `super_admin`
+  role claim. Either mismatch denies access.
 - Super Admin console reads and writes call `requireSuperAdmin()` server-side;
   hiding a link or a button is never the control. Every console page is inside a
   layout that calls `requirePageSuperAdmin()`.
 - Organiser may act only on tournaments they own; ownership is loaded from
   Firestore. Tournament reads for non-owners return 404 so the route does not
   reveal that the document exists.
-- The `organiser` role is granted only through the application approval flow
-  (or the pre-existing Super Admin email rule for `super_admin`). There is no
-  route that sets `organiser` directly.
+- The `organiser` role is granted only through the application approval flow.
+  `super_admin` is never assigned by a route: it is derived from the configured
+  email and uid pair at session exchange (ADR-047).
 - Participant permissions are scoped to their own registrations, result reports,
   profile, memberships and notifications.
 - Hiding a button is never an authorisation control.
@@ -464,7 +473,7 @@ contact details.
 
 - Only `NEXT_PUBLIC_*` variables reach the browser.
 - `FIREBASE_ADMIN_PROJECT_ID`, `FIREBASE_ADMIN_CLIENT_EMAIL`,
-  `FIREBASE_ADMIN_PRIVATE_KEY`, `SUPER_ADMIN_EMAIL`,
+  `FIREBASE_ADMIN_PRIVATE_KEY`, `SUPER_ADMIN_EMAIL`, `SUPER_ADMIN_UID`,
   `SESSION_COOKIE_MAX_AGE_DAYS`, `CLOUDINARY_CLOUD_NAME`,
   `CLOUDINARY_API_KEY` and `CLOUDINARY_API_SECRET` are server-only and validated
   by `src/lib/config/env.server.ts`.
@@ -502,6 +511,8 @@ contact details.
   the path; the participant identity always comes from the session.
 - Organiser participant add/remove and cancellation require the documented
   reasons (5–300 and 10–500 characters).
+- Password input uses one shared Zod schema: 6–128 characters, no complexity
+  rules and no trimming (ADR-045). Sign-in only requires a non-empty value.
 - Account actions require a 5–300 character reason. A restore also requires one.
 - Organiser profile PATCH accepts only `organisationName` (2–60 characters,
   required), an optional `bio` ≤ 300 characters and up to three links, each with

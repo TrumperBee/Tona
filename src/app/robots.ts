@@ -15,7 +15,6 @@ const disallowed = [
   "/login",
   "/register",
   "/forgot-password",
-  "/verify-email",
   "/auth/",
 ];
 

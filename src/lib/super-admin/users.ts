@@ -226,7 +226,6 @@ async function searchUsers(
 export interface UserDetail {
   readonly uid: string;
   readonly user: UserDocument;
-  readonly emailVerified: boolean;
   readonly disabled: boolean;
   readonly lastSignInAt: Date | null;
   readonly memberships: ReadonlyArray<MembershipDocument>;
@@ -270,7 +269,6 @@ export async function getUserDetail(uid: string): Promise<UserDetail | null> {
   return {
     uid,
     user: userSnapshot.data() as UserDocument,
-    emailVerified: authUser?.emailVerified ?? false,
     disabled: authUser?.disabled ?? false,
     lastSignInAt: authUser?.metadata.lastSignInTime
       ? new Date(authUser.metadata.lastSignInTime)

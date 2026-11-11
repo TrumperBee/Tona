@@ -108,13 +108,12 @@ export default async function ApplicationDetailPage({ params }: ApplicationDetai
             <ApplicationReviewActions applicationId={id} gamerTag={application.gamerTag} />
           ) : null}
 
-          {!detail.emailVerified || detail.disabled ? (
+          {detail.disabled ? (
             <div className="flex items-start gap-3 rounded-md border border-danger/30 bg-danger/10 p-3 text-sm text-danger-soft">
               <ShieldAlert aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
               <p>
-                {detail.disabled
-                  ? "This applicant's Auth account is disabled. Approval will be refused until it is restored."
-                  : "This applicant has not verified their email. Approval will be refused until they verify it."}
+                This applicant&apos;s Auth account is disabled. Approval will be refused until it is
+                restored.
               </p>
             </div>
           ) : null}
@@ -199,9 +198,6 @@ export default async function ApplicationDetailPage({ params }: ApplicationDetai
               ) : (
                 <Badge tone="warning">Profile missing</Badge>
               )}
-              <Badge tone={detail.emailVerified ? "success" : "danger"}>
-                {detail.emailVerified ? "Email verified" : "Email unverified"}
-              </Badge>
               {detail.disabled ? <Badge tone="danger">Auth disabled</Badge> : null}
             </div>
           </div>

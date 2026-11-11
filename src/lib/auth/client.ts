@@ -3,14 +3,12 @@
 // GCC — browser authentication helpers.
 //
 // Firebase owns credentials and emails. Our server owns the http-only session
-// cookie. After any sign-in or verification change the client exchanges a fresh
-// ID token at /api/auth/session; roles are never read from client data.
+// cookie. After sign-in the client exchanges a fresh ID token at
+// /api/auth/session; roles are never read from client data.
 import {
-  sendEmailVerification,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut,
-  type ActionCodeSettings,
   type User,
 } from "firebase/auth";
 
@@ -20,7 +18,6 @@ import type { UserRole } from "@/types/domain";
 
 export interface SessionExchange {
   readonly role: UserRole;
-  readonly emailVerified: boolean;
   readonly refreshRequired: boolean;
   readonly message?: string;
 }
@@ -74,35 +71,6 @@ export async function signInWithSession(
   return { user: credential.user, session };
 }
 
-/** Reloads the user and re-exchanges a force-refreshed token. */
-export async function refreshVerificationSession(): Promise<{
-  user: User;
-  session: SessionExchange;
-}> {
-  const auth = getFirebaseClientAuth();
-  const user = auth.currentUser;
-
-  if (!user) {
-    throw new AuthClientError("Sign in again to continue.");
-  }
-
-  await user.reload();
-  const session = await exchangeSession(await user.getIdToken(true));
-  return { user, session };
-}
-
-function verificationSettings(): ActionCodeSettings {
-  return {
-    url: `${siteConfig.url.replace(/\/+$/, "")}/verify-email`,
-    handleCodeInApp: false,
-  };
-}
-
-/** Sends Firebase's built-in verification email. */
-export async function sendVerificationEmail(user: User): Promise<void> {
-  await sendEmailVerification(user, verificationSettings());
-}
-
 /**
  * Requests a reset email. The caller always shows the same message so the
  * endpoint cannot be used to discover which addresses have accounts.
@@ -153,7 +121,7 @@ export function authErrorMessage(error: unknown): string {
     case "auth/email-already-in-use":
       return "An account with that email already exists.";
     case "auth/weak-password":
-      return "Use a stronger password.";
+      return "Use at least 6 characters.";
     default:
       return "We could not complete that request. Try again.";
   }

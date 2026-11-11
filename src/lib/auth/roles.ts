@@ -2,7 +2,8 @@
 //
 // This module is intentionally free of Firebase, Next.js and environment
 // imports so it can be unit tested as pure logic and imported by shared types.
-// Server code is responsible for loading SUPER_ADMIN_EMAIL and passing it in.
+// Server code is responsible for loading SUPER_ADMIN_EMAIL and SUPER_ADMIN_UID
+// and passing them in.
 import { isUserRole, USER_ROLES, type UserRole } from "@/types/domain";
 
 export const ROLES = {
@@ -40,6 +41,11 @@ export function normalizeEmail(email: string | null | undefined): string {
   return (email ?? "").trim().toLowerCase();
 }
 
+/** Normalises a UID for exact comparison. */
+export function normalizeUid(uid: string | null | undefined): string {
+  return (uid ?? "").trim();
+}
+
 /** Raised when an attempted role assignment violates the role policy. */
 export class RoleAssignmentError extends Error {
   constructor(message: string) {
@@ -48,50 +54,89 @@ export class RoleAssignmentError extends Error {
   }
 }
 
+export const SUPER_ADMIN_UID_MISSING_MESSAGE =
+  "SUPER_ADMIN_UID is not configured, so the Super Admin role is withheld from everyone. " +
+  "Set SUPER_ADMIN_UID in .env.local to the uid of the SUPER_ADMIN_EMAIL account " +
+  "(Firebase Console → Authentication → Users) and redeploy.";
+
+let warnedAboutMissingSuperAdminUid = false;
+
+/** Logs one clear server-side error when the UID pin is missing. */
+export function warnMissingSuperAdminUid(): void {
+  if (warnedAboutMissingSuperAdminUid) {
+    return;
+  }
+
+  warnedAboutMissingSuperAdminUid = true;
+  console.error(SUPER_ADMIN_UID_MISSING_MESSAGE);
+}
+
+/**
+ * True only when the account matches BOTH configured Super Admin identifiers.
+ * A missing or blank UID pin fails closed for every account (ADR-047).
+ */
+export function isSuperAdminAccount(
+  email: string | null | undefined,
+  uid: string | null | undefined,
+  superAdminEmail: string | null | undefined,
+  superAdminUid: string | null | undefined,
+): boolean {
+  const configuredEmail = normalizeEmail(superAdminEmail);
+  const configuredUid = normalizeUid(superAdminUid);
+
+  if (configuredEmail.length === 0 || configuredUid.length === 0) {
+    return false;
+  }
+
+  return normalizeEmail(email) === configuredEmail && normalizeUid(uid) === configuredUid;
+}
+
 /**
  * Enforces the only role-assignment rules the platform permits.
  *
  * The function is pure: callers must supply the configured Super Admin email
- * (normally `getServerEnv().SUPER_ADMIN_EMAIL`) rather than reading the
- * environment here. The optional parameter keeps the three-argument call shape
- * for callers that have already validated their inputs; omitting it makes
- * `super_admin` assignments fail closed.
+ * and UID (normally `getServerEnv()`), not read the environment here.
  *
  * Rules:
- * - `super_admin` is allowed only when the target email matches the configured
- *   Super Admin email case-insensitively and the target email is verified.
+ * - `super_admin` is allowed only when the target's email AND uid match the
+ *   configured Super Admin identifiers. Email verification plays no part.
  * - The configured Super Admin account can never be demoted to another role.
  * - An unknown role is rejected at runtime.
  */
 export function assertRoleAssignmentAllowed(
   targetEmail: string | null | undefined,
-  targetEmailVerified: boolean,
+  targetUid: string | null | undefined,
   role: UserRole,
   superAdminEmail: string = "",
+  superAdminUid: string = "",
 ): void {
   if (!isUserRole(role)) {
     throw new RoleAssignmentError(`Unknown role: ${String(role)}`);
   }
 
-  const configuredSuperAdmin = normalizeEmail(superAdminEmail);
-  const target = normalizeEmail(targetEmail);
-  const targetIsConfiguredSuperAdmin =
-    configuredSuperAdmin.length > 0 && target === configuredSuperAdmin;
+  const configuredEmail = normalizeEmail(superAdminEmail);
+  const configuredUid = normalizeUid(superAdminUid);
+  const targetIsConfiguredSuperAdmin = isSuperAdminAccount(
+    targetEmail,
+    targetUid,
+    superAdminEmail,
+    superAdminUid,
+  );
 
   if (role === "super_admin") {
-    if (!targetEmailVerified) {
-      throw new RoleAssignmentError("The Super Admin account must have a verified email address.");
-    }
-
-    if (configuredSuperAdmin.length === 0) {
+    if (configuredEmail.length === 0) {
       throw new RoleAssignmentError(
         "SUPER_ADMIN_EMAIL is not configured, so the Super Admin role cannot be assigned.",
       );
     }
 
+    if (configuredUid.length === 0) {
+      throw new RoleAssignmentError(SUPER_ADMIN_UID_MISSING_MESSAGE);
+    }
+
     if (!targetIsConfiguredSuperAdmin) {
       throw new RoleAssignmentError(
-        "The Super Admin role can only be granted to the configured SUPER_ADMIN_EMAIL account.",
+        "The Super Admin role can only be granted to the configured SUPER_ADMIN_EMAIL and SUPER_ADMIN_UID account.",
       );
     }
 
@@ -103,14 +148,6 @@ export function assertRoleAssignmentAllowed(
       "The configured Super Admin account cannot be demoted to another role.",
     );
   }
-}
-
-export function isSuperAdminEmail(
-  email: string | null | undefined,
-  superAdminEmail: string | null | undefined,
-): boolean {
-  const configured = normalizeEmail(superAdminEmail);
-  return configured.length > 0 && normalizeEmail(email) === configured;
 }
 
 export { isUserRole, USER_ROLES };

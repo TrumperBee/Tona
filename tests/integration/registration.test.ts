@@ -9,7 +9,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { RegistrationError, registerPlayer } from "@/lib/auth/registration";
-import { syncSessionRole } from "@/lib/auth/role-sync";
+import { resolveSessionRole, syncSessionRole } from "@/lib/auth/role-sync";
 import { getFirebaseAdminAuth, getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 import { normalizeGamerTag } from "@/lib/validation/gamer-tag";
@@ -18,6 +18,7 @@ import { EMPTY_PROFILE_STATS } from "@/types/domain";
 
 const PASSWORD = "correct horse battery";
 const SUPER_ADMIN_EMAIL = "owner@example.com";
+const SUPER_ADMIN_UID = "integration-super-admin";
 
 function input(overrides: Partial<RegistrationInput> = {}): RegistrationInput {
   return {
@@ -80,7 +81,6 @@ describe("registerPlayer", () => {
 
     const authUser = await auth.getUser(result.uid);
     expect(authUser.email).toBe("striker@example.com");
-    expect(authUser.emailVerified).toBe(false);
     expect(authUser.displayName).toBe("Striker_9");
     // Registration NEVER sets a role claim; the session exchange derives it.
     expect(authUser.customClaims?.role).toBeUndefined();
@@ -188,29 +188,13 @@ describe("registerPlayer", () => {
 });
 
 describe("syncSessionRole", () => {
-  it("does not elevate an unverified account that owns the configured owner email", async () => {
+  it("grants super_admin when BOTH the configured email and uid match, regardless of verification", async () => {
     const auth = getFirebaseAdminAuth();
     const user = await auth.createUser({
+      uid: SUPER_ADMIN_UID,
       email: SUPER_ADMIN_EMAIL,
       password: PASSWORD,
       emailVerified: false,
-    });
-
-    const result = await syncSessionRole(user.uid);
-
-    expect(result.role).toBe("user");
-    expect(result.refreshRequired).toBe(false);
-
-    const stored = await auth.getUser(user.uid);
-    expect(stored.customClaims?.role).toBeUndefined();
-  });
-
-  it("grants super_admin only once the owner email is verified", async () => {
-    const auth = getFirebaseAdminAuth();
-    const user = await auth.createUser({
-      email: SUPER_ADMIN_EMAIL,
-      password: PASSWORD,
-      emailVerified: true,
     });
 
     const result = await syncSessionRole(user.uid);
@@ -223,12 +207,53 @@ describe("syncSessionRole", () => {
     expect(stored.customClaims?.role).toBe("super_admin");
   });
 
-  it("strips a stale super_admin claim when the account email changes", async () => {
+  it("never elevates the configured email when it belongs to a different uid", async () => {
     const auth = getFirebaseAdminAuth();
     const user = await auth.createUser({
       email: SUPER_ADMIN_EMAIL,
       password: PASSWORD,
-      emailVerified: true,
+    });
+
+    const result = await syncSessionRole(user.uid);
+
+    expect(result.role).toBe("user");
+    expect(result.refreshRequired).toBe(false);
+
+    const stored = await auth.getUser(user.uid);
+    expect(stored.customClaims?.role).toBeUndefined();
+  });
+
+  it("never elevates a registered super-admin email under a different uid", async () => {
+    const registered = await registerPlayer(
+      input({ gamerTag: "Squatter", email: SUPER_ADMIN_EMAIL }),
+    );
+
+    const result = await syncSessionRole(registered.uid);
+
+    expect(result.role).toBe("user");
+    const stored = await getFirebaseAdminAuth().getUser(registered.uid);
+    expect(stored.customClaims?.role).toBeUndefined();
+  });
+
+  it("fails closed when SUPER_ADMIN_UID is missing", () => {
+    const resolution = resolveSessionRole({
+      uid: SUPER_ADMIN_UID,
+      email: SUPER_ADMIN_EMAIL,
+      customClaims: { role: "super_admin" },
+      superAdminEmail: SUPER_ADMIN_EMAIL,
+      superAdminUid: "",
+    });
+
+    expect(resolution.role).toBe("user");
+    expect(resolution.revoke).toBe(true);
+  });
+
+  it("strips a stale super_admin claim when the account email changes", async () => {
+    const auth = getFirebaseAdminAuth();
+    const user = await auth.createUser({
+      uid: SUPER_ADMIN_UID,
+      email: SUPER_ADMIN_EMAIL,
+      password: PASSWORD,
     });
     await auth.setCustomUserClaims(user.uid, { role: "super_admin" });
     await auth.updateUser(user.uid, { email: "former-owner@example.com" });
@@ -243,12 +268,11 @@ describe("syncSessionRole", () => {
     expect(stored.customClaims?.role).toBe("user");
   });
 
-  it("never elevates an ordinary verified player", async () => {
+  it("never elevates an ordinary player", async () => {
     const auth = getFirebaseAdminAuth();
     const user = await auth.createUser({
       email: "player@example.com",
       password: PASSWORD,
-      emailVerified: true,
     });
 
     const result = await syncSessionRole(user.uid);

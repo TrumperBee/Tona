@@ -11,7 +11,7 @@ import "server-only";
 import { FieldValue } from "firebase-admin/firestore";
 
 import { writeAuditLog } from "@/lib/audit/log";
-import { requireVerifiedUser, requireTournamentOwnerOrSuperAdmin } from "@/lib/auth/guards";
+import { requireUser, requireTournamentOwnerOrSuperAdmin } from "@/lib/auth/guards";
 import type { SessionUser } from "@/lib/auth/session";
 import type { PlatformId } from "@/lib/config/games";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
@@ -161,7 +161,7 @@ function registrationWrite(
  * membership entry. Capacity is never exceeded.
  */
 export async function registerPlayer(tournamentId: string): Promise<void> {
-  const user = await requireVerifiedUser();
+  const user = await requireUser();
   await assertPlatformWritable(user);
   await requireActivePlayer(user);
   const player = await loadPlayerSnapshot(user.userId);
@@ -245,7 +245,7 @@ export async function registerPlayer(tournamentId: string): Promise<void> {
  * that just ended does not lock a player into their entry.
  */
 export async function withdrawPlayer(tournamentId: string): Promise<void> {
-  const user = await requireVerifiedUser();
+  const user = await requireUser();
   await assertPlatformWritable(user);
 
   const firestore = getFirebaseAdminFirestore();

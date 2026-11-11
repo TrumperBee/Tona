@@ -124,7 +124,7 @@ capability.
 | Folder          | Purpose                                                 |
 | --------------- | ------------------------------------------------------- |
 | `(public)`      | Public website, navbar/footer shell, discovery pages    |
-| `(auth)`        | Sign in, registration, verification, password reset     |
+| `(auth)`        | Sign in, registration, password reset                   |
 | `(dashboard)`   | Participant area                                        |
 | `(organiser)`   | Tournament Admin area                                   |
 | `(super-admin)` | Platform owner area                                     |

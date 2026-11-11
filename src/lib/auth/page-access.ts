@@ -7,12 +7,7 @@ import "server-only";
 
 import { redirect } from "next/navigation";
 
-import {
-  AuthenticationError,
-  hasSessionCookie,
-  requireUser,
-  requireVerifiedUser,
-} from "@/lib/auth/guards";
+import { AuthenticationError, hasSessionCookie, requireUser } from "@/lib/auth/guards";
 import { hasRoleAtLeast } from "@/lib/auth/roles";
 import { safeRedirectPath } from "@/lib/security/redirect";
 import type { SessionUser } from "@/lib/auth/session";
@@ -41,8 +36,7 @@ async function redirectToSignIn(nextPath: string): Promise<never> {
 
 /**
  * Requires a valid, unrevoked session without requiring email verification.
- * The participant dashboard uses this so an unverified player can still read
- * their own profile. Tournament entry uses requireVerifiedUser instead.
+ * The participant dashboard uses this so a player can read their own profile.
  */
 export async function requirePageSignedIn(nextPath: string): Promise<SessionUser> {
   try {
@@ -60,22 +54,19 @@ export async function requirePageSignedIn(nextPath: string): Promise<SessionUser
 }
 
 /**
- * Requires a valid, unrevoked session with a verified email.
- * Unauthenticated visitors go to sign-in; unverified accounts go to the
- * verification page. Neither sees the protected shell.
+ * Requires a valid, unrevoked session with an active account.
+ * Unauthenticated visitors go to sign-in; suspended or banned accounts are
+ * rejected by the session guard. Neither sees the protected shell.
  */
 export async function requirePageUser(nextPath: string): Promise<SessionUser> {
   try {
-    return await requireVerifiedUser();
+    return await requireUser();
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      // Same control-flow rule as requirePageSignedIn: the redirect throw must
-      // propagate, otherwise a signed-out visitor would fall through to the
-      // verification-page redirect below.
       return redirectToSignIn(nextPath);
     }
 
-    redirect("/verify-email");
+    throw error;
   }
 }
 

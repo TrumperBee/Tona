@@ -3,15 +3,7 @@
 // Combines the private user document, Auth state, memberships, organiser
 // applications and audit entries targeting this account. The WhatsApp number is
 // masked until an audited reveal.
-import {
-  ArrowLeft,
-  BadgeCheck,
-  ClipboardList,
-  Clock,
-  ShieldAlert,
-  Trophy,
-  UserRound,
-} from "lucide-react";
+import { ArrowLeft, ClipboardList, Clock, ShieldAlert, Trophy, UserRound } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -24,7 +16,7 @@ import { buttonStyles } from "@/components/ui/button-styles";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, EmptyState } from "@/components/ui/data-display";
 import { requirePageSuperAdmin } from "@/lib/auth/page-access";
-import { isSuperAdminEmail } from "@/lib/auth/roles";
+import { isSuperAdminAccount } from "@/lib/auth/roles";
 import { countryFlag, countryName } from "@/lib/config/countries";
 import { getServerEnv } from "@/lib/config/env.server";
 import { getGame, PLATFORMS } from "@/lib/config/games";
@@ -66,7 +58,8 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
   const user = detail.user;
   const env = getServerEnv();
   const targetIsSuperAdmin =
-    user.role === "super_admin" || isSuperAdminEmail(user.email, env.SUPER_ADMIN_EMAIL);
+    user.role === "super_admin" ||
+    isSuperAdminAccount(user.email, detail.uid, env.SUPER_ADMIN_EMAIL, env.SUPER_ADMIN_UID);
   const isSelf = viewer.userId === uid;
   const canAct = !targetIsSuperAdmin && !isSelf;
   const game = getGame(user.preferredGame);
@@ -93,14 +86,6 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
           <div className="flex flex-wrap items-center gap-2">
             <RoleBadge role={user.role ?? "user"} />
             <StatusBadge status={user.status ?? "active"} />
-            {detail.emailVerified ? (
-              <Badge tone="success">
-                <BadgeCheck aria-hidden="true" className="h-3 w-3" />
-                Email verified
-              </Badge>
-            ) : (
-              <Badge tone="warning">Email unverified</Badge>
-            )}
           </div>
         }
       />
@@ -161,10 +146,6 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
                 <Badge tone={detail.disabled ? "danger" : "success"}>
                   {detail.disabled ? "Disabled" : "Enabled"}
                 </Badge>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-grey-400">Email verified</span>
-                <span className="text-grey-200">{detail.emailVerified ? "Yes" : "No"}</span>
               </div>
               <div className="flex items-center justify-between gap-3">
                 <span className="text-grey-400">Last sign-in</span>

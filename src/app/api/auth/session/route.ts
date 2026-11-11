@@ -119,7 +119,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const sessionCookie = await createSessionCookie(parsed.data.idToken);
     const response = NextResponse.json({
       role: synced.role,
-      emailVerified: synced.emailVerified,
       refreshRequired: synced.refreshRequired,
     });
     setSessionCookie(response, sessionCookie);

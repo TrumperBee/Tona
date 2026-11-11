@@ -15,7 +15,6 @@ import type { UserRole } from "@/types/domain";
 export interface SessionUser {
   readonly userId: string;
   readonly email: string;
-  readonly emailVerified: boolean;
   readonly role: UserRole;
   readonly isSuperAdmin: boolean;
 }

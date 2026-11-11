@@ -1,7 +1,7 @@
 // GCC - tournament entry confirmation.
 //
 // The last step before an entry is recorded: key details, the full published
-// rules and an explicit acceptance checkbox. Gating (sign-in, verification,
+// rules and an explicit acceptance checkbox. Gating (sign-in, account status,
 // already registered, the effective state) is decided on the server before the
 // form ever renders.
 import { ArrowLeft, Ban, CheckCircle2, ClipboardCheck, UserCheck } from "lucide-react";
@@ -83,11 +83,6 @@ export default async function TournamentRegisterPage({ params }: RegisterPagePro
   } else if (!user) {
     // Hand the player to sign-in and bring them straight back here.
     redirect(`/login?next=${encodeURIComponent(`/tournaments/${slug}/register`)}`);
-  } else if (!user.emailVerified) {
-    gating = unavailable(
-      "Verify your email first",
-      "Your email must be verified before a tournament entry is accepted. Open your dashboard to resend the verification link.",
-    );
   } else {
     const viewerRegistration = await getViewerRegistration(tournament.id, user.userId);
 

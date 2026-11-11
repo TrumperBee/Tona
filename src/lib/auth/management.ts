@@ -9,7 +9,11 @@ import { FieldValue } from "firebase-admin/firestore";
 
 import { writeAuditLog } from "@/lib/audit/log";
 import { AuthorizationError, type AuthContext } from "@/lib/auth/guards";
-import { assertRoleAssignmentAllowed, isSuperAdminEmail } from "@/lib/auth/roles";
+import {
+  assertRoleAssignmentAllowed,
+  isSuperAdminAccount,
+  warnMissingSuperAdminUid,
+} from "@/lib/auth/roles";
 import { getServerEnv } from "@/lib/config/env.server";
 import { getFirebaseAdminAuth, getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
@@ -28,7 +32,7 @@ export interface RoleAssignmentResult {
 }
 
 /**
- * Sets the `role` custom claim for a user. Only the configured, verified
+ * Sets the `role` custom claim for a user. Only the configured Super Admin
  * Super Admin email may receive `super_admin`, and that account cannot be
  * demoted. The target's refresh tokens are revoked so the new claim takes
  * effect on the next token refresh.
@@ -51,7 +55,17 @@ export async function setUserRole(
   const auth = getFirebaseAdminAuth();
   const target = await auth.getUser(targetUid);
 
-  assertRoleAssignmentAllowed(target.email, target.emailVerified, role, env.SUPER_ADMIN_EMAIL);
+  if (!env.SUPER_ADMIN_UID) {
+    warnMissingSuperAdminUid();
+  }
+
+  assertRoleAssignmentAllowed(
+    target.email,
+    target.uid,
+    role,
+    env.SUPER_ADMIN_EMAIL,
+    env.SUPER_ADMIN_UID ?? "",
+  );
 
   const currentClaims = target.customClaims ?? {};
   const previousRole = isUserRole(currentClaims.role) ? currentClaims.role : null;
@@ -59,7 +73,10 @@ export async function setUserRole(
   // Defence in depth: never let a manual role action touch a Super Admin,
   // including the caller. Only the configured account may hold that claim, and
   // it is never changed from the console.
-  if (previousRole === "super_admin" || isSuperAdminEmail(target.email, env.SUPER_ADMIN_EMAIL)) {
+  if (
+    previousRole === "super_admin" ||
+    isSuperAdminAccount(target.email, target.uid, env.SUPER_ADMIN_EMAIL, env.SUPER_ADMIN_UID)
+  ) {
     throw new AuthorizationError("A Super Admin account cannot be changed here.");
   }
 
@@ -171,7 +188,10 @@ export async function setAccountStatus(
   const targetClaims = target.customClaims ?? {};
   const targetRole = isUserRole(targetClaims.role) ? targetClaims.role : null;
 
-  if (targetRole === "super_admin" || isSuperAdminEmail(target.email, env.SUPER_ADMIN_EMAIL)) {
+  if (
+    targetRole === "super_admin" ||
+    isSuperAdminAccount(target.email, target.uid, env.SUPER_ADMIN_EMAIL, env.SUPER_ADMIN_UID)
+  ) {
     throw new AuthorizationError(
       "The configured Super Admin account cannot be suspended or banned.",
     );

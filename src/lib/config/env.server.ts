@@ -15,6 +15,12 @@ const serverEnvSchema = z.object({
   FIREBASE_ADMIN_PRIVATE_KEY: z.string().min(1),
   // The sole Super Admin. This address must never be hardcoded in source.
   SUPER_ADMIN_EMAIL: z.email().transform((value) => value.trim().toLowerCase()),
+  // The same account's Firebase uid. Super admin is granted only when email and
+  // uid both match; a missing value fails closed for everyone (ADR-047).
+  SUPER_ADMIN_UID: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().trim().min(1).optional(),
+  ),
   // Session cookie lifetime in days. Defaults to five days.
   SESSION_COOKIE_MAX_AGE_DAYS: z.coerce.number().int().min(1).max(30).default(5),
   // Cloudinary credentials are server-only. The client never sees them.
@@ -40,6 +46,7 @@ const serverOnlySchemaKeys = [
   "FIREBASE_ADMIN_CLIENT_EMAIL",
   "FIREBASE_ADMIN_PRIVATE_KEY",
   "SUPER_ADMIN_EMAIL",
+  "SUPER_ADMIN_UID",
   "SESSION_COOKIE_MAX_AGE_DAYS",
   "CLOUDINARY_CLOUD_NAME",
   "CLOUDINARY_API_KEY",
@@ -65,6 +72,7 @@ export function getServerEnv(): ServerEnv {
     FIREBASE_ADMIN_CLIENT_EMAIL: process.env.FIREBASE_ADMIN_CLIENT_EMAIL,
     FIREBASE_ADMIN_PRIVATE_KEY: process.env.FIREBASE_ADMIN_PRIVATE_KEY,
     SUPER_ADMIN_EMAIL: process.env.SUPER_ADMIN_EMAIL,
+    SUPER_ADMIN_UID: process.env.SUPER_ADMIN_UID,
     SESSION_COOKIE_MAX_AGE_DAYS: process.env.SESSION_COOKIE_MAX_AGE_DAYS,
     CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME,
     CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY,

@@ -1,5 +1,9 @@
 # Phase 7 manual acceptance script — organiser workspace
 
+> Historical acceptance record. Email-verification steps in this script describe
+> the Phase 7 product; verification was removed in Phase 8B (ADR-046). The Super
+> Admin now requires `SUPER_ADMIN_EMAIL` **and** `SUPER_ADMIN_UID`.
+
 Run this script against **either** a local emulator stack or a real Firebase
 project. Record which environment you used; the two are not interchangeable
 evidence.

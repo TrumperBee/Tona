@@ -673,11 +673,13 @@ Applications, Tournaments, Result reports, Announcements, Analytics, Audit log, 
 
 All shell layouts call the server guard and force dynamic rendering. Redirect behaviour:
 
-| Situation        | Destination                  |
-| ---------------- | ---------------------------- |
-| Not signed in    | `/login?next=<current path>` |
-| Email unverified | `/verify-email`              |
-| Wrong role       | the user's own workspace     |
+| Situation     | Destination                  |
+| ------------- | ---------------------------- |
+| Not signed in | `/login?next=<current path>` |
+| Wrong role    | the user's own workspace     |
+
+There is no email-verification redirect: the product does not verify addresses
+(ADR-046).
 
 Role checks happen on the server. A hidden link is never treated as access control.
 

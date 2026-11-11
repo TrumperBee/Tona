@@ -8,6 +8,7 @@ process.env.FIREBASE_AUTH_EMULATOR_HOST ??= "127.0.0.1:9099";
 
 process.env.FIREBASE_ADMIN_PROJECT_ID ??= process.env.GCLOUD_PROJECT ?? "tona-d6f56";
 process.env.SUPER_ADMIN_EMAIL ??= "owner@example.com";
+process.env.SUPER_ADMIN_UID ??= "integration-super-admin";
 process.env.FIREBASE_ADMIN_CLIENT_EMAIL ??= "integration@example.com";
 process.env.FIREBASE_ADMIN_PRIVATE_KEY ??=
   "-----BEGIN PRIVATE KEY-----\\nintegration-test-placeholder\\n-----END PRIVATE KEY-----";

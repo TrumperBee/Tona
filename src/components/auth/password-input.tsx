@@ -47,43 +47,73 @@ export interface PasswordStrengthProps {
   readonly password: string;
 }
 
+export type PasswordStrengthLevel = "empty" | "weak" | "okay" | "strong";
+
 interface Strength {
+  readonly level: PasswordStrengthLevel;
   readonly score: number;
   readonly label: string;
   readonly tone: string;
+  readonly advisory: string | null;
 }
 
-function scorePassword(password: string): Strength {
+const WEAK_ADVISORY =
+  "This password is easy to guess. You can still use it, but a longer one is safer.";
+
+/**
+ * Advisory feedback only. It never decides whether the form may submit: any
+ * password of six or more characters is accepted by the server.
+ */
+export function getPasswordStrength(password: string): Strength {
+  if (password.length === 0) {
+    return { level: "empty", score: 0, label: "", tone: "bg-white/10", advisory: null };
+  }
+
+  // Length dominates, with a small bonus for variety. These are hints, not
+  // requirements.
   let score = 0;
 
-  if (password.length >= 10) score += 1;
-  if (password.length >= 14) score += 1;
+  if (password.length >= 8) score += 1;
+  if (password.length >= 12) score += 1;
+  if (password.length >= 16) score += 1;
   if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score += 1;
   if (/\d/.test(password)) score += 1;
   if (/[^A-Za-z0-9]/.test(password)) score += 1;
 
-  if (password.length === 0) {
-    return { score: 0, label: "Use at least 10 characters.", tone: "bg-white/10" };
-  }
-
   if (score <= 2) {
-    return { score, label: "Weak password. Add length and variety.", tone: "bg-danger" };
+    return {
+      level: "weak",
+      score,
+      label: "Weak password",
+      tone: "bg-warning",
+      advisory: WEAK_ADVISORY,
+    };
   }
 
-  if (score <= 3) {
-    return { score, label: "Fair password. Longer is safer.", tone: "bg-warning" };
+  if (score <= 4) {
+    return {
+      level: "okay",
+      score,
+      label: "Okay password",
+      tone: "bg-electric-400",
+      advisory: null,
+    };
   }
 
-  if (score === 4) {
-    return { score, label: "Strong password.", tone: "bg-electric-400" };
-  }
+  return { level: "strong", score, label: "Strong password", tone: "bg-success", advisory: null };
+}
 
-  return { score, label: "Very strong password.", tone: "bg-success" };
+function scorePassword(password: string): Strength {
+  return getPasswordStrength(password);
 }
 
 export function PasswordStrength({ password }: PasswordStrengthProps) {
   const strength = useMemo(() => scorePassword(password), [password]);
   const segments = 5;
+
+  if (strength.level === "empty") {
+    return null;
+  }
 
   return (
     <div className="mt-2">
@@ -92,7 +122,7 @@ export function PasswordStrength({ password }: PasswordStrengthProps) {
           <span
             key={index}
             className={`h-1 flex-1 rounded-full ${
-              index < Math.max(strength.score, password ? 1 : 0) ? strength.tone : "bg-white/10"
+              index < Math.max(strength.score, 1) ? strength.tone : "bg-white/10"
             }`}
           />
         ))}
@@ -100,6 +130,9 @@ export function PasswordStrength({ password }: PasswordStrengthProps) {
       <p className="mt-1.5 text-xs leading-5 text-grey-400" role="status">
         {strength.label}
       </p>
+      {strength.advisory ? (
+        <p className="mt-1 text-xs leading-5 text-warning-soft">{strength.advisory}</p>
+      ) : null}
     </div>
   );
 }

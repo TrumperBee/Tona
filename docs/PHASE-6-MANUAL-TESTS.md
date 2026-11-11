@@ -1,5 +1,10 @@
 # Phase 6 manual acceptance script — organiser applications and notifications
 
+> Historical acceptance record. Email-verification steps in this script describe
+> the Phase 6 product; verification was removed in Phase 8B (ADR-046). An active
+> account can apply without a verification step, and approval no longer checks
+> the verified flag.
+
 Run this script against **either** a local emulator stack or a real Firebase
 project. Record which environment you used; the two are not interchangeable
 evidence.

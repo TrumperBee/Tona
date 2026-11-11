@@ -46,7 +46,7 @@ function isFirebaseError(error: unknown, code: string): boolean {
 
 /**
  * Creates a player account. Never sets a role custom claim: the session
- * exchange derives the Super Admin role from the verified email.
+ * exchange derives the Super Admin role from the configured email and uid.
  */
 export async function registerPlayer(input: RegistrationInput): Promise<RegisteredPlayer> {
   const auth = getFirebaseAdminAuth();
@@ -79,7 +79,6 @@ export async function registerPlayer(input: RegistrationInput): Promise<Register
       email: input.email,
       password: input.password,
       displayName: gamerTag,
-      emailVerified: false,
     });
     uid = authUser.uid;
 

@@ -33,9 +33,9 @@ export function LoginForm({ nextPath }: LoginFormProps) {
     setSubmitting(true);
 
     try {
-      const { session } = await signInWithSession(email, password);
+      await signInWithSession(email, password);
       const safeNext = safeRedirectPath(nextPath);
-      router.push(safeNext ?? (session.emailVerified ? "/dashboard" : "/verify-email"));
+      router.push(safeNext ?? "/dashboard");
       router.refresh();
     } catch (signInError) {
       setError(authErrorMessage(signInError));

@@ -1,14 +1,15 @@
 // GCC — session role reconciliation.
 //
-// The Super Admin role is derived from the configured, VERIFIED email at session
-// exchange time. Registration never sets a custom claim, so an account that
-// squats the owner address before verification has no elevated authority.
+// The Super Admin role is derived at session exchange time from the configured
+// email AND uid, never from email verification. Registration never sets a custom
+// claim, so an account that squats the owner address with a different uid has no
+// elevated authority.
 //
 // The pure resolver is exported for unit tests. The Admin-SDK wrapper is used by
 // POST /api/auth/session and by emulator integration tests.
 import "server-only";
 
-import { isSuperAdminEmail, isUserRole } from "@/lib/auth/roles";
+import { isSuperAdminAccount, isUserRole, warnMissingSuperAdminUid } from "@/lib/auth/roles";
 import { getServerEnv } from "@/lib/config/env.server";
 import { getFirebaseAdminAuth } from "@/lib/firebase/admin";
 import type { UserRole } from "@/types/domain";
@@ -21,17 +22,22 @@ export interface RoleResolution {
 }
 
 export interface RoleResolutionInput {
+  readonly uid: string;
   readonly email: string | undefined;
-  readonly emailVerified: boolean;
   readonly customClaims: Readonly<Record<string, unknown>> | undefined;
   readonly superAdminEmail: string;
+  readonly superAdminUid: string;
 }
 
 export function resolveSessionRole(input: RoleResolutionInput): RoleResolution {
   const currentClaim = isUserRole(input.customClaims?.role) ? input.customClaims.role : "user";
   const hasLegacyClaim = input.customClaims?.superAdmin !== undefined;
-  const mayBeSuperAdmin =
-    input.emailVerified && isSuperAdminEmail(input.email, input.superAdminEmail);
+  const mayBeSuperAdmin = isSuperAdminAccount(
+    input.email,
+    input.uid,
+    input.superAdminEmail,
+    input.superAdminUid,
+  );
 
   if (mayBeSuperAdmin) {
     return {
@@ -42,8 +48,8 @@ export function resolveSessionRole(input: RoleResolutionInput): RoleResolution {
   }
 
   if (currentClaim === "super_admin") {
-    // The owner email changed or is no longer verified. Strip the claim and
-    // force a fresh sign-in rather than issuing a privileged cookie.
+    // The configured email or uid changed (or the UID pin is missing). Strip the
+    // claim and force a fresh sign-in rather than issuing a privileged cookie.
     return { role: "user", refreshRequired: true, revoke: true };
   }
 
@@ -56,7 +62,6 @@ export function resolveSessionRole(input: RoleResolutionInput): RoleResolution {
 
 export interface SyncedSessionRole {
   readonly role: UserRole;
-  readonly emailVerified: boolean;
   readonly refreshRequired: boolean;
   readonly revoked: boolean;
 }
@@ -68,11 +73,18 @@ export interface SyncedSessionRole {
 export async function syncSessionRole(uid: string): Promise<SyncedSessionRole> {
   const auth = getFirebaseAdminAuth();
   const user = await auth.getUser(uid);
+  const env = getServerEnv();
+
+  if (!env.SUPER_ADMIN_UID) {
+    warnMissingSuperAdminUid();
+  }
+
   const resolution = resolveSessionRole({
+    uid,
     email: user.email,
-    emailVerified: user.emailVerified,
     customClaims: user.customClaims,
-    superAdminEmail: getServerEnv().SUPER_ADMIN_EMAIL,
+    superAdminEmail: env.SUPER_ADMIN_EMAIL,
+    superAdminUid: env.SUPER_ADMIN_UID ?? "",
   });
 
   if (resolution.revoke || resolution.refreshRequired) {
@@ -87,7 +99,6 @@ export async function syncSessionRole(uid: string): Promise<SyncedSessionRole> {
 
   return {
     role: resolution.role,
-    emailVerified: user.emailVerified,
     refreshRequired: resolution.refreshRequired,
     revoked: resolution.revoke,
   };

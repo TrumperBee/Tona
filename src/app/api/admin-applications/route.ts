@@ -1,7 +1,7 @@
 // GCC - submit an organiser application.
 //
 // POST /api/admin-applications
-// The applicant must be a signed-in, email-verified participant. The server
+// The applicant must be a signed-in participant with the `user` role. The server
 // snapshots identity, enforces one pending application and the post-rejection
 // cooldown inside a transaction, then notifies the Super Admin and audits it.
 import { NextResponse, type NextRequest } from "next/server";

@@ -42,26 +42,24 @@ Before testing, confirm no fake data exists: `users`, `publicProfiles` and
       profiles → only one account can be created; the other sees “already taken”.
 - [ ] Enter an invalid WhatsApp number (e.g. `123`) → inline error; no account is
       created.
-- [ ] Enter mismatched passwords → client rejects before submitting.
-- [ ] Create a valid account. You land on `/verify-email`.
+- [ ] Enter mismatched emails in “Email” and “Confirm email” → client rejects
+      before submitting.
+- [ ] Create a valid account. You land on `/dashboard`.
 - [ ] Check Firestore:
   - [ ] `users/{uid}` exists with `gamerTag`, `gamerTagLower`, `email`,
         `whatsappE164` (E.164 or null), `role: "user"`, `status: "active"`.
   - [ ] `publicProfiles/{uid}` exists with zeroed `stats` and **no email or
         WhatsApp field**.
   - [ ] `gamerTags/{gamerTagLower}` exists and maps to the uid.
-- [ ] In Firebase Authentication, the new user is **not** verified and has **no**
-      `role` custom claim yet.
+- [ ] In Firebase Authentication, the new user has **no** `role` custom claim
+      yet. Email verification plays no part in access (ADR-046).
 
-## 2. Email verification
+## 2. Email confirmation and account recovery
 
-- [ ] On `/verify-email`, press “Resend email”. The button enters a 60-second
-      cooldown and a second press is disabled.
-- [ ] Open the verification link (emulator terminal or real inbox).
-- [ ] Return to `/verify-email`, press “I've verified”. You are sent to
-      `/dashboard`.
-- [ ] While unverified, `/dashboard` and `/dashboard/profile` still render and
-      show the verification banner. Tournament entry is not yet available.
+- [ ] Sign out. Use “Forgot password” with the account's address and confirm the
+      reset email arrives; complete the reset and sign in with the new password.
+- [ ] The dashboard and profile render immediately after sign-in, with no
+      confirmation banner and no extra step.
 
 ## 3. Sign-in and sign-out
 

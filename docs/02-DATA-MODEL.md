@@ -77,7 +77,7 @@ Document id: Firebase Auth UID.
 | `fullName`                | string          | 2–60 characters                                        |
 | `gamerTag`                | string          | Display casing, 3–16 characters, immutable             |
 | `gamerTagLower`           | string          | Normalised uniqueness key                              |
-| `email`                   | string          | Mirrors the verified Auth email                        |
+| `email`                   | string          | Mirrors the Auth email (not verified)                  |
 | `whatsappE164`            | string \| null  | Private contact number; never public                   |
 | `country`                 | string          | ISO 3166-1 alpha-2                                     |
 | `preferredGame`           | `GameId`        | Configured game id                                     |
@@ -176,7 +176,8 @@ time so a record stays meaningful if the profile changes later.
 | `reviewedBy`, `reviewedAt`, `reviewNote` | reviewer audit data   | `reviewedBy` is the Super Admin UID                                                 |
 | `createdAt`, `updatedAt`                 | Timestamp             | Server-written                                                                      |
 
-Only a signed-in, email-verified participant with the `user` role may submit.
+Only a signed-in participant with the `user` role may submit; email verification
+plays no part (ADR-046).
 Submission snapshots `gamerTag`/`email`, creates the document with `pending`
 status, notifies the Super Admin and writes an `application.submitted` audit
 entry. Approval grants the organiser claim (and revokes the applicant's
@@ -606,8 +607,8 @@ Add an index only with the query that needs it. Deploy rules and indexes with
 - Collection-group reads for `matches` and `registrations` resolve the parent
   tournament from `resource.data.tournamentId`. A query that does not constrain
   `tournamentId` fails rather than exposing a hidden tournament's documents.
-- Super Admin checks require both the `role == "super_admin"` custom claim and a
-  verified email.
+- Super Admin checks require the `role == "super_admin"` custom claim and the
+  configured email and uid pair (ADR-047). Email verification is not a rule input.
 - Rules tests live in `tests/rules/` and run with `npm run test:rules`. The
   emulator requires Java 21.
 

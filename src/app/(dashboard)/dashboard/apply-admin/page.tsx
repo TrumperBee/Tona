@@ -9,7 +9,6 @@ import Link from "next/link";
 import { ApplicationForm } from "@/components/applications/application-form";
 import { WithdrawApplicationButton } from "@/components/applications/withdraw-application-button";
 import { PageHeader } from "@/components/shared/page-header";
-import { VerificationBanner } from "@/components/shared/verification-banner";
 import { buttonStyles } from "@/components/ui/button-styles";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requirePageSignedIn } from "@/lib/auth/page-access";
@@ -117,8 +116,6 @@ export default async function ApplyAdminPage() {
           </Link>
         }
       />
-
-      {!user.emailVerified ? <VerificationBanner /> : null}
 
       {latest ? (
         <Card variant={latest.status === "approved" ? "gold" : "default"}>
@@ -230,13 +227,7 @@ export default async function ApplyAdminPage() {
         </Card>
       ) : null}
 
-      {canApply && user.emailVerified ? <ApplicationForm /> : null}
-
-      {!user.emailVerified ? (
-        <p className="text-sm text-grey-400">
-          Verify your email address before you can submit an organiser application.
-        </p>
-      ) : null}
+      {canApply ? <ApplicationForm /> : null}
 
       {latest?.status === "rejected" && !context.cooldown.allowed && context.cooldown.reapplyAt ? (
         <p className="text-sm text-grey-400">

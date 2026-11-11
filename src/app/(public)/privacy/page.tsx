@@ -68,7 +68,7 @@ const sections: readonly LegalSection[] = [
     body: (
       <>
         <ul className="list-disc space-y-2 pl-5">
-          <li>To create and secure your account and verify your email address.</li>
+          <li>To create and secure your account.</li>
           <li>To enter you in competitions, generate fixtures and record results.</li>
           <li>To display public competition records and career statistics.</li>
           <li>To review organiser applications and administer roles.</li>

@@ -29,7 +29,7 @@ export default async function LoginPage({
         Sign in
       </h1>
       <p className="mt-3 text-sm leading-6 text-grey-300">
-        Sign in with the verified email address on your GCC account.
+        Sign in with the email address on your GCC account.
       </p>
       {permissionNotice ? (
         <div

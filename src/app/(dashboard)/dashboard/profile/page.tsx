@@ -8,7 +8,6 @@ import Link from "next/link";
 
 import { AvatarUploader } from "@/components/profile/avatar-uploader";
 import { PageHeader, SectionHeading } from "@/components/shared/page-header";
-import { VerificationBanner } from "@/components/shared/verification-banner";
 import { buttonStyles } from "@/components/ui/button-styles";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState, StatCard } from "@/components/ui/data-display";
@@ -61,8 +60,6 @@ export default async function ProfilePage() {
           </Link>
         }
       />
-
-      {!user.emailVerified ? <VerificationBanner /> : null}
 
       <Card variant="elevated">
         <CardContent className="flex flex-col gap-6 p-6 sm:flex-row sm:items-start">

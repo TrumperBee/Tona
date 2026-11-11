@@ -27,7 +27,7 @@ import { PATCH as updateOrganiserProfileRoute } from "@/app/api/organiser/profil
 import {
   AuthorizationError,
   NotFoundError,
-  requireVerifiedUser,
+  requireUser,
   requireTournamentOwnerOrSuperAdmin,
 } from "@/lib/auth/guards";
 import { requirePageRole } from "@/lib/auth/page-access";
@@ -41,6 +41,7 @@ import type { AuditLogDocument, TournamentStatus } from "@/types/domain";
 
 const PASSWORD = "correct horse battery";
 const SUPER_ADMIN_EMAIL = "owner@example.com";
+const SUPER_ADMIN_UID = "integration-super-admin";
 
 interface SeededUser {
   readonly uid: string;
@@ -95,9 +96,11 @@ async function createUser(options: {
   const auth = getFirebaseAdminAuth();
   const firestore = getFirebaseAdminFirestore();
   const record = await auth.createUser({
+    ...(options.email === SUPER_ADMIN_EMAIL && options.role === "super_admin"
+      ? { uid: SUPER_ADMIN_UID }
+      : {}),
     email: options.email,
     password: PASSWORD,
-    emailVerified: true,
     displayName: options.gamerTag,
   });
 
@@ -419,7 +422,7 @@ describe("organiser dashboard overview", () => {
     });
 
     sessionCookie.value = await sessionFor(organiser);
-    const user = await requireVerifiedUser();
+    const user = await requireUser();
     const overview = await getOrganiserOverview(user);
 
     // Registration-open through knockout occupy a slot: three here.
@@ -462,7 +465,7 @@ describe("organiser dashboard overview", () => {
     });
 
     sessionCookie.value = await sessionFor(root);
-    const user = await requireVerifiedUser();
+    const user = await requireUser();
     const overview = await getOrganiserOverview(user);
 
     expect(overview.exemptFromSlotLimit).toBe(true);

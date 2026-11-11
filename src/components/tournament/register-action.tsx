@@ -20,7 +20,6 @@ export interface RegisterActionProps {
   readonly slug: string;
   readonly state: RegistrationState;
   readonly signedIn: boolean;
-  readonly emailVerified: boolean;
   readonly registered: boolean;
   /** Pre-formatted opening moment for the `opens_soon` label. */
   readonly opensAtLabel: string | null;
@@ -37,7 +36,6 @@ export function RegisterAction({
   slug,
   state,
   signedIn,
-  emailVerified,
   registered,
   opensAtLabel,
 }: RegisterActionProps) {
@@ -158,19 +156,6 @@ export function RegisterAction({
       >
         Sign in to register
       </Link>
-    );
-  }
-
-  if (!emailVerified) {
-    return (
-      <div className="space-y-2">
-        <Link href="/verify-email" className={buttonStyles({ className: "w-full" })}>
-          Verify email to register
-        </Link>
-        <p className="text-xs leading-5 text-grey-500">
-          Your email must be verified before an entry is accepted.
-        </p>
-      </div>
     );
   }
 

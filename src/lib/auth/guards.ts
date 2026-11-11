@@ -9,7 +9,12 @@ import { cookies } from "next/headers";
 import type { DecodedIdToken } from "firebase-admin/auth";
 
 import { SESSION_COOKIE_NAME } from "@/lib/auth/constants";
-import { hasRoleAtLeast, isSuperAdminEmail, isUserRole } from "@/lib/auth/roles";
+import {
+  hasRoleAtLeast,
+  isSuperAdminAccount,
+  isUserRole,
+  warnMissingSuperAdminUid,
+} from "@/lib/auth/roles";
 import type { SessionUser } from "@/lib/auth/session";
 import { getServerEnv } from "@/lib/config/env.server";
 import { getFirebaseAdminAuth } from "@/lib/firebase/admin";
@@ -91,12 +96,10 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     }
 
     const role = roleFromToken(decoded);
-    const emailVerified = decoded.email_verified === true;
 
     return {
       userId: decoded.uid,
       email: userRecord.email ?? decoded.email ?? "",
-      emailVerified,
       role,
       isSuperAdmin: role === "super_admin",
     };
@@ -106,7 +109,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
   }
 }
 
-/** Requires a valid, unrevoked session. */
+/** Requires a valid, unrevoked session with an active account. */
 export async function requireUser(): Promise<SessionUser> {
   const user = await getCurrentUser();
 
@@ -117,23 +120,12 @@ export async function requireUser(): Promise<SessionUser> {
   return user;
 }
 
-/** Requires a valid session whose email Firebase has verified. */
-export async function requireVerifiedUser(): Promise<SessionUser> {
-  const user = await requireUser();
-
-  if (!user.emailVerified) {
-    throw new AuthorizationError("Verify your email address before continuing.");
-  }
-
-  return user;
-}
-
 /**
  * Requires the user's role to grant at least the requested role.
  * The hierarchy is user < organiser < super_admin.
  */
 export async function requireRole(role: UserRole): Promise<SessionUser> {
-  const user = await requireVerifiedUser();
+  const user = await requireUser();
 
   if (!hasRoleAtLeast(user.role, role)) {
     throw new AuthorizationError();
@@ -143,15 +135,22 @@ export async function requireRole(role: UserRole): Promise<SessionUser> {
 }
 
 /**
- * Requires the configured Super Admin role claim. The email check is a second
- * line of defence in case the owner changes in configuration while an old
- * claim is still present in a token.
+ * Requires the configured Super Admin role claim. The email and uid check is a
+ * second line of defence in case the pin changes while an old claim is still
+ * present in a token. A missing SUPER_ADMIN_UID denies everyone.
  */
 export async function requireSuperAdmin(): Promise<SessionUser> {
-  const user = await requireVerifiedUser();
+  const user = await requireUser();
   const env = getServerEnv();
 
-  if (user.role !== "super_admin" || !isSuperAdminEmail(user.email, env.SUPER_ADMIN_EMAIL)) {
+  if (!env.SUPER_ADMIN_UID) {
+    warnMissingSuperAdminUid();
+  }
+
+  if (
+    user.role !== "super_admin" ||
+    !isSuperAdminAccount(user.email, user.userId, env.SUPER_ADMIN_EMAIL, env.SUPER_ADMIN_UID)
+  ) {
     throw new AuthorizationError("Super Admin access is required.");
   }
 
@@ -171,7 +170,7 @@ export interface TournamentAccess {
 export async function requireTournamentOwnerOrSuperAdmin(
   tournamentId: string,
 ): Promise<TournamentAccess> {
-  const user = await requireVerifiedUser();
+  const user = await requireUser();
   const snapshot = await getFirebaseAdminFirestore().doc(paths.tournament(tournamentId)).get();
 
   if (!snapshot.exists) {

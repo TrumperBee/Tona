@@ -203,7 +203,7 @@ published without an explicit regeneration and audit entry.
 ## ADR-010 — Super Admin via `SUPER_ADMIN_EMAIL` and custom claims
 
 **Date:** 2026-11-07
-**Status:** Accepted (claim shape amended by ADR-015)
+**Status:** Superseded by ADR-047 (email + uid pinning)
 
 **Context.** Firestore Security Rules need a fast, trustworthy way to recognise the
 platform owner without exposing the owner's email address or allowing a role document to
@@ -228,7 +228,7 @@ plus a claim update. No database document can grant Super Admin status. Ordinary
 ## ADR-015 — One `role` custom claim is the role authority
 
 **Date:** 2026-11-07
-**Status:** Accepted
+**Status:** Superseded by ADR-047 (the grant rule now needs email + uid)
 
 **Context.** Phase 1B used a boolean `superAdmin` claim while planning a separate role
 model. Phase 2 needs one claim that is easy to check in Security Rules and server guards:
@@ -356,7 +356,7 @@ and ownership checks run in server guards and route handlers from Phase 2.
 ## ADR-012 — Password policy 10–128 characters
 
 **Date:** 2026-11-07
-**Status:** Accepted
+**Status:** Superseded by ADR-045
 
 **Context.** Passwords are verified and hashed by Firebase Authentication. The server
 still validates registration and reset input with Zod.
@@ -489,7 +489,8 @@ Firebase email action codes.
 
 **Consequences.** There is one less route to secure, and email action links work without
 custom code. Branded email templates and a custom action handler can be revisited later if
-Firebase supports them without a Cloud Function.
+Firebase supports them without a Cloud Function. Only password reset and email-change links
+are used now; email verification was removed in ADR-046.
 
 ---
 
@@ -587,7 +588,7 @@ and size. Rate limiting (5 changes per hour) limits storage abuse.
 ## ADR-028 — Unverified accounts may view their own profile
 
 **Date:** 2026-11-08
-**Status:** Accepted
+**Status:** Superseded by ADR-046
 
 **Context.** Requiring verification for every dashboard route would lock a new player out of
 the profile they just created and make the verification panel hard to reach.
@@ -762,8 +763,9 @@ writes cannot be one atomic operation; a failure between them could leave an
 approved application with no claim, or a queue that lies about a review that
 happened.
 
-**Decision.** Approval pre-validates the applicant (Auth exists, enabled, email
-verified, account not suspended/banned), then commits `approved` plus reviewer
+**Decision.** Approval pre-validates the applicant (Auth exists, enabled and
+account not suspended/banned — email verification is not a criterion since
+ADR-046), then commits `approved` plus reviewer
 fields in a transaction that re-checks the status is `pending`. Only after the
 transaction does it call `setUserRole(uid, "organiser")`, which revokes the
 target's refresh tokens. If the claim write fails, a compensating transaction
@@ -771,7 +773,7 @@ restores the application to `pending` (clearing reviewer fields) and resets the
 state marker, and the route returns 500. A repeated approval of an
 already-approved application is a no-op success (idempotent); anything that is
 not `pending` returns 409. The `organiser` role has no other granting route
-besides the Super Admin email rule for `super_admin`.
+besides the configured email + uid rule for `super_admin` (ADR-047).
 
 **Consequences.** The applicant's old session is revoked by design; the login page
 explains the redirect with a fixed `?reason=permissions` notice. A failed claim
@@ -977,3 +979,100 @@ and the Super Admin retain full access. Public pages that previously expected
 cancelled entries (organiser public page, discovery) must filter or rely on the
 rules; the Phase 8 tests assert that a cancelled cup never appears in either
 place. ADR-039's status model otherwise stands.
+
+---
+
+## ADR-045 - Password policy is length only: 6-128 characters
+
+**Date:** 2026-11-11
+**Status:** Accepted
+**Supersedes:** ADR-012.
+
+**Context.** ADR-012 required ten characters. That is stricter than the platform
+can enforce at the identity provider: Firebase Authentication's minimum password
+length is six characters and cannot be lowered, while a stricter application-only
+rule would lock out accounts created elsewhere and add friction for no verified
+security gain. Players commonly enter simple passwords on mobile anyway, and a
+blocked submission teaches them nothing.
+
+**Decision.** One shared Zod `passwordSchema` governs registration and any future
+password-setting form: minimum 6, maximum 128, **no complexity rules**, and no
+trimming (spaces and emoji are valid characters). Sign-in uses a separate schema
+that only requires a non-empty password up to 128 characters, so existing accounts
+always remain able to sign in. The strength indicator is advisory only: it labels
+Weak / Okay / Strong and never blocks submission. A weak password shows one gentle
+amber message: "This password is easy to guess. You can still use it, but a longer
+one is safer." Both the registration form and the server use the same schema; the
+helper text is "At least 6 characters".
+
+**Consequences.** The client and server agree by construction, and the boundary is
+exactly the provider's floor. Weak passwords are accepted, which is a deliberate
+trade-off: mitigation comes from rate limiting, mandatory unique gamer tags and a
+WhatsApp contact number rather than from composition theatre. The unit tests pin
+the policy (5 rejected, 6 and 128 accepted, 129 rejected, `abcdef`, `123456`,
+spaces and emoji accepted). Any future password-change screen must import the same
+schema.
+
+---
+
+## ADR-046 - Email verification is removed from the product
+
+**Date:** 2026-11-11
+**Status:** Accepted
+
+**Context.** Email verification added a mandatory detour between registration and
+the first meaningful action. It failed often in practice: players mistyped an
+address, the hosted action handler landed them on a page that could not complete a
+session exchange, and a mistyped address was unrecoverable without support. The
+platform had no way to require a mobile number during that phase, and the extra
+step was costing registrations without proving that an address was deliverable.
+
+**Decision.** The product no longer verifies email addresses. `/verify-email`, the
+verification panel, the dashboard banner, the resend and "I've verified" controls,
+every `sendEmailVerification` call, the `requireVerifiedUser` guard, page-level
+verified gates, verified badges on Super Admin screens and the `email_verified`
+rule are removed. Registration signs the new account in and sends it straight to
+`/dashboard`. The password-reset flow remains and is the supported recovery path.
+The registration form adds a **Confirm email** field: the client compares the two
+values and the server still trims and lowercases the address it stores.
+
+**Consequences and trade-offs.** Fake or mistyped addresses are now possible and
+are not blocked. The platform mitigates that with the Confirm email field, the
+registration and session rate limits, unique gamer tags (one account per tag) and
+the mandatory WhatsApp number used for competition contact. A fake address costs
+the player their own account recovery, not another user's safety. Accounts that
+were already verified keep working; the flag is simply no longer consulted. The
+Super Admin application review no longer refuses an applicant for an unverified
+address and only checks that the account exists and is active.
+
+---
+
+## ADR-047 - The Super Admin is pinned by email AND uid
+
+**Date:** 2026-11-11
+**Status:** Accepted
+
+**Context.** Before this change, `SUPER_ADMIN_EMAIL` alone granted `super_admin`,
+guarded by an email-verified check. With verification removed (ADR-046), the email
+address became the only identifier, so anyone who created an account with the
+owner's address before the owner did could hold the identity. Email alone is not a
+secret and is not stable proof of who controls an account.
+
+**Decision.** A server-only, optional `SUPER_ADMIN_UID` joins `SUPER_ADMIN_EMAIL`.
+`super_admin` is granted only when the account's `uid` **and** its normalized,
+case-insensitive email both match the configured pair. The uid is read from
+`getServerEnv()`, never hardcoded and never sent to the browser. When
+`SUPER_ADMIN_UID` is missing or blank, the role is withheld from **everyone** (fail
+closed) and the server logs one clear error with the exact instructions for finding
+the uid (Firebase Console → Authentication → Users). The check lives in one pure
+function, `isSuperAdminAccount`, used by role assignment, session exchange and
+`requireSuperAdmin`. Stale privileged claims are still stripped and refresh tokens
+revoked when an account stops matching.
+
+**Consequences.** Squatting `SUPER_ADMIN_EMAIL` with a different uid can never
+elevate an account; an emulator test registers that email under a different uid and
+asserts the session role stays `user`. Rotating the Super Admin requires changing
+both values and redeploying, which is intentionally a deployment action rather than
+a console action. The console can never demote or reassign the pinned account. The
+unit and integration tests cover the match, both mismatch directions, the missing
+UID case and the irrelevance of the old verified flag.

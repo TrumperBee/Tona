@@ -5,7 +5,6 @@ import { CalendarDays, Compass, UserRound } from "lucide-react";
 import Link from "next/link";
 
 import { PageHeader, SectionHeading } from "@/components/shared/page-header";
-import { VerificationBanner } from "@/components/shared/verification-banner";
 import { buttonStyles } from "@/components/ui/button-styles";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState, StatCard } from "@/components/ui/data-display";
@@ -52,8 +51,6 @@ export default async function DashboardPage() {
           </Link>
         }
       />
-
-      {!user.emailVerified ? <VerificationBanner /> : null}
 
       <section>
         <SectionHeading

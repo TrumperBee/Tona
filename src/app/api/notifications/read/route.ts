@@ -1,11 +1,11 @@
 // GCC - mark notifications as read.
 //
 // POST /api/notifications/read
-// The owner is always the verified session UID. A caller may name up to 50 of
+// The owner is always the signed-in session UID. A caller may name up to 50 of
 // their own notification ids or mark every unread notification as read.
 import { NextResponse, type NextRequest } from "next/server";
 
-import { AuthenticationError, AuthorizationError, requireVerifiedUser } from "@/lib/auth/guards";
+import { AuthenticationError, AuthorizationError, requireUser } from "@/lib/auth/guards";
 import { jsonError } from "@/lib/http/respond";
 import { markNotificationsRead } from "@/lib/notifications";
 import { assertPlatformWritable, PlatformWriteBlockedError } from "@/lib/platform/settings";
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   let user;
 
   try {
-    user = await requireVerifiedUser();
+    user = await requireUser();
   } catch (error) {
     if (error instanceof AuthenticationError) {
       return jsonError("Sign in to continue.", 401);

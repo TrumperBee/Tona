@@ -49,6 +49,7 @@ import type { AdminApplicationDocument } from "@/types/domain";
 
 const PASSWORD = "correct horse battery";
 const SUPER_ADMIN_EMAIL = "owner@example.com";
+const SUPER_ADMIN_UID = "integration-super-admin";
 
 interface SeededUser {
   readonly uid: string;
@@ -91,14 +92,15 @@ async function createUser(options: {
   readonly email: string;
   readonly role: "user" | "organiser" | "super_admin";
   readonly gamerTag: string;
-  readonly emailVerified?: boolean;
 }): Promise<SeededUser> {
   const auth = getFirebaseAdminAuth();
   const firestore = getFirebaseAdminFirestore();
   const record = await auth.createUser({
+    ...(options.email === SUPER_ADMIN_EMAIL && options.role === "super_admin"
+      ? { uid: SUPER_ADMIN_UID }
+      : {}),
     email: options.email,
     password: PASSWORD,
-    emailVerified: options.emailVerified ?? true,
     displayName: options.gamerTag,
   });
 
@@ -264,14 +266,8 @@ afterAll(async () => {
 });
 
 describe("organiser application submission", () => {
-  it("only lets a verified participant submit, and notifies the Super Admin", async () => {
+  it("lets an active participant submit and notifies the Super Admin", async () => {
     const owner = await createSuperAdmin();
-    const unverified = await createUser({
-      email: "unverified@example.com",
-      role: "user",
-      gamerTag: "Unverified",
-      emailVerified: false,
-    });
     const organiser = await createUser({
       email: "organiser@example.com",
       role: "organiser",
@@ -283,7 +279,6 @@ describe("organiser application submission", () => {
       gamerTag: "Player",
     });
 
-    expect((await submitAs(unverified)).status).toBe(403);
     expect((await submitAs(organiser)).status).toBe(403);
 
     const response = await submitAs(player);

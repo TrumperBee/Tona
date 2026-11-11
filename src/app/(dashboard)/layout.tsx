@@ -1,7 +1,7 @@
 // GCC - participant dashboard route group.
-// Unauthenticated visitors are redirected before the shell renders. Email
-// verification is NOT required here: unverified players may still view their
-// own profile, but tournament entry uses requireVerifiedUser on the server.
+// Unauthenticated visitors are redirected before the shell renders. There is no
+// email-verification gate: an active account may view its own profile and enter
+// tournaments.
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { SiteNotices } from "@/components/shared/site-notices";
 import { requirePageSignedIn } from "@/lib/auth/page-access";
@@ -25,7 +25,6 @@ export default async function DashboardLayout({
     email: user.email,
     role: user.role,
     isSuperAdmin: user.isSuperAdmin,
-    emailVerified: user.emailVerified,
     gamerTag: profile?.user.gamerTag,
     fullName: profile?.user.fullName,
     avatarUrl: profile?.user.avatarUrl ?? null,

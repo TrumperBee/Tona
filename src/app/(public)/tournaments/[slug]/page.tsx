@@ -440,7 +440,6 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
                   slug={tournament.slug}
                   state={state}
                   signedIn={Boolean(user)}
-                  emailVerified={user?.emailVerified ?? false}
                   registered={viewerRegistration !== null}
                   opensAtLabel={
                     tournament.registrationOpensAt

@@ -49,7 +49,6 @@ function user(uid: string, role: "user" | "organiser" | "super_admin" = "user"):
   return firestoreFor(
     testEnv.authenticatedContext(uid, {
       email: `${uid}@example.com`,
-      email_verified: true,
       role,
     }),
   );

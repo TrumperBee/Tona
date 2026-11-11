@@ -14,7 +14,7 @@ GCC is **not affiliated with UEFA** and never uses UEFA logos or branding.
 > Phase 2 implemented the Firestore data model, Security Rules, rules tests and server auth
 > infrastructure. Phase 3 delivered the public design system and site skeleton. Phase 3B
 > made result handling admin-only and hardened redirects, same-origin checks and headers.
-> Phase 4 implemented real registration, email verification, sign-in, password reset,
+> Phase 4 implemented real registration, sign-in, password reset,
 > player profiles, avatar upload via Cloudinary and public player search. Phase 5 added a
 > guarded Super Admin console: platform settings and maintenance mode, overview, user
 > management, audit viewer, announcements, analytics and a read-only tournament list.
@@ -93,6 +93,7 @@ Fill in the values in `.env.local`. Never commit it — it is git-ignored.
 | `FIREBASE_ADMIN_CLIENT_EMAIL`              | Server only | Service account email                          |
 | `FIREBASE_ADMIN_PRIVATE_KEY`               | Server only | Service account private key (escaped `\n`)     |
 | `SUPER_ADMIN_EMAIL`                        | Server only | The single Super Admin's email address         |
+| `SUPER_ADMIN_UID`                          | Server only | The same account's Firebase uid                |
 | `SESSION_COOKIE_MAX_AGE_DAYS`              | Server only | Session lifetime in days (default 5)           |
 | `CLOUDINARY_CLOUD_NAME`                    | Server only | Cloudinary cloud for avatar uploads (optional) |
 | `CLOUDINARY_API_KEY`                       | Server only | Cloudinary API key (optional)                  |
@@ -101,6 +102,13 @@ Fill in the values in `.env.local`. Never commit it — it is git-ignored.
 Environment validation is lazy: the app builds without secrets, but Firebase features will
 report a clear configuration error until `.env.local` contains valid credentials.
 Never paste secrets into chat or commit them.
+
+**Super Admin setup.** The `super_admin` role is granted only when an account's
+email **and** uid both match `SUPER_ADMIN_EMAIL` and `SUPER_ADMIN_UID`. Find the
+uid in **Firebase Console → Authentication → Users**: open the owner account and
+copy the value under _User UID_. If `SUPER_ADMIN_UID` is missing or blank, nobody
+receives the role (fail closed) and the server logs one clear error saying so.
+Email verification is not part of the product and is never required.
 
 ## Scripts
 

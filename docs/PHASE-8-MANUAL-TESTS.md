@@ -16,17 +16,20 @@ npm run emulators
 npm run dev
 ```
 
-The Super Admin is the account whose email matches `SUPER_ADMIN_EMAIL` in
-`.env.local` (`owner@example.com` in the integration setup). Create it, verify
-its email and sign in once so the claim and session cookie are issued.
+The Super Admin is the account whose email **and** uid match
+`SUPER_ADMIN_EMAIL` and `SUPER_ADMIN_UID` in `.env.local` (`owner@example.com` /
+`integration-super-admin` in the integration setup). Find the uid in Firebase
+Console → Authentication → Users. Create the account and sign in once so the
+claim and session cookie are issued. If the uid is missing, nobody is Super Admin.
 
 You also need:
 
 - One **organiser** account approved through the Phase 6 flow, with an
   `organiserProfiles/{uid}` document. Use a second organiser for the ownership
   checks.
-- Three **participant** accounts with verified emails. Give each a country,
-  platform and WhatsApp number so the entry restrictions can be exercised.
+- Three **participant** accounts. Give each a country, platform and WhatsApp
+  number so the entry restrictions can be exercised. Email verification is not
+  required.
 
 ### Option B — real Firebase project
 
@@ -134,11 +137,32 @@ wizard. `platformSettings/main` should be absent or use
 2. Organiser B cannot open or mutate organiser A's tournament (404), export its
    registrations, or read its contact links.
 3. A suspended/banned account cannot register; the session route rejects it.
-4. An unverified account cannot register for a tournament in this phase.
+4. An account with no email verification has exactly the same access as any
+   other active account, including tournament entry (ADR-046).
 5. During maintenance mode, non-Super-Admin tournament mutations are blocked
    with the maintenance message; the Super Admin can still act.
 
-## 8. Evidence
+## 8. Phase 8B auth hardening
+
+1. **Password policy.** Register with `abcde` → rejected with "At least 6
+   characters". Register with `abcdef` → accepted; the indicator says Weak and
+   shows the amber advisory, but submission is not blocked. Register with 128
+   characters → accepted; 129 → rejected. Spaces and emoji are accepted.
+   Sign in with an existing short password → still works.
+2. **Email confirmation.** Type two different addresses in Email and Confirm
+   email → client rejects before submitting. Correct it, register, and land
+   directly on `/dashboard` with no verification page or banner. Use "Forgot
+   password" and confirm the reset flow still works.
+3. **Super Admin pinning.** Set `SUPER_ADMIN_UID` to the owner account's real uid
+   and sign in → `/super-admin` loads. Blank the value, redeploy/restart and sign
+   in again → the console is denied and the server log shows the missing-UID
+   error. Register a _new_ account with the owner email but a different uid →
+   it receives no `super_admin` claim and is sent to `/dashboard`.
+4. **No verification UI.** Confirm there is no `/verify-email` route, no resend
+   or "I've verified" control, and no verified badge on the Super Admin user or
+   application screens.
+
+## 9. Evidence
 
 Record: environment, account ids, tournament ids, the counts observed at each
 step, and any screenshot or log excerpt. A phase is accepted only when every

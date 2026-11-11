@@ -53,8 +53,8 @@ const sections: readonly LegalSection[] = [
       <>
         <p>
           One person may hold one GCC account. You must provide accurate information, keep your
-          sign-in credentials secure and verify your email address before entering a competition.
-          You must not share, sell or transfer an account.
+          sign-in credentials secure and keep your email address current for password reset. You
+          must not share, sell or transfer an account.
         </p>
         <p>
           You are responsible for activity carried out through your account. Tell us promptly if you

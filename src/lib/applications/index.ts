@@ -202,7 +202,6 @@ export interface ApplicationDetail {
   readonly id: string;
   readonly application: AdminApplicationDocument;
   readonly user: UserDocument | null;
-  readonly emailVerified: boolean;
   readonly disabled: boolean;
   readonly previous: ReadonlyArray<{ id: string; data: AdminApplicationDocument }>;
 }
@@ -234,7 +233,6 @@ export async function getApplicationDetail(id: string): Promise<ApplicationDetai
     id,
     application,
     user: userSnapshot.exists ? (userSnapshot.data() as UserDocument) : null,
-    emailVerified: authUser?.emailVerified ?? false,
     disabled: authUser?.disabled ?? false,
     previous: previousSnapshot.docs
       .filter((document) => document.id !== id)
@@ -479,10 +477,6 @@ async function validateApprovalTarget(uid: string): Promise<void> {
 
   if (authUser.disabled) {
     throw new ApplicationConflictError("This applicant's account is disabled.");
-  }
-
-  if (!authUser.emailVerified) {
-    throw new ApplicationConflictError("The applicant must verify their email before approval.");
   }
 
   const userSnapshot = await getFirebaseAdminFirestore().doc(paths.user(uid)).get();

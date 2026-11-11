@@ -1,13 +1,13 @@
 // GCC - shared guard for applicant mutation routes.
 //
-// Order is fixed: same-origin, verified session, participant role, rate limit,
-// platform write gate. Organiser and Super Admin accounts cannot use the
+// Order is fixed: same-origin, signed-in active session, participant role, rate
+// limit, platform write gate. Organiser and Super Admin accounts cannot use the
 // applicant flow; their role is granted or managed elsewhere.
 import "server-only";
 
 import type { NextRequest, NextResponse } from "next/server";
 
-import { AuthenticationError, AuthorizationError, requireVerifiedUser } from "@/lib/auth/guards";
+import { AuthenticationError, AuthorizationError, requireUser } from "@/lib/auth/guards";
 import type { SessionUser } from "@/lib/auth/session";
 import { jsonError } from "@/lib/http/respond";
 import { assertPlatformWritable, PlatformWriteBlockedError } from "@/lib/platform/settings";
@@ -37,7 +37,7 @@ export async function guardApplicantMutation(
   let user: SessionUser;
 
   try {
-    user = await requireVerifiedUser();
+    user = await requireUser();
   } catch (error) {
     if (error instanceof AuthenticationError) {
       return { ok: false, response: jsonError("Sign in to continue.", 401) };

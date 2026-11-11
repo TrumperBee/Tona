@@ -5,7 +5,6 @@ export interface Viewer {
   readonly email: string;
   readonly role: UserRole;
   readonly isSuperAdmin: boolean;
-  readonly emailVerified?: boolean;
   readonly gamerTag?: string;
   readonly fullName?: string;
   readonly avatarUrl?: string | null;

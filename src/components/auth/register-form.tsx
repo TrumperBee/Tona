@@ -3,8 +3,9 @@
 // GCC - registration form.
 //
 // The server is authoritative for validation and gamer-tag reservation. This
-// form provides immediate feedback, then signs the new account in and sends the
-// Firebase verification email.
+// form provides immediate feedback, then signs the new account in and goes
+// straight to the dashboard. There is no email-verification step (ADR-046); the
+// confirmation field only guards against a mistyped address.
 import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -16,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/ui/form-field";
 import { Input, Select } from "@/components/ui/input";
-import { authErrorMessage, sendVerificationEmail, signInWithSession } from "@/lib/auth/client";
+import { authErrorMessage, signInWithSession } from "@/lib/auth/client";
 import { DEFAULT_COUNTRY_CODE } from "@/lib/config/countries";
 import {
   GAMES,
@@ -39,6 +40,7 @@ interface FormValues {
   fullName: string;
   gamerTag: string;
   email: string;
+  confirmEmail: string;
   password: string;
   confirmPassword: string;
   whatsapp: string;
@@ -52,6 +54,7 @@ const initialValues: FormValues = {
   fullName: "",
   gamerTag: "",
   email: "",
+  confirmEmail: "",
   password: "",
   confirmPassword: "",
   whatsapp: "",
@@ -184,6 +187,11 @@ export function RegisterForm() {
       return;
     }
 
+    if (values.email.trim().toLowerCase() !== values.confirmEmail.trim().toLowerCase()) {
+      setFieldErrors({ confirmEmail: "The email addresses do not match." });
+      return;
+    }
+
     const payload = {
       fullName: values.fullName,
       gamerTag: values.gamerTag,
@@ -232,15 +240,8 @@ export function RegisterForm() {
       }
 
       try {
-        const { user } = await signInWithSession(parsed.data.email, parsed.data.password);
-
-        try {
-          await sendVerificationEmail(user);
-        } catch {
-          // The verification page offers a resend control.
-        }
-
-        router.push("/verify-email");
+        await signInWithSession(parsed.data.email, parsed.data.password);
+        router.push("/dashboard");
         router.refresh();
       } catch (error) {
         setFormError(
@@ -295,7 +296,7 @@ export function RegisterForm() {
           htmlFor="email"
           label="Email"
           required
-          hint="We send verification and password-reset messages here."
+          hint="We send password-reset messages here."
           error={fieldErrors.email}
         >
           <Input
@@ -308,10 +309,26 @@ export function RegisterForm() {
         </FormField>
 
         <FormField
+          htmlFor="confirmEmail"
+          label="Confirm email"
+          required
+          hint="Type the same address again to catch a typo."
+          error={fieldErrors.confirmEmail}
+        >
+          <Input
+            type="email"
+            value={values.confirmEmail}
+            onChange={(event) => update("confirmEmail", event.target.value)}
+            autoComplete="email"
+            inputMode="email"
+          />
+        </FormField>
+
+        <FormField
           htmlFor="password"
           label="Password"
           required
-          hint="At least 10 characters. A longer phrase is easier to remember and safer."
+          hint="At least 6 characters. A longer phrase is easier to remember and safer."
           error={fieldErrors.password}
         >
           <PasswordInput

@@ -89,6 +89,7 @@ import type { AuditLogDocument, TournamentDocument, TournamentStatus } from "@/t
 
 const PASSWORD = "correct horse battery";
 const SUPER_ADMIN_EMAIL = "owner@example.com";
+const SUPER_ADMIN_UID = "integration-super-admin";
 const DAY_MS = 86_400_000;
 
 interface SeededUser {
@@ -149,9 +150,11 @@ async function createUser(options: {
   const auth = getFirebaseAdminAuth();
   const firestore = getFirebaseAdminFirestore();
   const record = await auth.createUser({
+    ...(options.email === SUPER_ADMIN_EMAIL && options.role === "super_admin"
+      ? { uid: SUPER_ADMIN_UID }
+      : {}),
     email: options.email,
     password: PASSWORD,
-    emailVerified: true,
     displayName: options.gamerTag,
   });
 
@@ -253,7 +256,6 @@ function sessionUser(user: SeededUser): SessionUser {
   return {
     userId: user.uid,
     email: user.email,
-    emailVerified: true,
     role: user.role,
     isSuperAdmin: user.role === "super_admin",
   };
