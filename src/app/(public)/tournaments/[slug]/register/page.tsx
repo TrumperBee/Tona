@@ -1,57 +1,45 @@
-// GCC - tournament registration information.
-// No registration form exists in Phase 3. The page reads the real tournament
-// status and explains what is required without collecting anything.
-import { ArrowLeft, ClipboardCheck, ListChecks, UserCheck } from "lucide-react";
+// GCC - tournament entry confirmation.
+//
+// The last step before an entry is recorded: key details, the full published
+// rules and an explicit acceptance checkbox. Gating (sign-in, verification,
+// already registered, the effective state) is decided on the server before the
+// form ever renders.
+import { ArrowLeft, Ban, CheckCircle2, ClipboardCheck, UserCheck } from "lucide-react";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { cache } from "react";
 
 import { OrganisedBy } from "@/components/tournament/organised-by";
+import { RegisterForm } from "@/components/tournament/register-form";
 import { PageHeader } from "@/components/shared/page-header";
 import { buttonStyles } from "@/components/ui/button-styles";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/data-display";
+import { getCurrentUser } from "@/lib/auth/guards";
 import { getGame } from "@/lib/config/games";
 import { TOURNAMENT_STATUS_META } from "@/lib/config/tournament-status";
-import { getPublicTournamentBySlug } from "@/lib/data/public-tournaments";
-import { formatDateTime, isIanaTimezone } from "@/lib/utils/dates";
+import { getPublicTournamentBySlug, getViewerRegistration } from "@/lib/data/public-tournaments";
+import { formatDateTime } from "@/lib/utils/dates";
+import { getRegistrationState } from "@/lib/tournament/registration-state";
 
 interface RegisterPageProps {
-  params: Promise<{ slug: string }>;
+  readonly params: Promise<{ slug: string }>;
 }
+
+const getTournament = cache(getPublicTournamentBySlug);
 
 export async function generateMetadata({ params }: RegisterPageProps) {
   const { slug } = await params;
-  const tournament = await getPublicTournamentBySlug(slug);
+  const tournament = await getTournament(slug);
 
   return {
     title: tournament ? `Register for ${tournament.name}` : "Tournament registration",
   };
 }
 
-const requirements = [
-  {
-    title: "A verified GCC account",
-    description:
-      "One account per person. Your email must be verified before a tournament entry is accepted.",
-    icon: UserCheck,
-  },
-  {
-    title: "A complete player identity",
-    description:
-      "Gamer tag, country, preferred game and platform. Your gamer tag is how opponents recognise you.",
-    icon: ClipboardCheck,
-  },
-  {
-    title: "The tournament requirements",
-    description:
-      "The correct game and platform, and acceptance of the organiser's published rules and schedule.",
-    icon: ListChecks,
-  },
-] as const;
-
 export default async function TournamentRegisterPage({ params }: RegisterPageProps) {
   const { slug } = await params;
-  const tournament = await getPublicTournamentBySlug(slug);
+  const tournament = await getTournament(slug);
 
   if (!tournament) {
     notFound();
@@ -59,8 +47,85 @@ export default async function TournamentRegisterPage({ params }: RegisterPagePro
 
   const game = getGame(tournament.gameId);
   const meta = TOURNAMENT_STATUS_META[tournament.status];
-  const timezone = isIanaTimezone(tournament.timezone) ? tournament.timezone : "UTC";
-  const registrationOpen = tournament.status === "registration_open";
+  const timezone = tournament.timezone;
+  const state = getRegistrationState(tournament, new Date());
+  const user = await getCurrentUser();
+
+  const unavailable = (title: string, description: string) => (
+    <EmptyState
+      icon={ClipboardCheck}
+      eyebrow="No entry possible"
+      title={title}
+      description={description}
+      action={
+        <Link href="/tournaments" className={buttonStyles({ size: "sm" })}>
+          Browse other tournaments
+        </Link>
+      }
+      secondaryAction={
+        <Link
+          href={`/tournaments/${tournament.slug}`}
+          className={buttonStyles({ variant: "secondary", size: "sm" })}
+        >
+          Tournament details
+        </Link>
+      }
+    />
+  );
+
+  let gating: React.ReactNode | null = null;
+
+  if (tournament.status === "cancelled") {
+    gating = unavailable(
+      "This competition was cancelled",
+      "The organiser cancelled this competition. It is not accepting entries.",
+    );
+  } else if (!user) {
+    // Hand the player to sign-in and bring them straight back here.
+    redirect(`/login?next=${encodeURIComponent(`/tournaments/${slug}/register`)}`);
+  } else if (!user.emailVerified) {
+    gating = unavailable(
+      "Verify your email first",
+      "Your email must be verified before a tournament entry is accepted. Open your dashboard to resend the verification link.",
+    );
+  } else {
+    const viewerRegistration = await getViewerRegistration(tournament.id, user.userId);
+
+    if (viewerRegistration) {
+      gating = (
+        <EmptyState
+          icon={CheckCircle2}
+          eyebrow="Already registered"
+          title="You are already in this competition"
+          description="Your place is held. You can withdraw from the tournament page while registration stays open."
+          action={
+            <Link href={`/tournaments/${tournament.slug}`} className={buttonStyles({ size: "sm" })}>
+              Back to tournament
+            </Link>
+          }
+        />
+      );
+    } else if (state === "opens_soon") {
+      gating = unavailable(
+        "Registration has not opened yet",
+        `Registration opens ${
+          tournament.registrationOpensAt
+            ? formatDateTime(tournament.registrationOpensAt, { timeZone: timezone })
+            : "soon"
+        }. The tournament page counts down to it.`,
+      );
+    } else if (state === "full") {
+      gating = unavailable(
+        "The field is full",
+        `All ${tournament.maxParticipants} places are taken. A withdrawn place reopens automatically while registration stays open.`,
+      );
+    } else if (state === "closed") {
+      gating = unavailable(
+        "The entry window has closed",
+        `${meta.description} No new entry can be recorded for this competition.`,
+      );
+    }
+  }
 
   return (
     <>
@@ -69,7 +134,7 @@ export default async function TournamentRegisterPage({ params }: RegisterPagePro
           <PageHeader
             eyebrow="Registration"
             title={tournament.name}
-            description="What entering this competition requires, and what happens next. No entry form is open on this page."
+            description="Confirm your entry. One click records it on the platform — nothing is collected through third parties."
             breadcrumbs={[
               { label: "Home", href: "/" },
               { label: "Tournaments", href: "/tournaments" },
@@ -103,146 +168,62 @@ export default async function TournamentRegisterPage({ params }: RegisterPagePro
 
       <section className="border-b border-white/10">
         <div className="container py-10 sm:py-14">
-          {registrationOpen ? (
-            <EmptyState
-              icon={ClipboardCheck}
-              eyebrow="Entry not yet open on the platform"
-              title="In-platform registration is not available yet"
-              description={
-                <>
-                  This competition is marked as open for registration, but the account and entry
-                  flow is not live. There is no form to submit, and no entry is being recorded from
-                  this page. When the flow opens, registration will be completed inside your GCC
-                  dashboard.
-                </>
-              }
-              action={
-                <Link href="/login" className={buttonStyles({ size: "sm" })}>
-                  About GCC accounts
-                </Link>
-              }
-              secondaryAction={
-                <Link
-                  href={`/tournaments/${tournament.slug}`}
-                  className={buttonStyles({ variant: "secondary", size: "sm" })}
-                >
-                  Back to tournament
-                </Link>
-              }
-            />
-          ) : (
-            <EmptyState
-              icon={ClipboardCheck}
-              eyebrow="Registration closed"
-              title={
-                tournament.status === "registration_closed" ||
-                tournament.status === "pots_confirmed"
-                  ? "The entry window has closed"
-                  : tournament.status === "suspended"
-                    ? "This competition is suspended"
-                    : "This competition is not accepting entries"
-              }
-              description={
-                <>
-                  {meta.description} Registration details remain visible so participants can see the
-                  field size and schedule, but no new entry can be created.
-                </>
-              }
-              action={
-                <Link href="/tournaments" className={buttonStyles({ size: "sm" })}>
-                  Browse other tournaments
-                </Link>
-              }
-              secondaryAction={
-                <Link
-                  href={`/tournaments/${tournament.slug}`}
-                  className={buttonStyles({ variant: "secondary", size: "sm" })}
-                >
-                  Tournament details
-                </Link>
-              }
-            />
-          )}
-        </div>
-      </section>
-
-      <section>
-        <div className="container py-10 sm:py-14">
-          <div className="grid gap-6 lg:grid-cols-[1fr_0.8fr] lg:items-start">
-            <div>
-              <h2 className="font-display text-2xl font-semibold uppercase tracking-display text-white sm:text-3xl">
-                What you will need
-              </h2>
-              <div className="mt-5 space-y-3">
-                {requirements.map((requirement) => {
-                  const Icon = requirement.icon;
-
-                  return (
-                    <Card key={requirement.title} className="p-4">
-                      <div className="flex items-start gap-3">
-                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-electric-400/20 bg-electric-500/10 text-electric-300">
-                          <Icon aria-hidden="true" className="h-4 w-4" />
-                        </span>
-                        <div>
-                          <p className="text-sm font-semibold text-white">{requirement.title}</p>
-                          <p className="mt-1 text-sm leading-6 text-grey-400">
-                            {requirement.description}
-                          </p>
-                        </div>
-                      </div>
-                    </Card>
-                  );
-                })}
-              </div>
-            </div>
-
-            <Card variant="outline">
-              <CardHeader>
-                <CardTitle>Key dates</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <dl className="space-y-3 text-sm">
-                  {tournament.registrationClosesAt ? (
-                    <div>
-                      <dt className="text-xs font-semibold uppercase tracking-eyebrow text-grey-500">
-                        Registration closes
-                      </dt>
-                      <dd className="mt-0.5 text-grey-200">
-                        {formatDateTime(tournament.registrationClosesAt, {
+          {gating ?? (
+            <div className="mx-auto max-w-2xl">
+              <div className="mb-6 flex items-start gap-3 rounded-xl border border-electric-400/20 bg-electric-500/5 p-4">
+                <UserCheck
+                  aria-hidden="true"
+                  className="mt-0.5 h-5 w-5 shrink-0 text-electric-300"
+                />
+                <div className="text-sm leading-6 text-grey-300">
+                  <p className="font-semibold text-white">
+                    You are about to enter this competition.
+                  </p>
+                  <p className="mt-1">
+                    {tournament.registrationClosesAt
+                      ? `Registration closes ${formatDateTime(tournament.registrationClosesAt, {
                           timeZone: timezone,
-                        })}{" "}
-                        <span className="text-grey-500">({timezone})</span>
-                      </dd>
+                        })} (${timezone}).`
+                      : "Check the tournament page for the registration window."}{" "}
+                    {tournament.startsAt
+                      ? `Play starts ${formatDateTime(tournament.startsAt, { timeZone: timezone })}.`
+                      : null}
+                  </p>
+                </div>
+              </div>
+
+              <Card variant="outline" className="mb-6">
+                <CardHeader>
+                  <CardTitle>Published rules</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {tournament.rules ? (
+                    <div className="max-h-72 overflow-y-auto pr-1">
+                      <p className="whitespace-pre-line text-sm leading-7 text-grey-300">
+                        {tournament.rules}
+                      </p>
                     </div>
-                  ) : null}
-                  <div>
-                    <dt className="text-xs font-semibold uppercase tracking-eyebrow text-grey-500">
-                      Competition starts
-                    </dt>
-                    <dd className="mt-0.5 text-grey-200">
-                      {tournament.startsAt
-                        ? `${formatDateTime(tournament.startsAt, { timeZone: timezone })}`
-                        : "To be confirmed"}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs font-semibold uppercase tracking-eyebrow text-grey-500">
-                      Match length
-                    </dt>
-                    <dd className="mt-0.5 text-grey-200">
-                      {tournament.matchDurationMinutes
-                        ? `${tournament.matchDurationMinutes} minutes`
-                        : "To be confirmed"}
-                    </dd>
-                  </div>
-                </dl>
-                <p className="mt-5 border-t border-white/10 pt-4 text-xs leading-5 text-grey-500">
-                  Do not send entry fees, account details or passwords to anyone claiming to
-                  register you manually. Entry is only valid when it is recorded by the platform.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
+                  ) : (
+                    <p className="flex items-center gap-2 text-sm leading-6 text-grey-400">
+                      <Ban aria-hidden="true" className="h-4 w-4 text-warning" />
+                      This competition has no published rules. Entries cannot be accepted until the
+                      organiser publishes them — contact the organiser if you believe this is an
+                      error.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
+              {tournament.rules ? (
+                <RegisterForm tournamentId={tournament.id} slug={tournament.slug} />
+              ) : (
+                unavailable(
+                  "Rules are missing",
+                  "An entry requires the organiser's published rules. Nothing is recorded from this page.",
+                )
+              )}
+            </div>
+          )}
         </div>
       </section>
     </>

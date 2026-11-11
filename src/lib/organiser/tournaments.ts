@@ -74,16 +74,16 @@ export async function listOrganiserTournaments(
   const firestore = getFirebaseAdminFirestore();
   const collection = firestore.collection(paths.tournaments());
   const pageSize = parsePageSize(String(options.pageSize ?? ""));
-  const search = options.search?.trim() ?? "";
+  const search = options.search?.trim().toLowerCase() ?? "";
   let filtered: Query = collection.where("ownerUid", "==", ownerUid);
 
   if (options.status) filtered = filtered.where("status", "==", options.status);
 
   if (search.length > 0) {
     filtered = filtered
-      .where("name", ">=", search)
-      .where("name", "<=", `${search}\uf8ff`)
-      .orderBy("name", "asc");
+      .where("nameLower", ">=", search)
+      .where("nameLower", "<=", `${search}\uf8ff`)
+      .orderBy("nameLower", "asc");
   } else {
     filtered = filtered.orderBy("updatedAt", "desc");
   }

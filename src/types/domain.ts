@@ -86,13 +86,17 @@ export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
  * Allowed tournament status transitions. `completed`, `archived` and `cancelled`
  * are terminal. A competition that has not reached a terminal status may be
  * cancelled at any time; it may also be suspended for a Super Admin review.
+ *
+ * Registration may be reopened from `registration_closed` while the pots are
+ * not confirmed; once the pots are confirmed the status has moved past
+ * `registration_closed`, so reopening is structurally impossible.
  */
 export const TOURNAMENT_TRANSITIONS: Readonly<
   Record<TournamentStatus, readonly TournamentStatus[]>
 > = {
   draft: ["registration_open", "suspended", "cancelled"],
   registration_open: ["registration_closed", "suspended", "cancelled"],
-  registration_closed: ["pots_confirmed", "suspended", "cancelled"],
+  registration_closed: ["registration_open", "pots_confirmed", "suspended", "cancelled"],
   pots_confirmed: ["fixtures_published", "suspended", "cancelled"],
   fixtures_published: ["league_phase", "suspended", "cancelled"],
   league_phase: ["knockout", "completed", "suspended", "cancelled"],
@@ -205,7 +209,9 @@ export interface PublicProfileDocument {
 
 /**
  * Server-written "My Tournaments" entry. Owning the parent user document is
- * enough to read it; no tournament read is required.
+ * enough to read it; no tournament read is required. `playerStatus` mirrors
+ * the player's registration state so a withdrawn or removed entry is labelled
+ * honestly on the dashboard.
  */
 export interface MembershipDocument {
   readonly tournamentId: string;
@@ -213,7 +219,9 @@ export interface MembershipDocument {
   readonly name: string;
   readonly gameId: GameId;
   readonly status: TournamentStatus;
+  readonly playerStatus: RegistrationStatus;
   readonly registeredAt: Timestamp;
+  readonly updatedAt: Timestamp;
 }
 
 /** Server-written public career history entry for a completed tournament. */
@@ -299,36 +307,85 @@ export interface OrganiserProfileDocument {
   readonly updatedAt: Timestamp;
 }
 
+/**
+ * A tournament as the server writes it. Owner snapshots (`ownerTag`,
+ * `organisationName`) are copied at creation and on ownership transfer so
+ * public surfaces never need to join against private documents. `nameLower`
+ * powers public prefix search. `allowedPlatforms` and `allowedCountries` are
+ * entry restrictions: `null` means "no restriction" (every platform /
+ * every country). `suspendedFrom` remembers the stage a Super Admin suspended
+ * the competition from so unsuspension restores it exactly.
+ */
 export interface TournamentDocument {
   readonly ownerUid: string;
+  readonly ownerTag: string;
+  readonly organisationName: string;
   readonly slug: string;
   readonly name: string;
+  readonly nameLower: string;
   readonly description: string;
   readonly gameId: GameId;
   readonly formatId: TournamentFormatId;
   readonly coverImageUrl: string | null;
+  readonly coverImagePublicId: string | null;
+  readonly logoUrl: string | null;
+  readonly logoPublicId: string | null;
   readonly rules: string;
   readonly matchDurationMinutes: number;
   /** IANA identifier, e.g. Africa/Nairobi. */
   readonly timezone: string;
-  readonly registrationOpensAt: Timestamp;
-  readonly registrationClosesAt: Timestamp;
-  readonly startsAt: Timestamp;
+  /**
+   * The three schedule moments. Null while a draft has not reached the
+   * schedule step; publishing requires all three. `getRegistrationState`
+   * treats a missing window as closed rather than guessing.
+   */
+  readonly registrationOpensAt: Timestamp | null;
+  readonly registrationClosesAt: Timestamp | null;
+  readonly startsAt: Timestamp | null;
+  /** Fixed at 36 by the `ucl-league-phase-36` format; never client-set. */
   readonly maxParticipants: number;
   readonly registrationCount: number;
   readonly status: TournamentStatus;
+  /** Stage the competition was suspended from, or null when not suspended. */
+  readonly suspendedFrom: TournamentStatus | null;
   readonly season: string;
+  readonly allowedPlatforms: readonly PlatformId[] | null;
+  /** ISO 3166-1 alpha-2 codes, or null when every country may enter. */
+  readonly allowedCountries: readonly string[] | null;
   readonly createdAt: Timestamp;
   readonly updatedAt: Timestamp;
 }
 
+/**
+ * Server-only slug reservation. The document id is the slug; creating it in
+ * the same transaction as the tournament guarantees uniqueness, and deleting
+ * it releases the slug when a never-published draft is deleted.
+ */
+export interface TournamentSlugDocument {
+  readonly tournamentId: string;
+  readonly name: string;
+  readonly createdAt: Timestamp;
+}
+
+/**
+ * Server-written public registration snapshot inside
+ * `tournaments/{id}/registrations/{uid}`. Only display-safe fields live here:
+ * no email, no phone number, no full name. The organiser's reason for a
+ * removal is recorded in the audit log, not on this public document.
+ */
 export interface RegistrationDocument {
   readonly tournamentId: string;
   readonly gamerTag: string;
+  readonly gamerTagLower: string;
   readonly country: string;
-  readonly photoUrl: string | null;
+  readonly avatarUrl: string | null;
+  readonly platform: PlatformId;
   readonly status: RegistrationStatus;
   readonly registeredAt: Timestamp;
+  readonly withdrawnAt: Timestamp | null;
+  readonly removedAt: Timestamp | null;
+  /** UID of the owner or Super Admin who removed the player. */
+  readonly removedBy: string | null;
 }
 
 export type PotNumber = "1" | "2" | "3" | "4";

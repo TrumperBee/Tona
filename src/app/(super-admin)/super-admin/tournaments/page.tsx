@@ -1,13 +1,16 @@
-// GCC - read-only tournament list for the Super Admin console.
+// GCC - tournament management list for the Super Admin console.
 //
-// Phase 5 shows the real records and filters only. Management actions arrive in
-// Phase 8, so no decorative controls are rendered here.
+// Phase 8 adds the operator actions: suspend (hides the competition from
+// every public surface, remembering the exact stage), unsuspend, cancel and
+// transfer ownership. Every action requires a reason that is audited and
+// shown to the affected organiser.
 import { Search, Trophy } from "lucide-react";
 import Link from "next/link";
 
 import { PageHeader } from "@/components/shared/page-header";
 import { TournamentStatusBadge } from "@/components/super-admin/badges";
 import { CursorNav } from "@/components/super-admin/cursor-nav";
+import { TournamentRowActions } from "@/components/super-admin/tournament-row-actions";
 import { buttonStyles } from "@/components/ui/button-styles";
 import { EmptyState } from "@/components/ui/data-display";
 import { Input, Select } from "@/components/ui/input";
@@ -88,12 +91,27 @@ export default async function TournamentsPage({ searchParams }: TournamentsPageP
     },
     {
       key: "owner",
-      header: "Owner UID",
-      render: (row) => <span className="break-all text-xs text-grey-500">{row.ownerUid}</span>,
+      header: "Owner",
+      render: (row) => (
+        <div>
+          {row.ownerTag ? (
+            <Link
+              href={`/organisers/${row.ownerUid}`}
+              className="text-sm font-medium text-electric-300 underline-offset-4 transition-colors hover:text-electric-200 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-400"
+            >
+              {row.organisationName || `@${row.ownerTag}`}
+            </Link>
+          ) : (
+            <span className="text-sm text-grey-300">{row.organisationName || "—"}</span>
+          )}
+          <span className="block break-all text-xs text-grey-500">{row.ownerUid}</span>
+        </div>
+      ),
     },
     {
       key: "starts",
       header: "Starts",
+      hideOnMobile: true,
       render: (row) => (
         <span className="text-sm text-grey-300">
           {row.startsAt ? formatDate(row.startsAt) : "—"}
@@ -103,6 +121,7 @@ export default async function TournamentsPage({ searchParams }: TournamentsPageP
     {
       key: "workspace",
       header: "Workspace",
+      hideOnMobile: true,
       render: (row) => (
         <Link
           href={`/organiser/tournaments/${row.id}`}
@@ -111,6 +130,13 @@ export default async function TournamentsPage({ searchParams }: TournamentsPageP
           Open in organiser workspace
           <span className="sr-only">for {row.name}</span>
         </Link>
+      ),
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      render: (row) => (
+        <TournamentRowActions tournamentId={row.id} name={row.name} status={row.status} />
       ),
     },
   ];
@@ -122,7 +148,7 @@ export default async function TournamentsPage({ searchParams }: TournamentsPageP
       <PageHeader
         eyebrow="Super Admin console"
         title="Tournaments"
-        description="Every competition on the platform, read-only in this phase. Status, entrant numbers and dates come from the tournament documents."
+        description="Every competition on the platform with its real status, entrant numbers and dates. Management actions suspend, restore, cancel or transfer a competition — each one requires a reason that is audited and shown to the organiser."
         breadcrumbs={[{ label: "Super Admin", href: "/super-admin" }, { label: "Tournaments" }]}
       />
 
@@ -189,7 +215,7 @@ export default async function TournamentsPage({ searchParams }: TournamentsPageP
           description={
             hasFilters
               ? "Try a different name prefix or status. Name search matches from the start of the tournament name."
-              : "When organisers create competitions in Phase 8, every one will appear here with its real status, dates and entrant count."
+              : "Every competition any organiser creates appears here with its real status, dates and entrant count."
           }
         />
       ) : (
@@ -217,8 +243,8 @@ export default async function TournamentsPage({ searchParams }: TournamentsPageP
       )}
 
       <p className="text-xs leading-5 text-grey-500">
-        Read-only in Phase 5. Tournament creation, status transitions and result management are
-        deliberately not available here yet.
+        Suspended competitions keep all of their data and return to the exact stage they left.
+        Statuses only change through these explicit actions — nothing changes on a schedule.
       </p>
     </div>
   );

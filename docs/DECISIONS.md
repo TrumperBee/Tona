@@ -948,3 +948,32 @@ Phase 8 creation guard agree by construction. Suspension frees the slot while
 the competition is hidden, which matches the intent of the limit (concurrent
 live operations), and the disabled create CTA explains the blocked state
 without a server write.
+
+---
+
+## ADR-044 - Cancelled tournaments are not publicly readable
+
+**Date:** 2026-11-11
+**Status:** Accepted
+**Supersedes:** the `cancelled` visibility rule in ADR-039.
+
+**Context.** Phase 7 added `cancelled` as a terminal status and treated it as a
+public tournament status. Phase 8 makes cancellation a real organiser and Super
+Admin action, so the visibility rule now determines whether a cancelled
+competition remains in public discovery lists, collection-group registration
+reads and crawler indexes.
+
+**Decision.** `cancelled` is removed from the public status allow-lists in
+`firestore.rules`. A cancelled tournament stays readable only to its owner and
+the Super Admin. Public tournament routes and lists stop showing it; a visitor
+who follows an old direct link to `/tournaments/[slug]` sees an honest notice
+page rendered by the server (which is authorised) rather than a 404 or a public
+document read. The registration subcollection follows the same rule, so
+collection-group registration queries cannot include a cancelled competition.
+
+**Consequences.** Cancelled records are preserved for audit and history but are
+no longer discoverable, which matches the meaning of cancellation. Organisers
+and the Super Admin retain full access. Public pages that previously expected
+cancelled entries (organiser public page, discovery) must filter or rely on the
+rules; the Phase 8 tests assert that a cancelled cup never appears in either
+place. ADR-039's status model otherwise stands.

@@ -347,8 +347,9 @@ export default async function TournamentsPage({ searchParams }: TournamentsPageP
       ) : null}
 
       <p className="text-xs leading-5 text-grey-500">
-        Tournament creation, status transitions and result management arrive with the organiser
-        tools. Nothing on this page is editable yet.
+        Every competition you own stays private until you publish it. Status changes only happen
+        through explicit actions in each competition&apos;s workspace — nothing changes on a
+        schedule.
       </p>
     </div>
   );

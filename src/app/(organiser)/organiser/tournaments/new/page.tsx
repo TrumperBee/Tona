@@ -1,26 +1,47 @@
 // GCC - New tournament.
-// Honest Phase 3 state: real heading and guidance, no mock data or controls.
-import { FeatureNotice } from "@/components/shared/feature-notice";
-import { buttonStyles } from "@/components/ui/button-styles";
-import { Plus } from "lucide-react";
-import Link from "next/link";
+//
+// The five-step creation wizard. Step 1 creates a real draft on the server
+// (slot limits and slug reservations are enforced there); later steps patch
+// it. Nothing fake is rendered — a slot-limited organiser sees the honest
+// server error from the wizard's step 1 save.
+import type { Metadata } from "next";
 
-export const metadata = { title: "New tournament" };
+import { TournamentWizard } from "@/components/tournament/tournament-wizard";
+import { PageHeader } from "@/components/shared/page-header";
+import { requirePageRole } from "@/lib/auth/page-access";
 
-export default function NewPage() {
+export const metadata: Metadata = {
+  title: "Create a tournament",
+  description:
+    "Set up a GCC competition: basics, schedule, branding, rules and entry restrictions.",
+};
+
+export default async function NewTournamentPage() {
+  await requirePageRole("organiser", "/organiser/tournaments/new");
+
   return (
-    <FeatureNotice
-      eyebrow="Organiser workspace"
-      title="Create a tournament"
-      description="Set the competition name, game, format, rules, dates and field size, then save a real draft."
-      availabilityTitle="Tournament creation is not open yet"
-      availabilityDescription="The creation flow opens with organiser tools. It will validate every field on the server and save a draft that only the owner can edit."
-      icon={Plus}
-      action={
-        <Link href="/organiser/tournaments" className={buttonStyles({ size: "sm" })}>
-          Back to my tournaments
-        </Link>
-      }
-    />
+    <>
+      <section className="border-b border-white/10">
+        <div className="container py-12 sm:py-16">
+          <PageHeader
+            eyebrow="Organiser workspace"
+            title="Create a tournament"
+            description="Five steps create a draft you own: basics, schedule, branding, rules and entry restrictions, then a review that publishes it to players. Everything is validated again on the server — the format is the fixed 36-team league phase."
+            breadcrumbs={[
+              { label: "Home", href: "/" },
+              { label: "Organiser", href: "/organiser" },
+              { label: "Tournaments", href: "/organiser/tournaments" },
+              { label: "New" },
+            ]}
+          />
+        </div>
+      </section>
+
+      <section className="border-b border-white/10">
+        <div className="container max-w-3xl py-10 sm:py-14">
+          <TournamentWizard />
+        </div>
+      </section>
+    </>
   );
 }

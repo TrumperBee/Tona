@@ -114,6 +114,39 @@ export async function uploadOrganiserLogo(
   return { publicId: result.public_id, url: deliveryUrl(client, result.public_id) };
 }
 
+/**
+ * Replaces (or creates) a tournament's 16:9 cover image. The public id is
+ * derived from the tournament id, so re-uploading replaces the previous asset
+ * and old URLs never dangle.
+ */
+export async function uploadTournamentCover(
+  tournamentId: string,
+  bytes: Buffer,
+  mimeType: string,
+): Promise<StoredAvatar> {
+  const client = getCloudinary();
+  const publicId = `gcc/tournaments/${tournamentId}/cover`;
+  const result = await uploadImage(client, publicId, bytes, mimeType);
+
+  return { publicId: result.public_id, url: deliveryUrl(client, result.public_id) };
+}
+
+/**
+ * Replaces (or creates) a tournament's square logo. Kept separate from the
+ * cover so either can be replaced without touching the other.
+ */
+export async function uploadTournamentLogo(
+  tournamentId: string,
+  bytes: Buffer,
+  mimeType: string,
+): Promise<StoredAvatar> {
+  const client = getCloudinary();
+  const publicId = `gcc/tournaments/${tournamentId}/logo`;
+  const result = await uploadImage(client, publicId, bytes, mimeType);
+
+  return { publicId: result.public_id, url: deliveryUrl(client, result.public_id) };
+}
+
 /** Best-effort removal. A missing asset is treated as success. */
 export async function destroyAvatar(publicId: string): Promise<void> {
   const client = getCloudinary();

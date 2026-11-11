@@ -202,10 +202,15 @@ async function seed(): Promise<void> {
       setDoc(doc(db, "tournaments/cancelled/registrations/alice"), {
         tournamentId: "cancelled",
         gamerTag: "Alice",
+        gamerTagLower: "alice",
         country: "NG",
-        photoUrl: null,
+        avatarUrl: null,
+        platform: "android",
         status: "registered",
         registeredAt: now,
+        withdrawnAt: null,
+        removedAt: null,
+        removedBy: null,
       }),
       setDoc(doc(db, "organiserProfiles/organiser-a"), {
         uid: "organiser-a",
@@ -223,7 +228,14 @@ async function seed(): Promise<void> {
         name: "Public Cup",
         gameId: "efootball",
         status: "registration_open",
+        playerStatus: "registered",
         registeredAt: now,
+        updatedAt: now,
+      }),
+      setDoc(doc(db, "tournamentSlugs/public-cup"), {
+        tournamentId: "public",
+        name: "Public Cup",
+        createdAt: now,
       }),
       setDoc(doc(db, "publicProfiles/alice/history/public"), {
         tournamentName: "Public Cup",
@@ -243,26 +255,41 @@ async function seed(): Promise<void> {
       setDoc(doc(db, "tournaments/public/registrations/alice"), {
         tournamentId: "public",
         gamerTag: "Alice",
+        gamerTagLower: "alice",
         country: "NG",
-        photoUrl: null,
+        avatarUrl: null,
+        platform: "android",
         status: "registered",
         registeredAt: now,
+        withdrawnAt: null,
+        removedAt: null,
+        removedBy: null,
       }),
       setDoc(doc(db, "tournaments/draft/registrations/alice"), {
         tournamentId: "draft",
         gamerTag: "Alice",
+        gamerTagLower: "alice",
         country: "NG",
-        photoUrl: null,
+        avatarUrl: null,
+        platform: "android",
         status: "registered",
         registeredAt: now,
+        withdrawnAt: null,
+        removedAt: null,
+        removedBy: null,
       }),
       setDoc(doc(db, "tournaments/suspended/registrations/alice"), {
         tournamentId: "suspended",
         gamerTag: "Alice",
+        gamerTagLower: "alice",
         country: "NG",
-        photoUrl: null,
+        avatarUrl: null,
+        platform: "android",
         status: "registered",
         registeredAt: now,
+        withdrawnAt: null,
+        removedAt: null,
+        removedBy: null,
       }),
       setDoc(doc(db, "tournaments/public/draw/current"), {
         pots: { "1": ["alice"], "2": [], "3": [], "4": [] },
@@ -524,6 +551,18 @@ describe("private collections", () => {
     await assertFails(getDoc(doc(user("root", "super_admin"), "applicationState/alice")));
     await assertFails(getDoc(doc(anonymous(), "applicationState/alice")));
   });
+
+  it("keeps the tournament slug registry server-only", async () => {
+    // The registry is an internal uniqueness mechanism: clients learn slugs
+    // from the tournament documents the rules already scope.
+    await assertFails(getDoc(doc(anonymous(), "tournamentSlugs/public-cup")));
+    await assertFails(getDoc(doc(user("alice"), "tournamentSlugs/public-cup")));
+    await assertFails(getDoc(doc(user("organiser-a", "organiser"), "tournamentSlugs/public-cup")));
+    await assertFails(getDoc(doc(user("root", "super_admin"), "tournamentSlugs/public-cup")));
+
+    await assertFails(getDocs(collection(user("root", "super_admin"), "tournamentSlugs")));
+    await assertFails(getDocs(collectionGroup(user("root", "super_admin"), "tournamentSlugs")));
+  });
 });
 
 describe("public reads", () => {
@@ -546,11 +585,24 @@ describe("public reads", () => {
     );
   });
 
-  it("keeps a cancelled competition and its registrations visible to the public", async () => {
-    const db = anonymous();
+  it("hides a cancelled competition from every client read (ADR-044)", async () => {
+    await assertFails(getDoc(doc(anonymous(), "tournaments/cancelled")));
+    await assertFails(getDoc(doc(user("alice"), "tournaments/cancelled")));
+    await assertFails(getDoc(doc(user("alice"), "tournaments/cancelled/registrations/alice")));
 
-    await assertSucceeds(getDoc(doc(db, "tournaments/cancelled")));
-    await assertSucceeds(getDoc(doc(db, "tournaments/cancelled/registrations/alice")));
+    // The owner and the Super Admin keep access to their own records; the
+    // server-rendered notice page reads through the Admin SDK.
+    await assertSucceeds(getDoc(doc(user("organiser-a", "organiser"), "tournaments/cancelled")));
+    await assertSucceeds(
+      getDoc(doc(user("root", "super_admin"), "tournaments/cancelled/registrations/alice")),
+    );
+
+    // A collection-group sweep must not leak cancelled entries either.
+    const sweep = query(
+      collectionGroup(user("alice"), "registrations"),
+      where("tournamentId", "==", "cancelled"),
+    );
+    await assertFails(getDocs(sweep));
   });
 
   it("hides draft, expired and soft-deleted platform announcements from the public", async () => {
@@ -716,11 +768,13 @@ describe("collection-group player history", () => {
     );
     await assertSucceeds(getDocs(published));
 
-    const draft = query(
-      collectionGroup(user("alice"), "registrations"),
-      where("tournamentId", "==", "draft"),
-    );
-    await assertFails(getDocs(draft));
+    for (const tournamentId of ["draft", "suspended", "cancelled"]) {
+      const hidden = query(
+        collectionGroup(user("alice"), "registrations"),
+        where("tournamentId", "==", tournamentId),
+      );
+      await assertFails(getDocs(hidden));
+    }
   });
 });
 
@@ -752,6 +806,7 @@ describe("client writes", () => {
       "publicProfiles/alice",
       "publicProfiles/alice/history/public",
       "gamerTags/alice",
+      "tournamentSlugs/public-cup",
       "adminApplications/app1",
       "applicationState/alice",
       "organiserProfiles/organiser-a",

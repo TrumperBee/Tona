@@ -96,6 +96,38 @@ export const TOURNAMENT_FORMATS = [UCL_LEAGUE_PHASE_36] as const;
 
 export const DEFAULT_TOURNAMENT_FORMAT_ID: TournamentFormatId = "ucl-league-phase-36";
 
+/** Match lengths an organiser may pick for a competition, in minutes. */
+export const MATCH_DURATION_MINUTES_OPTIONS = [5, 6, 8, 10, 12, 15] as const;
+export type MatchDurationMinutes = (typeof MATCH_DURATION_MINUTES_OPTIONS)[number];
+export const DEFAULT_MATCH_DURATION_MINUTES: MatchDurationMinutes = 10;
+
+export function isMatchDurationMinutes(value: number): value is MatchDurationMinutes {
+  return (MATCH_DURATION_MINUTES_OPTIONS as readonly number[]).includes(value);
+}
+
+/**
+ * Editable starting point the wizard offers for the rules field. Organisers
+ * edit it to taste; publishing requires the field to be non-empty either way.
+ */
+export const STARTER_RULES_TEMPLATE = [
+  "Entry and eligibility",
+  "- One entry per player. Your GCC account, gamer tag and platform must match the entry.",
+  "- Entries close at the published registration deadline. Withdrawals are possible until registration closes.",
+  "",
+  "Group stage",
+  "- 36 players are drawn into groups for the league phase.",
+  "- Each match is played on the platform-published platform list for this competition.",
+  "- Results are recorded and verified through GCC; both players confirm the score.",
+  "",
+  "Match rules",
+  "- Match length and any extra time follow the competition settings published on the tournament page.",
+  "- No-shows forfeit the match. A no-show is recorded by the organiser with the reason.",
+  "",
+  "Fair play",
+  "- Cheating, account sharing and abusive conduct lead to removal from the competition.",
+  "- The organiser's decision on disputes is final and every change is recorded in the platform audit log.",
+].join("\n");
+
 export function getTournamentFormat(id: string): CompetitionFormat | undefined {
   return TOURNAMENT_FORMATS.find((format) => format.id === id);
 }

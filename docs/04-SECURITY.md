@@ -327,6 +327,47 @@ notification carries an off-site link.
   aggregation per request for signed-in users only, memoised within a render
   with React `cache()`; it never pulls the whole subcollection.
 
+### 2.15 Tournament mutation and entry abuse
+
+**Threat:** a non-owner edits, publishes, cancels or transfers a tournament; a
+player manipulates capacity, registers twice, enters outside the window or
+escapes entry restrictions; an organiser reads another organiser's participant
+contact details.
+
+**Controls:**
+
+- Every organiser tournament route calls `guardOrganiserMutation()` (same-origin
+  → signed-in **verified** session → `organiser` or higher → rate limit →
+  maintenance gate). The store then loads `ownerUid` from Firestore;
+  `requireTournamentOwnerOrSuperAdmin` is applied for each document. A
+  non-owner gets 404, not 403, so the route does not confirm the document.
+- Creation enforces the active-slot limit (ADR-043), the fixed
+  `ucl-league-phase-36` format, capacity 36 and slug uniqueness inside a
+  transaction with a `tournamentSlugs/{slug}` reservation. The server assigns
+  status, owner, counters and timestamps; the client schema rejects them.
+- Publishing requires a real description, rules and ordered dates
+  (`validatePublishCompleteness`). Lifecycle changes go through `canTransition`,
+  so a client cannot skip a stage or reopen a terminal one.
+- Registration and withdrawal run as transactions that re-read the tournament,
+  recompute `getRegistrationState` from the stored dates and count, enforce the
+  entry restrictions (`allowedPlatforms`, `allowedCountries`) and update
+  `registrationCount` with a `transaction.create()` on
+  `registrations/{uid}`. A duplicate entry, a full field, a closed window, a
+  suspended/cancelled event or a concurrent 37th entry is rejected with a
+  contract error.
+- Organiser removal is server-only, requires a reason, sets `removed` (never
+  deletes the document), decrements the count and is audited. Participant
+  contact details are never stored on the registration; the owner-only contact
+  route resolves the private user document and is rate limited.
+- CSV export and the contact link are owner-only. The export contains public
+  registration snapshots, not phone numbers or email addresses.
+- Public discovery and public tournament pages read through server helpers that
+  exclude `draft`, `suspended` and `cancelled`, so a hidden document is never
+  enumerated. Direct links to a cancelled event show a server-rendered notice.
+- Super Admin suspend, unsuspend, cancel and transfer routes use
+  `guardSuperAdminMutation()` and are audited; transferring ownership updates
+  the document and the audit trail, never the registrations.
+
 ## 3. Authentication and sessions
 
 - Firebase Authentication owns password hashing and credential verification.
@@ -366,8 +407,10 @@ notification carries an off-site link.
 ## 4. Firestore Security Rules
 
 - Default deny; no client writes anywhere.
-- Tournament documents are readable by the public unless `draft` or `suspended`.
-- Tournament subcollections are hidden for draft/suspended tournaments.
+- Tournament documents are readable by the public unless `draft`, `suspended` or
+  `cancelled` (ADR-044).
+- Tournament subcollections are hidden for draft/suspended/cancelled tournaments.
+- `tournamentSlugs` is server-only on read and write.
 - Matches become public only for published statuses (`fixtures_published`,
   `league_phase`, `knockout`, `completed`, `archived`).
 - Draws become public only after `confirmedAt` is set.
@@ -408,7 +451,8 @@ notification carries an off-site link.
   hiding a link or a button is never the control. Every console page is inside a
   layout that calls `requirePageSuperAdmin()`.
 - Organiser may act only on tournaments they own; ownership is loaded from
-  Firestore.
+  Firestore. Tournament reads for non-owners return 404 so the route does not
+  reveal that the document exists.
 - The `organiser` role is granted only through the application approval flow
   (or the pre-existing Super Admin email rule for `super_admin`). There is no
   route that sets `organiser` directly.
@@ -448,6 +492,16 @@ notification carries an off-site link.
   cooldown days and a 5–300 character reason.
 - Announcement input is strict: title ≤ 100, body ≤ 2000 plain text, severity
   `info` or `important`, optional expiry, and an explicit publish decision.
+- Tournament input is strict: name 3–80, season 2–40, description 1–1000,
+  rules ≤ 4000, ordered dates with a start no more than 18 months away, a known
+  IANA timezone, an https cover/logo URL or null, one of the configured match
+  lengths, at least one platform, and ≤ 60 unique known country codes. Status,
+  owner, slug, `nameLower`, counters, capacity and timestamps are rejected by
+  the strict schema and written only by the server.
+- Registration and withdrawal accept no body fields beyond the tournament id in
+  the path; the participant identity always comes from the session.
+- Organiser participant add/remove and cancellation require the documented
+  reasons (5–300 and 10–500 characters).
 - Account actions require a 5–300 character reason. A restore also requires one.
 - Organiser profile PATCH accepts only `organisationName` (2–60 characters,
   required), an optional `bio` ≤ 300 characters and up to three links, each with
@@ -475,9 +529,11 @@ notification carries an off-site link.
   search, profile edits, avatar changes, organiser profile edits (20 per 10
   minutes), organiser logo uploads and removals (5 per hour), organiser
   application submission (5 per hour) and withdrawal, notification read marking,
-  every Super Admin mutation, settings saves, contact reveal and analytics
-  refresh (implemented); password reset, admin result entry and result-report
-  creation (later phases).
+  tournament create (10 per hour), update (30 per minute), delete/publish/
+  close/reopen/cancel (10 per hour), organiser participant add (20 per hour),
+  participant register/withdraw (10 per hour each), every Super Admin mutation,
+  settings saves, contact reveal and analytics refresh (implemented); password
+  reset, admin result entry and result-report creation (later phases).
 - Limitations: fixed windows allow boundary bursts; transactions add latency;
   counter documents need eventual cleanup; keys must be scoped carefully.
 - Rate limiting is abuse control, not a WAF or a replacement for Firebase Auth

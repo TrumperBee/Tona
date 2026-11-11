@@ -4,7 +4,7 @@
 import type { MetadataRoute } from "next";
 
 import { SITE_URL } from "@/lib/config/site";
-import { getPublicTournaments } from "@/lib/data/public-tournaments";
+import { listPublicTournamentSitemapEntries } from "@/lib/data/public-tournaments";
 
 export const revalidate = 3600;
 
@@ -27,7 +27,7 @@ const publicRoutes: ReadonlyArray<{
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const lastModified = new Date();
-  const tournaments = await getPublicTournaments(500);
+  const tournaments = await listPublicTournamentSitemapEntries(500);
 
   return [
     ...publicRoutes.map((route) => ({
@@ -38,7 +38,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     })),
     ...tournaments.map((tournament) => ({
       url: `${SITE_URL}/tournaments/${tournament.slug}`,
-      lastModified: tournament.startsAt ? new Date(tournament.startsAt) : lastModified,
+      lastModified: tournament.updatedAt
+        ? new Date(tournament.updatedAt)
+        : tournament.startsAt
+          ? new Date(tournament.startsAt)
+          : lastModified,
       changeFrequency: "weekly" as const,
       priority: 0.8,
     })),

@@ -19,7 +19,7 @@ import { buttonStyles } from "@/components/ui/button-styles";
 import { Badge, Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/data-display";
 import { UCL_LEAGUE_PHASE_36 } from "@/lib/config/formats";
-import { getPublicTournaments } from "@/lib/data/public-tournaments";
+import { listPublicTournaments } from "@/lib/data/public-tournaments";
 
 const steps = [
   {
@@ -53,7 +53,8 @@ const steps = [
 ] as const;
 
 export default async function HomePage() {
-  const tournaments = await getPublicTournaments(3);
+  const page = await listPublicTournaments({ sort: "newest" });
+  const tournaments = page.rows.slice(0, 3);
   const format = UCL_LEAGUE_PHASE_36;
 
   return (

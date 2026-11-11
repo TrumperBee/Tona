@@ -126,22 +126,37 @@ Firestore rules deny all client writes and allow reads only where documented in
 
 ## Session endpoints
 
-| Endpoint                                     | Purpose                                                          |
-| -------------------------------------------- | ---------------------------------------------------------------- |
-| `POST /api/auth/session`                     | Exchange a Firebase ID token for an http-only session cookie     |
-| `DELETE /api/auth/session`                   | Clear the cookie and revoke refresh tokens                       |
-| `POST /api/auth/register`                    | Atomic player registration (Auth user + tag + profiles)          |
-| `GET /api/gamer-tags/check`                  | Gamer-tag availability lookup                                    |
-| `GET /api/players/search`                    | Public gamer-tag prefix search                                   |
-| `PATCH /api/profile`                         | Strict edit of the signed-in player's profile                    |
-| `POST /api/profile/avatar`                   | Upload and store a verified avatar                               |
-| `DELETE /api/profile/avatar`                 | Remove the avatar and its Cloudinary asset                       |
-| `POST /api/admin-applications`               | Submit an organiser application (one pending, cooldown enforced) |
-| `POST /api/admin-applications/[id]/withdraw` | Withdraw the caller's own pending application                    |
-| `PATCH /api/organiser/profile`               | Strict edit of the caller's public organiser profile             |
-| `POST /api/organiser/logo`                   | Upload and store a verified organiser logo                       |
-| `DELETE /api/organiser/logo`                 | Remove the logo and its Cloudinary asset                         |
-| `POST /api/notifications/read`               | Mark the caller's own notifications read (ids or all)            |
+| Endpoint                                                           | Purpose                                                          |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| `POST /api/auth/session`                                           | Exchange a Firebase ID token for an http-only session cookie     |
+| `DELETE /api/auth/session`                                         | Clear the cookie and revoke refresh tokens                       |
+| `POST /api/auth/register`                                          | Atomic player registration (Auth user + tag + profiles)          |
+| `GET /api/gamer-tags/check`                                        | Gamer-tag availability lookup                                    |
+| `GET /api/players/search`                                          | Public gamer-tag prefix search                                   |
+| `PATCH /api/profile`                                               | Strict edit of the signed-in player's profile                    |
+| `POST /api/profile/avatar`                                         | Upload and store a verified avatar                               |
+| `DELETE /api/profile/avatar`                                       | Remove the avatar and its Cloudinary asset                       |
+| `POST /api/admin-applications`                                     | Submit an organiser application (one pending, cooldown enforced) |
+| `POST /api/admin-applications/[id]/withdraw`                       | Withdraw the caller's own pending application                    |
+| `PATCH /api/organiser/profile`                                     | Strict edit of the caller's public organiser profile             |
+| `POST /api/organiser/logo`                                         | Upload and store a verified organiser logo                       |
+| `DELETE /api/organiser/logo`                                       | Remove the logo and its Cloudinary asset                         |
+| `POST /api/notifications/read`                                     | Mark the caller's own notifications read (ids or all)            |
+| `POST /api/organiser/tournaments`                                  | Create a draft tournament (slot limit, slug reservation)         |
+| `PATCH /api/organiser/tournaments/[id]`                            | Edit the fields the lifecycle allows                             |
+| `DELETE /api/organiser/tournaments/[id]`                           | Delete a draft; otherwise archive                                |
+| `POST /api/organiser/tournaments/[id]/publish`                     | Publish a complete draft                                         |
+| `POST /api/organiser/tournaments/[id]/close-registration`          | Close entry                                                      |
+| `POST /api/organiser/tournaments/[id]/reopen-registration`         | Reopen entry                                                     |
+| `POST /api/organiser/tournaments/[id]/cancel`                      | Cancel with a reason                                             |
+| `POST /api/organiser/tournaments/[id]/cover`                       | Upload/replace the cover image                                   |
+| `POST /api/organiser/tournaments/[id]/logo`                        | Upload/replace the tournament logo                               |
+| `POST /api/organiser/tournaments/[id]/registrations`               | Add a participant (owner-only)                                   |
+| `POST /api/organiser/tournaments/[id]/registrations/[uid]/remove`  | Remove with a reason                                             |
+| `POST /api/organiser/tournaments/[id]/registrations/[uid]/contact` | Owner-only WhatsApp link                                         |
+| `GET /api/organiser/tournaments/[id]/registrations/export`         | CSV of public registration snapshots                             |
+| `POST /api/tournaments/[id]/register`                              | Enter an open tournament (transactional)                         |
+| `POST /api/tournaments/[id]/withdraw`                              | Withdraw the caller's entry                                      |
 
 ## Super Admin endpoints
 
@@ -149,20 +164,24 @@ All routes below require the configured Super Admin, a same-origin request, a
 rate-limit budget and a writable platform (maintenance mode exempts the Super
 Admin). Every write is validated with Zod and audited.
 
-| Endpoint                                             | Purpose                               |
-| ---------------------------------------------------- | ------------------------------------- |
-| `PATCH /api/super-admin/settings`                    | Save platform settings                |
-| `POST /api/super-admin/users/[uid]/status`           | Suspend, ban or restore an account    |
-| `POST /api/super-admin/users/[uid]/role`             | Revoke organiser privileges           |
-| `POST /api/super-admin/users/[uid]/contact`          | Reveal a WhatsApp number (audited)    |
-| `POST /api/super-admin/applications/[id]/approve`    | Approve an organiser application      |
-| `POST /api/super-admin/applications/[id]/reject`     | Reject an organiser application       |
-| `POST /api/super-admin/announcements`                | Create an announcement                |
-| `PATCH /api/super-admin/announcements/[id]`          | Edit an announcement                  |
-| `POST /api/super-admin/announcements/[id]/publish`   | Publish an announcement               |
-| `POST /api/super-admin/announcements/[id]/unpublish` | Unpublish an announcement             |
-| `DELETE /api/super-admin/announcements/[id]`         | Soft-delete an announcement           |
-| `POST /api/super-admin/analytics/refresh`            | Recompute the cached platform summary |
+| Endpoint                                             | Purpose                                 |
+| ---------------------------------------------------- | --------------------------------------- |
+| `PATCH /api/super-admin/settings`                    | Save platform settings                  |
+| `POST /api/super-admin/users/[uid]/status`           | Suspend, ban or restore an account      |
+| `POST /api/super-admin/users/[uid]/role`             | Revoke organiser privileges             |
+| `POST /api/super-admin/users/[uid]/contact`          | Reveal a WhatsApp number (audited)      |
+| `POST /api/super-admin/applications/[id]/approve`    | Approve an organiser application        |
+| `POST /api/super-admin/applications/[id]/reject`     | Reject an organiser application         |
+| `POST /api/super-admin/announcements`                | Create an announcement                  |
+| `PATCH /api/super-admin/announcements/[id]`          | Edit an announcement                    |
+| `POST /api/super-admin/announcements/[id]/publish`   | Publish an announcement                 |
+| `POST /api/super-admin/announcements/[id]/unpublish` | Unpublish an announcement               |
+| `DELETE /api/super-admin/announcements/[id]`         | Soft-delete an announcement             |
+| `POST /api/super-admin/analytics/refresh`            | Recompute the cached platform summary   |
+| `POST /api/super-admin/tournaments/[id]/suspend`     | Suspend a tournament                    |
+| `POST /api/super-admin/tournaments/[id]/unsuspend`   | Resume a suspended tournament           |
+| `POST /api/super-admin/tournaments/[id]/cancel`      | Cancel a tournament with a reason       |
+| `POST /api/super-admin/tournaments/[id]/transfer`    | Transfer ownership to another organiser |
 
 Every state-changing route rejects cross-origin requests with `assertSameOrigin()` from
 `src/lib/security/same-origin.ts`, validates its body with Zod and applies the Firestore
@@ -181,6 +200,7 @@ src/
     auth/         Roles, session cookie, guards, role/status administration, audit
     applications/ Organiser application submission, review and cooldown
     organiser/    Organiser profile, dashboard overview, owned-tournament list, workspace access
+    tournament/   Tournament creation, editable fields, lifecycle, registration state and images
     notifications/ Server-written in-app notifications, inbox and bell
     validation/   Zod schemas
     audit/        Append-only audit log writer

@@ -56,10 +56,18 @@ async function clearEmulator(): Promise<void> {
     await auth.deleteUsers(users.users.map((user) => user.uid));
   }
 
+  // Tournaments own registration subcollections in Phase 8, so they are
+  // removed recursively before the rest of the top-level collections.
+  const tournaments = await firestore.collection(paths.tournaments()).listDocuments();
+  for (const tournament of tournaments) {
+    await firestore.recursiveDelete(tournament);
+  }
+
   for (const collection of [
     paths.users(),
     paths.publicProfiles(),
     paths.gamerTags(),
+    paths.tournamentSlugs(),
     paths.adminApplications(),
     paths.organiserProfiles(),
     paths.tournaments(),
@@ -202,42 +210,70 @@ async function auditEntries(): Promise<Array<{ id: string; data: AuditLogDocumen
 
 interface TournamentSeed {
   readonly ownerUid: string;
+  readonly ownerTag?: string;
+  readonly organisationName?: string;
   readonly status: TournamentStatus;
   readonly name: string;
   readonly slug?: string;
-  readonly startsAt?: Date;
+  readonly startsAt?: Date | null;
   readonly updatedAt?: Date;
   readonly registrationCount?: number;
   readonly maxParticipants?: number;
+  readonly registrationOpensAt?: Date | null;
   readonly registrationClosesAt?: Date | null;
+  readonly allowedPlatforms?: readonly string[] | null;
+  readonly allowedCountries?: readonly string[] | null;
+  readonly suspendedFrom?: TournamentStatus | null;
 }
 
-/** Writes a real tournament document the way the (future) creation flow will. */
+/**
+ * Writes a real Phase 8 tournament document the way the creation flow does.
+ * Owner snapshots are copied at creation so public surfaces never need a join.
+ */
 async function createTournament(tournamentId: string, seed: TournamentSeed): Promise<void> {
   const now = new Date();
-  await getFirebaseAdminFirestore()
-    .doc(paths.tournament(tournamentId))
-    .set({
-      ownerUid: seed.ownerUid,
-      slug: seed.slug ?? seed.name.toLowerCase().replaceAll(" ", "-"),
-      name: seed.name,
-      description: "Integration test competition.",
-      gameId: "efootball",
-      formatId: "ucl-league-phase-36",
-      coverImageUrl: null,
-      rulesSummary: "Fair play above everything.",
-      matchDurationMinutes: 10,
-      timezone: "Africa/Nairobi",
-      registrationOpensAt: new Date(now.getTime() - 7 * 86_400_000),
-      registrationClosesAt: seed.registrationClosesAt ?? null,
-      startsAt: seed.startsAt ?? new Date(now.getTime() + 7 * 86_400_000),
-      maxParticipants: seed.maxParticipants ?? 36,
-      registrationCount: seed.registrationCount ?? 0,
-      status: seed.status,
-      season: "2026",
-      createdAt: now,
-      updatedAt: seed.updatedAt ?? now,
-    });
+  const slug = seed.slug ?? seed.name.toLowerCase().replaceAll(" ", "-");
+  const firestore = getFirebaseAdminFirestore();
+
+  await firestore.doc(paths.tournament(tournamentId)).set({
+    ownerUid: seed.ownerUid,
+    ownerTag: seed.ownerTag ?? "organiser",
+    organisationName: seed.organisationName ?? "Organisation",
+    slug,
+    name: seed.name,
+    nameLower: seed.name.toLowerCase(),
+    description: "Integration test competition.",
+    gameId: "efootball",
+    formatId: "ucl-league-phase-36",
+    coverImageUrl: null,
+    coverImagePublicId: null,
+    logoUrl: null,
+    logoPublicId: null,
+    rules: "Fair play above everything.",
+    matchDurationMinutes: 10,
+    timezone: "Africa/Nairobi",
+    registrationOpensAt: new Date(now.getTime() - 7 * 86_400_000),
+    registrationClosesAt:
+      seed.registrationClosesAt === undefined ? null : seed.registrationClosesAt,
+    startsAt:
+      seed.startsAt === undefined ? new Date(now.getTime() + 7 * 86_400_000) : seed.startsAt,
+    maxParticipants: seed.maxParticipants ?? 36,
+    registrationCount: seed.registrationCount ?? 0,
+    status: seed.status,
+    suspendedFrom: seed.suspendedFrom ?? null,
+    season: "2026",
+    allowedPlatforms: seed.allowedPlatforms ?? null,
+    allowedCountries: seed.allowedCountries ?? null,
+    createdAt: now,
+    updatedAt: seed.updatedAt ?? now,
+  });
+
+  // The creation flow reserves every slug in the same transaction.
+  await firestore.doc(paths.tournamentSlug(slug)).set({
+    tournamentId,
+    name: seed.name,
+    createdAt: now,
+  });
 }
 
 beforeEach(async () => {
@@ -534,9 +570,10 @@ describe("public organiser page data", () => {
     expect(empty.hasMore).toBe(false);
 
     const first = await getPublicTournamentsByOwner(organiser.uid, null);
-    // Cancelled competitions stay listed; drafts never are.
+    // Cancelled competitions are excluded like drafts; ADR-044 keeps them as
+    // direct-link notice pages only. The cancelled cup (latest updatedAt)
+    // would otherwise sort first, so its absence proves the exclusion.
     expect(first.rows.map((row) => row.slug)).toEqual([
-      "cancelled-cup",
       "public-cup-9",
       "public-cup-8",
       "public-cup-7",
@@ -545,12 +582,14 @@ describe("public organiser page data", () => {
       "public-cup-4",
       "public-cup-3",
       "public-cup-2",
+      "public-cup-1",
     ]);
+    expect(first.rows.map((row) => row.slug)).not.toContain("cancelled-cup");
     expect(first.hasMore).toBe(true);
     expect(first.rows.every((row) => row.ownerUid === organiser.uid)).toBe(true);
 
     const second = await getPublicTournamentsByOwner(organiser.uid, first.lastId);
-    expect(second.rows.map((row) => row.slug)).toEqual(["public-cup-1", "public-cup-0"]);
+    expect(second.rows.map((row) => row.slug)).toEqual(["public-cup-0"]);
     expect(second.hasMore).toBe(false);
 
     // An unknown cursor degrades to an honest empty page rather than crashing.

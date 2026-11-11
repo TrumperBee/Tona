@@ -3,12 +3,18 @@
 // The layout above renders the guard, header, lifecycle stepper and tool tabs.
 // This page answers one question honestly: what is the next real step for this
 // competition right now?
-import { ArrowRight, CalendarClock, CircleDot, Info } from "lucide-react";
+import { ArrowRight, CalendarClock, CircleDot, Info, TriangleAlert } from "lucide-react";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 
+import {
+  PrimaryLifecycleActions,
+  TournamentDangerZone,
+} from "@/components/organiser/tournament-lifecycle-actions";
 import { buttonStyles } from "@/components/ui/button-styles";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/data-display";
+import { AuthorizationError, NotFoundError } from "@/lib/auth/guards";
 import { TOURNAMENT_STATUS_META } from "@/lib/config/tournament-status";
 import { getTournamentWorkspace } from "@/lib/organiser/workspace-access";
 import { formatDate, formatDateTime } from "@/lib/utils/dates";
@@ -36,12 +42,12 @@ function nextSteps(id: string, tournament: TournamentDocument): readonly Checkli
         {
           label: "Complete the competition details",
           href: `${base}/settings`,
-          note: "Name, game, format, dates, rules and field size. The details tool opens with the organiser tools.",
+          note: "Description, rules, schedule, branding and entry restrictions. Publishing requires the description, rules and all three schedule moments.",
         },
         {
-          label: "Open registration",
+          label: "Publish when it is ready",
           href: null,
-          note: "Opening registration is a recorded status change; it arrives with the organiser tools.",
+          note: "Publishing moves the competition to registration open immediately and lists it publicly. Use the action below when every detail is right.",
         },
       ];
     case "registration_open":
@@ -49,14 +55,14 @@ function nextSteps(id: string, tournament: TournamentDocument): readonly Checkli
         {
           label: "Monitor registrations",
           href: `${base}/registrations`,
-          note: `${tournament.registrationCount} / ${tournament.maxParticipants} entrants recorded by the platform.`,
+          note: `${tournament.registrationCount} / ${tournament.maxParticipants} entrants recorded by the platform. Players can withdraw on their own while registration is open.`,
         },
         {
           label: "Close registration when the field is set",
           href: null,
           note: tournament.registrationClosesAt
-            ? `The published window closes ${formatDateTime(tournament.registrationClosesAt.toDate())}.`
-            : "No closing time is published yet. Closing registration is a recorded status change.",
+            ? `The published window closes ${formatDateTime(tournament.registrationClosesAt.toDate())} — or close it now with the action below.`
+            : "No closing time is published yet. Close registration with the action below.",
         },
       ];
     case "registration_closed":
@@ -64,7 +70,10 @@ function nextSteps(id: string, tournament: TournamentDocument): readonly Checkli
         {
           label: "Confirm the field and draw the pots",
           href: `${base}/pots`,
-          note: `${tournament.registrationCount} entrants are recorded. The four pots of nine are confirmed before fixtures.`,
+          note:
+            tournament.registrationCount >= tournament.maxParticipants
+              ? `The field is complete: ${tournament.registrationCount} of ${tournament.maxParticipants} places taken. The pots tool is the next step.`
+              : `${tournament.registrationCount} of ${tournament.maxParticipants} places are taken. The pots tool is the next step; registration can be reopened below while the pots are not confirmed.`,
         },
       ];
     case "pots_confirmed":
@@ -134,7 +143,19 @@ function nextSteps(id: string, tournament: TournamentDocument): readonly Checkli
 
 export default async function TournamentOverviewPage({ params }: PageProps) {
   const { id } = await params;
-  const { tournament } = await getTournamentWorkspace(id);
+
+  let tournament: TournamentDocument;
+
+  try {
+    tournament = (await getTournamentWorkspace(id)).tournament;
+  } catch (error) {
+    if (error instanceof AuthorizationError || error instanceof NotFoundError) {
+      notFound();
+    }
+
+    throw error;
+  }
+
   const meta = TOURNAMENT_STATUS_META[tournament.status];
   const steps = nextSteps(id, tournament);
 
@@ -187,6 +208,13 @@ export default async function TournamentOverviewPage({ params }: PageProps) {
               </li>
             ))}
           </ul>
+
+          <div className="mt-5 border-t border-white/10 pt-5">
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-eyebrow text-grey-500">
+              Lifecycle action
+            </h3>
+            <PrimaryLifecycleActions tournamentId={id} status={tournament.status} />
+          </div>
         </CardContent>
       </Card>
 
@@ -248,6 +276,22 @@ export default async function TournamentOverviewPage({ params }: PageProps) {
           />
         )}
       </div>
+
+      <Card variant="outline" className="border-danger/20">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-danger-soft">
+            <TriangleAlert aria-hidden="true" className="h-4 w-4" />
+            Danger zone
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <TournamentDangerZone
+            tournamentId={id}
+            status={tournament.status}
+            name={tournament.name}
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 }

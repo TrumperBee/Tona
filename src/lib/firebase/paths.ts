@@ -13,6 +13,7 @@ export const COLLECTIONS = {
   applicationState: "applicationState",
   organiserProfiles: "organiserProfiles",
   tournaments: "tournaments",
+  tournamentSlugs: "tournamentSlugs",
   announcements: "announcements",
   hallOfFame: "hallOfFame",
   auditLogs: "auditLogs",
@@ -99,6 +100,8 @@ export const paths = {
 
   tournaments: () => COLLECTIONS.tournaments,
   tournament: (tournamentId: string) => documentPath(COLLECTIONS.tournaments, tournamentId),
+  tournamentSlugs: () => COLLECTIONS.tournamentSlugs,
+  tournamentSlug: (slug: string) => documentPath(COLLECTIONS.tournamentSlugs, slug),
   tournamentRegistrations: (tournamentId: string) =>
     collectionPath(COLLECTIONS.tournaments, tournamentId, SUBCOLLECTIONS.registrations),
   tournamentRegistration: (tournamentId: string, uid: string) =>

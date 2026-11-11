@@ -19,6 +19,9 @@ service cloud.firestore {
       return emailVerified() && request.auth.token.role == 'super_admin';
     }
 
+    // Cancelled is deliberately NOT public: it is a terminal state whose
+    // records stay readable only to the owner and the Super Admin (and to
+    // server-rendered notice pages). ADR-044 documents this revision.
     function isPublicTournamentStatus(status) {
       return status in [
         'registration_open',
@@ -28,8 +31,7 @@ service cloud.firestore {
         'league_phase',
         'knockout',
         'completed',
-        'archived',
-        'cancelled'
+        'archived'
       ];
     }
 
@@ -39,8 +41,7 @@ service cloud.firestore {
         'league_phase',
         'knockout',
         'completed',
-        'archived',
-        'cancelled'
+        'archived'
       ];
     }
 
@@ -106,6 +107,12 @@ service cloud.firestore {
       allow read: if false;
     }
 
+    // Tournament slug reservation: server-only on both read and write. The
+    // document id is the slug; clients learn slugs from tournament documents.
+    match /tournamentSlugs/{slug} {
+      allow read: if false;
+    }
+
     // Applicant or Super Admin only.
     match /adminApplications/{applicationId} {
       allow read: if signedIn() &&
@@ -118,8 +125,8 @@ service cloud.firestore {
       allow read: if false;
     }
 
-    // Tournaments are public once they leave draft and are not suspended.
-    // Owners and the Super Admin always see their own records.
+    // Tournaments are public once they leave draft and are neither suspended
+    // nor cancelled. Owners and the Super Admin always see their own records.
     match /tournaments/{tournamentId} {
       allow read: if isPublicTournamentStatus(resource.data.status) ||
         (signedIn() && resource.data.ownerUid == request.auth.uid) ||
