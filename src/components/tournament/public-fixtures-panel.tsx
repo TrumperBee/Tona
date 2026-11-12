@@ -6,6 +6,7 @@
 // result exists, and the "My matches" tab appears only when the signed-in
 // viewer has a fixture in this competition.
 import { CalendarDays, Swords } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 
 import { Badge } from "@/components/ui/card";
@@ -18,6 +19,7 @@ export interface PublicFixturesPanelProps {
   readonly matches: readonly PublicFixtureRow[];
   readonly matchdays: readonly PublicMatchdayWindow[];
   readonly viewerUid: string | null;
+  readonly tournamentSlug: string;
   readonly timezone: string;
 }
 
@@ -38,10 +40,12 @@ function scoreLabel(row: PublicFixtureRow): string {
 function FixtureCard({
   row,
   viewerUid,
+  tournamentSlug,
   timezone,
 }: {
   readonly row: PublicFixtureRow;
   readonly viewerUid: string | null;
+  readonly tournamentSlug: string;
   readonly timezone: string;
 }) {
   const viewerHome = viewerUid !== null && row.homeUid === viewerUid;
@@ -49,36 +53,41 @@ function FixtureCard({
   const mine = viewerHome || viewerAway;
 
   return (
-    <li
-      className={`rounded-lg border p-3 ${
-        mine ? "border-electric-400/40 bg-electric-500/[0.06]" : "border-white/10 bg-navy-950/50"
-      }`}
-    >
-      <div className="flex items-center gap-2">
-        <p className="min-w-0 flex-1 truncate text-sm font-semibold text-grey-100">{row.homeTag}</p>
-        <span className="shrink-0 rounded bg-white/[0.06] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-grey-200">
-          {scoreLabel(row)}
-        </span>
-        <p className="min-w-0 flex-1 truncate text-right text-sm font-semibold text-grey-100">
-          {row.awayTag}
-        </p>
-      </div>
-      <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-[11px] text-grey-500">
-        <span className="flex items-center gap-1.5">
-          <CalendarDays aria-hidden="true" className="h-3 w-3" />
-          {row.scheduledAt
-            ? formatDate(row.scheduledAt, { timeZone: timezone })
-            : "Date to be confirmed"}
-        </span>
-        <span className="flex items-center gap-1.5">
-          {mine ? <Badge tone="info">{viewerHome ? "Home" : "Away"}</Badge> : null}
-          {row.status === "completed" ? (
-            <Badge tone="success">Completed</Badge>
-          ) : (
-            <Badge tone="neutral">Scheduled</Badge>
-          )}
-        </span>
-      </div>
+    <li>
+      <Link
+        href={`/tournaments/${tournamentSlug}/matches/${row.id}`}
+        className={`block rounded-lg border p-3 transition-colors hover:border-electric-400/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-400 ${
+          mine ? "border-electric-400/40 bg-electric-500/[0.06]" : "border-white/10 bg-navy-950/50"
+        }`}
+      >
+        <div className="flex items-center gap-2">
+          <p className="min-w-0 flex-1 truncate text-sm font-semibold text-grey-100">
+            {row.homeTag}
+          </p>
+          <span className="shrink-0 rounded bg-white/[0.06] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-grey-200">
+            {scoreLabel(row)}
+          </span>
+          <p className="min-w-0 flex-1 truncate text-right text-sm font-semibold text-grey-100">
+            {row.awayTag}
+          </p>
+        </div>
+        <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-[11px] text-grey-500">
+          <span className="flex items-center gap-1.5">
+            <CalendarDays aria-hidden="true" className="h-3 w-3" />
+            {row.scheduledAt
+              ? formatDate(row.scheduledAt, { timeZone: timezone })
+              : "Date to be confirmed"}
+          </span>
+          <span className="flex items-center gap-1.5">
+            {mine ? <Badge tone="info">{viewerHome ? "Home" : "Away"}</Badge> : null}
+            {row.status === "completed" ? (
+              <Badge tone="success">Completed</Badge>
+            ) : (
+              <Badge tone="neutral">Scheduled</Badge>
+            )}
+          </span>
+        </div>
+      </Link>
     </li>
   );
 }
@@ -87,6 +96,7 @@ export function PublicFixturesPanel({
   matches,
   matchdays,
   viewerUid,
+  tournamentSlug,
   timezone,
 }: PublicFixturesPanelProps) {
   const [selected, setSelected] = useState("1");
@@ -124,7 +134,13 @@ export function PublicFixturesPanel({
           ) : (
             <ul className="grid gap-2 md:grid-cols-2">
               {dayMatches.map((match) => (
-                <FixtureCard key={match.id} row={match} viewerUid={viewerUid} timezone={timezone} />
+                <FixtureCard
+                  key={match.id}
+                  row={match}
+                  viewerUid={viewerUid}
+                  tournamentSlug={tournamentSlug}
+                  timezone={timezone}
+                />
               ))}
             </ul>
           )}
@@ -149,7 +165,13 @@ export function PublicFixturesPanel({
           </p>
           <ul className="grid gap-2 md:grid-cols-2">
             {mine.map((match) => (
-              <FixtureCard key={match.id} row={match} viewerUid={viewerUid} timezone={timezone} />
+              <FixtureCard
+                key={match.id}
+                row={match}
+                viewerUid={viewerUid}
+                tournamentSlug={tournamentSlug}
+                timezone={timezone}
+              />
             ))}
           </ul>
           {mine.length > 0 ? (

@@ -28,6 +28,7 @@ import { cache } from "react";
 import { OrganisedBy } from "@/components/tournament/organised-by";
 import { PublicFixturesPanel } from "@/components/tournament/public-fixtures-panel";
 import { PublicPotsPanel } from "@/components/tournament/public-pots-panel";
+import { PublicResultsPanel } from "@/components/tournament/public-results-panel";
 import { PublicSectionTabs } from "@/components/tournament/public-section-tabs";
 import { RegisterAction } from "@/components/tournament/register-action";
 import { TournamentDates } from "@/components/tournament/tournament-dates";
@@ -246,14 +247,21 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
               matches={publicFixtures.matches}
               matchdays={publicFixtures.matchdays}
               viewerUid={user?.userId ?? null}
+              tournamentSlug={tournament.slug}
               timezone={timezone}
             />
+          ) : null
+        }
+        results={
+          publicFixtures ? (
+            <PublicResultsPanel matches={publicFixtures.matches} tournamentSlug={tournament.slug} />
           ) : null
         }
       >
         <section className="border-b border-white/10">
           <div className="container grid gap-6 py-10 lg:grid-cols-[1.4fr_0.6fr] lg:items-start">
             <div className="space-y-6">
+              <h2 className="sr-only">Competition details</h2>
               <Card variant="elevated">
                 <CardHeader>
                   <CardTitle>Schedule</CardTitle>
@@ -273,7 +281,7 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
                   <CardTitle>Competition facts</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     {facts.map((fact) => {
                       const Icon = fact.icon;
 
@@ -287,17 +295,15 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
                             className="mt-0.5 h-4 w-4 shrink-0 text-grey-500"
                           />
                           <div className="min-w-0">
-                            <dt className="text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
+                            <p className="text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
                               {fact.label}
-                            </dt>
-                            <dd className="mt-0.5 text-sm font-medium text-grey-100">
-                              {fact.value}
-                            </dd>
+                            </p>
+                            <p className="mt-0.5 text-sm font-medium text-grey-100">{fact.value}</p>
                           </div>
                         </div>
                       );
                     })}
-                  </dl>
+                  </div>
 
                   {tournament.allowedPlatforms || tournament.allowedCountries ? (
                     <div className="mt-4 space-y-3 rounded-lg border border-white/10 bg-navy-950/50 p-3.5">

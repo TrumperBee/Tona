@@ -7,6 +7,7 @@ import { CalendarDays, Swords, Trophy } from "lucide-react";
 import Link from "next/link";
 
 import { PageHeader, SectionHeading } from "@/components/shared/page-header";
+import { ReportProblemButton } from "@/components/player/report-problem-button";
 import { buttonStyles } from "@/components/ui/button-styles";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, EmptyState, StatCard } from "@/components/ui/data-display";
@@ -150,6 +151,26 @@ export default async function FixturesPage() {
                               {fixture.homeTag} vs {fixture.awayTag}
                             </p>
                           </div>
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-3">
+                          <Link
+                            href={`/tournaments/${fixture.tournamentSlug}/matches/${fixture.matchId}`}
+                            className="text-xs font-semibold text-electric-300 underline-offset-4 hover:underline"
+                          >
+                            Open match page
+                          </Link>
+                          {fixture.status === "completed" ? (
+                            <ReportProblemButton
+                              tournamentId={fixture.tournamentId}
+                              matchId={fixture.matchId}
+                              matchLabel={`${fixture.homeTag} ${score ?? ""} ${fixture.awayTag}`}
+                            />
+                          ) : (
+                            <p className="text-[11px] text-grey-500">
+                              A problem can be reported after a result is recorded.
+                            </p>
+                          )}
                         </div>
                       </CardContent>
                     </Card>

@@ -3,25 +3,61 @@
 // Reads the server-written private profile, public profile and membership
 // snapshots. Statistics are real values (zero for a new account), never sample
 // numbers. The avatar control uploads through the server route.
-import { CalendarDays, Compass, Gamepad2, Globe2, Pencil, Trophy } from "lucide-react";
+import { CalendarDays, Gamepad2, Globe2, Pencil, Swords, Trophy } from "lucide-react";
 import Link from "next/link";
 
 import { AvatarUploader } from "@/components/profile/avatar-uploader";
 import { PageHeader, SectionHeading } from "@/components/shared/page-header";
+import { CursorNav } from "@/components/super-admin/cursor-nav";
 import { buttonStyles } from "@/components/ui/button-styles";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { EmptyState, StatCard } from "@/components/ui/data-display";
+import { Avatar, EmptyState, StatCard } from "@/components/ui/data-display";
 import { requirePageSignedIn } from "@/lib/auth/page-access";
 import { countryFlag, countryName } from "@/lib/config/countries";
 import { getGame, PLATFORMS } from "@/lib/config/games";
 import { TOURNAMENT_STATUS_META } from "@/lib/config/tournament-status";
+import { getPlayerMatchHistory, type MatchOutcome } from "@/lib/data/player-match-history";
 import { getOwnProfile } from "@/lib/profile/server";
+import { firstQueryValue } from "@/lib/super-admin/query";
+import { formatDate } from "@/lib/utils/dates";
 
 export const metadata = { title: "Profile" };
 
-export default async function ProfilePage() {
+const OUTCOME_META: Record<
+  MatchOutcome,
+  { readonly label: string; readonly tone: "success" | "neutral" | "danger" }
+> = {
+  win: { label: "Win", tone: "success" },
+  draw: { label: "Draw", tone: "neutral" },
+  loss: { label: "Loss", tone: "danger" },
+};
+
+interface ProfilePageProps {
+  readonly searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+function historyHref(cursor: {
+  readonly after?: string | null;
+  readonly before?: string | null;
+}): string {
+  const params = new URLSearchParams();
+
+  if (cursor.after) params.set("after", cursor.after);
+  if (cursor.before) params.set("before", cursor.before);
+
+  const query = params.toString();
+  return query ? `/dashboard/profile?${query}` : "/dashboard/profile";
+}
+
+export default async function ProfilePage({ searchParams }: ProfilePageProps) {
   const user = await requirePageSignedIn("/dashboard/profile");
-  const profile = await getOwnProfile(user.userId);
+  const params = await searchParams;
+  const after = firstQueryValue(params.after);
+  const before = firstQueryValue(params.before);
+  const [profile, history] = await Promise.all([
+    getOwnProfile(user.userId),
+    getPlayerMatchHistory(user.userId, { after, before }),
+  ]);
 
   if (!profile) {
     return (
@@ -187,13 +223,105 @@ export default async function ProfilePage() {
       </section>
 
       <section>
-        <SectionHeading title="Match history" />
+        <SectionHeading
+          title="Match history"
+          description="Completed matches from every competition, newest recorded first. Only results entered by a tournament admin appear here."
+        />
         <div className="mt-5">
-          <EmptyState
-            icon={Compass}
-            eyebrow="Match history"
-            title="No recorded matches yet"
-            description="History is built from results entered by tournament admins. It stays empty until your first real match is recorded."
+          {history.rows.length === 0 ? (
+            <EmptyState
+              icon={Swords}
+              eyebrow="Match history"
+              title="No recorded matches yet"
+              description="History is built from results entered by tournament admins. It stays empty until your first real match is recorded."
+            />
+          ) : (
+            <ul className="space-y-3">
+              {history.rows.map((match) => {
+                const outcome = OUTCOME_META[match.outcome];
+
+                return (
+                  <li key={match.cursor}>
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <CardTitle className="text-base">
+                              <Link
+                                href={`/tournaments/${match.tournamentSlug}`}
+                                className="underline-offset-4 hover:underline"
+                              >
+                                {match.tournamentName}
+                              </Link>
+                            </CardTitle>
+                            <p className="mt-1 text-xs text-grey-500">
+                              Matchday {match.matchday}
+                              {match.recordedAt
+                                ? ` · recorded ${formatDate(match.recordedAt)}`
+                                : ""}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge tone={outcome.tone}>{outcome.label}</Badge>
+                            <Badge tone={match.isHome ? "info" : "neutral"}>
+                              {match.isHome ? "Home" : "Away"}
+                            </Badge>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <Avatar
+                            name={match.opponentTag}
+                            src={match.opponentAvatarUrl}
+                            size="sm"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
+                              Opponent
+                            </p>
+                            <Link
+                              href={`/players/${encodeURIComponent(match.opponentTag)}`}
+                              className="truncate text-sm font-semibold text-grey-100 underline-offset-4 hover:underline"
+                            >
+                              @{match.opponentTag}
+                            </Link>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
+                              Score
+                            </p>
+                            <p className="mt-0.5 font-display text-lg font-semibold tabular-nums text-white">
+                              {match.homeGoals}–{match.awayGoals}
+                            </p>
+                            <Link
+                              href={`/tournaments/${match.tournamentSlug}/matches/${match.matchId}`}
+                              className="text-[11px] font-semibold text-electric-300 underline-offset-4 hover:underline"
+                            >
+                              Open match
+                            </Link>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          <CursorNav
+            previousHref={
+              (after || before) && history.firstCursor
+                ? historyHref({ before: history.firstCursor })
+                : null
+            }
+            nextHref={
+              history.hasMore && history.lastCursor
+                ? historyHref({ after: history.lastCursor })
+                : null
+            }
+            summary={`Showing ${history.rows.length} of ${history.total} recorded matches.`}
           />
         </div>
       </section>

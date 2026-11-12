@@ -21,9 +21,9 @@
 | 7   | Organiser workspace                                | Organiser profile + settings, public organiser page, dashboard, owned-tournament list, tournament workspace, cancelled   | Done        |
 | 8   | Tournament creation and registration               | Create/edit/publish tournaments, registrations, participant lists                                                        | Done        |
 | 8B  | Auth hardening patch                               | Length-only password policy, email verification removed, Super Admin pinned by email + uid                               | Done        |
-| 9   | Pot allocation (manual + shuffle)                  | Plain pots (no country restrictions), seeded draw, admin shuffle, audit trail                                            | Not started |
-| 10  | Fixture engine                                     | Pure constraint-based generator, validator, matchdays, fixture UI                                                        | Not started |
-| 11  | Admin result entry, corrections and result reports | Admin-only score entry, corrections with reason and audit, player "Report a problem" channel                             | Not started |
+| 9   | Pot allocation (manual + shuffle)                  | Plain pots (no country restrictions), seeded draw, admin shuffle, audit trail                                            | Done        |
+| 10  | Fixture engine                                     | Pure constraint-based generator, validator, matchdays, fixture UI                                                        | Done        |
+| 11  | Admin result entry, corrections and result reports | Admin-only score entry, corrections with reason and audit, player "Report a problem" channel                             | Done        |
 | 12  | Standings                                          | Pure standings calculation, tiebreakers, snapshots, qualification bands                                                  | Not started |
 | 13  | Knockout stages                                    | Play-off pairings, bracket, progression, final                                                                           | Not started |
 | 14  | WhatsApp contact                                   | E.164 handling, templates, click-to-chat links, reminders                                                                | Not started |

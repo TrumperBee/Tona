@@ -1296,3 +1296,127 @@ set of tournament reads and one set of public-profile reads, regardless of how m
 tournaments the player has entered. Visibility is enforced twice: the rules protect
 client reads, and the data module enforces the same rule for Admin SDK reads. The
 composite index must be deployed with `firebase deploy --only firestore:indexes`.
+
+---
+
+## ADR-056 - Results are an owner-only transaction, never a player submission
+
+**Date:** 2026-11-12
+**Status:** Accepted
+
+**Context.** Phase 11 needs final scores for 144 league matches. Allowing players to
+submit or confirm a score would add a pending-result state, disputes and a second
+source of truth. The league also needs to know when the first real result exists.
+
+**Decision.** Only the tournament owner or a Super Admin records a result. The
+`/api/organiser/tournaments/[id]/results/enter`, `/bulk`, `/correct` and `/clear`
+routes sit behind the same-origin, organiser role, rate-limit, platform-write and
+Zod gates as every other organiser mutation. `src/lib/tournament/result-state.ts`
+holds the pure transition rules and `src/lib/tournament/results.ts` applies them in
+one Firestore transaction: it re-reads the tournament and each match, requires
+`stage: "league"`, writes the result and `completed` status, increments or
+decrements `leagueMatchesCompleted`, and moves the tournament between
+`fixtures_published` and `league_phase`. A second entry finds a completed match and
+returns 409 with a "use correct" hint. Concurrency is left to Firestore: the losing
+transaction retries, sees the committed result and is rejected.
+
+**Consequences.** There is exactly one writer and one result shape. Entry and the
+counter can never disagree. Bulk entry accepts at most 18 rows and is
+all-or-nothing. Audit entries and both player notifications run after the
+transaction, so a notification failure never rolls a recorded result back. The
+`onLeagueResultsChanged(tournamentId)` hook is called after every successful
+mutation; Phase 12 replaces its no-op body with standings recalculation.
+
+---
+
+## ADR-057 - Corrections and clears require a reason and preserve history
+
+**Date:** 2026-11-12
+**Status:** Accepted
+
+**Context.** A mistyped score must be fixable, but the league table and public
+match page must never silently change. Deleting a result would erase the fact that
+an admin had recorded one.
+
+**Decision.** `correct` keeps `enteredBy` and `enteredAt`, sets `lastEditedBy` and
+`lastEditedAt`, increments `editCount`, and requires a 5–300 character reason.
+`clear` writes `result: null` and `status: "scheduled"`, requires a reason, and
+decrements `leagueMatchesCompleted`. When the counter reaches zero the tournament
+returns to `fixtures_published`. Both actions write an audit entry containing the
+before and after scores, the reason and the actor. Both notify the two players.
+
+**Consequences.** Public and organiser pages can show who entered and who last
+corrected a result. The audit log is the permanent record. Clearing has no
+separate "deleted result" document; the audit entry carries the previous score.
+
+---
+
+## ADR-058 - Result reports are participant-only messages with one open report per match
+
+**Date:** 2026-11-12
+**Status:** Accepted
+
+**Context.** Players need a way to flag a wrong score without gaining any result
+authority. The organiser needs a reviewable queue rather than a stream of
+notifications.
+
+**Decision.** A completed match's two participants may open a
+`resultReports/{id}` document with a 10–500 character reason. The server re-checks
+participation, the completed status and the tournament's published state, then
+rejects a second `open` report from the same player for the same match. Creation
+notifies the organiser. The organiser inbox and the Super Admin cross-tournament
+collection-group inbox both support status filters and cursor pagination. Resolve
+and dismiss require a 5–300 character admin note, audit the decision and notify
+the reporter. A report never edits the result; the match link opens the results
+correction panel, which has its own reason and audit entry.
+
+**Consequences.** The report channel cannot become a shadow result workflow. The
+one-open rule keeps the queue honest while still allowing a fresh report after a
+correction. Report documents duplicate `tournamentId` so the Super Admin
+collection-group query can resolve the parent tournament.
+
+---
+
+## ADR-059 - The public results tab is derived from published matches
+
+**Date:** 2026-11-12
+**Status:** Accepted
+
+**Context.** The public tournament page already loads every published fixture.
+A separate results collection would duplicate data and could drift.
+
+**Decision.** The Results tab is a read-only projection of the same
+`getPublicFixtures` rows: only `status: "completed"` matches with two scores,
+grouped by matchday with the newest matchday first, and linked to a shareable
+`/tournaments/[slug]/matches/[matchId]` page. The match loader re-checks that the
+tournament is in a published fixture status before returning anything, and uses
+public-profile display data only. Fixture cards link to the same match page.
+
+**Consequences.** No extra query or collection is needed and a score cannot appear
+in one public surface without appearing in the other. An unplayed fixture shows
+"vs", never a placeholder score. The match page has its own metadata for sharing.
+
+---
+
+## ADR-060 - Match history is a completed-only collection-group page
+
+**Date:** 2026-11-12
+**Status:** Accepted
+
+**Context.** The profile page needs a real career history without scanning every
+tournament a player has entered. Match document ids repeat across tournaments
+(`league-md01-m01`), so a bare document-id cursor is ambiguous.
+
+**Decision.** `getPlayerMatchHistory` queries the `matches` collection group with
+`participants array-contains uid`, `status == "completed"` and
+`orderBy("updatedAt", "desc")`, ten rows per page. Cursors are opaque
+`${tournamentId}/${matchId}` strings resolved back to a document snapshot before
+`startAfter` or `endBefore`. The loader re-checks the parent tournament's public
+fixture status in code and drops hidden rows. Outcome is derived from the player's
+own side. The profile statistics numbers stay unchanged; history is a separate
+list.
+
+**Consequences.** The page uses one composite index
+(`participants CONTAINS + status ASC + updatedAt DESC`) and one public-profile read
+per opponent. Cursor pagination remains stable while new results arrive. The
+index must be deployed with `firebase deploy --only firestore:indexes`.

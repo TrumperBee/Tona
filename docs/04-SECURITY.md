@@ -103,8 +103,13 @@ standings, or claims a win without authorisation.
   and Zod validation (0–99 integers and valid tournament/match ids). The server
   recalculates standings from completed results with the Admin SDK.
 - Match documents and standings have no client write path.
-- Corrections require a reason, increment `editCount`, and write before/after
-  values to the audit log. History is retained.
+- Entry requires a scheduled league match and a tournament at
+  `fixtures_published` or `league_phase`. The match write, the
+  `leagueMatchesCompleted` counter and the tournament status change commit in
+  one transaction, so a concurrent second entry conflicts and is rejected.
+- Corrections require a reason (5–300), increment `editCount`, and write
+  before/after values to the audit log. Clears also require a reason. History is
+  retained.
 - Match results and standings become publicly readable only when the tournament
   is published, never while a draft or suspended.
 
@@ -120,8 +125,12 @@ official result through the report channel.
 - Firestore rules allow reads only to the reporter, the tournament owner or the
   Super Admin. Writes remain deny-all.
 - Creation and resolution are server-only, validated with Zod and audited.
-- The server verifies that the reporter participated in the match before writing.
-- Rate limiting is applied when the channel is implemented in Phase 11.
+- The server verifies that the caller is one of the two match participants and
+  that the match is completed in a published tournament before writing.
+- At most one `open` report is allowed per player per match. Resolution requires
+  an admin note (5–300), notifies the reporter and is audited.
+- Creation is rate limited to 5 per minute per user and resolution to 30 per
+  minute; both run behind the same-origin and platform-write gates.
 
 ### 2.6 Token and session theft
 
@@ -424,6 +433,8 @@ contact details.
 - Draws become public only after `confirmedAt` is set.
 - Fixture drafts are owner/Super Admin only.
 - Result reports are readable by the reporter, tournament owner or Super Admin.
+- Result reports are never readable through a broad collection-group query by a
+  player. The Super Admin console reads them with the Admin SDK.
 - Collection-group queries for `matches` and `registrations` require the query
   to constrain `tournamentId`; the rules resolve the parent tournament and deny
   draft/suspended results.
@@ -543,8 +554,10 @@ contact details.
   tournament create (10 per hour), update (30 per minute), delete/publish/
   close/reopen/cancel (10 per hour), organiser participant add (20 per hour),
   participant register/withdraw (10 per hour each), every Super Admin mutation,
-  settings saves, contact reveal and analytics refresh (implemented); password
-  reset, admin result entry and result-report creation (later phases).
+  settings saves, contact reveal and analytics refresh, admin result entry
+  (30 per minute), bulk entry (10 per minute), corrections and clears (20 per
+  minute each), result-report creation (5 per minute) and resolution (30 per
+  minute).
 - Limitations: fixed windows allow boundary bursts; transactions add latency;
   counter documents need eventual cleanup; keys must be scoped carefully.
 - Rate limiting is abuse control, not a WAF or a replacement for Firebase Auth
@@ -555,9 +568,10 @@ contact details.
 - Append-only entries for sign-in/role grants, account-status changes, admin
   decisions, organiser application transitions (submitted, withdrawn, approved,
   rejected, revoked), organiser profile updates, tournament changes, pot
-  draws/shuffles, fixture generation, admin
-  result entry/corrections, result-report decisions, platform settings updates,
-  contact reveals and announcement transitions.
+  draws/shuffles, fixture generation, fixture publication, reset and matchday
+  window changes, admin result entry/correction/clearing, result-report creation
+  and decisions, platform settings updates, contact reveals and announcement
+  transitions.
 - Each entry records actor UID, actor role, action, target type/id, optional
   tournament id, before/after values, reason and server timestamp.
 - Written only by `src/lib/audit/log.ts` with the Admin SDK; readable only by

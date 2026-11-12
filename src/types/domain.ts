@@ -540,6 +540,7 @@ export interface MatchDocument {
  * the audit log records any result correction separately.
  */
 export interface ResultReportDocument {
+  readonly tournamentId: string;
   readonly matchId: string;
   readonly reportedBy: string;
   readonly reportedByTag: string;

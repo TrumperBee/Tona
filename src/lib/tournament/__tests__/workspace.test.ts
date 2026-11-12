@@ -239,8 +239,8 @@ describe("getWorkspaceTabs", () => {
         "archived",
       ],
       graphics: ["fixtures_published", "league_phase", "knockout", "completed", "archived"],
-      results: ["league_phase", "knockout", "completed", "archived"],
-      "result-reports": ["league_phase", "knockout", "completed", "archived"],
+      results: ["fixtures_published", "league_phase", "knockout", "completed", "archived"],
+      "result-reports": ["fixtures_published", "league_phase", "knockout", "completed", "archived"],
       knockout: ["knockout", "completed", "archived"],
     };
 

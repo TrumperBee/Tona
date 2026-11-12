@@ -1,6 +1,6 @@
 # GCC - Competition Engine
 
-> **Status: pot allocation implemented in Phase 9; league-phase fixtures implemented in Phase 10; standings and knockout stages are still design.**
+> **Status: pot allocation implemented in Phase 9; league-phase fixtures implemented in Phase 10; results and result reports implemented in Phase 11; standings and knockout stages are still design.**
 >
 > `src/lib/engine/` contains the real, fully tested Phase 9 pot allocation (`random.ts`,
 > `pots.ts`) and the Phase 10 fixture engine (`fixtures/`). Phase 12 implements
@@ -88,6 +88,28 @@ The server boundary (`src/lib/tournament/fixtures.ts`) is the only caller in
 production. It generates the seed server-side, validates the output, stores the draft
 and recomputes a canonical SHA-256 with `node:crypto`. The client never supplies
 fixtures, tags, the seed or an algorithm version.
+
+### Result recording (implemented in Phase 11)
+
+Results are administrative facts, not engine output. The tournament owner or a
+Super Admin records a final score after the match; players never submit or
+confirm one. The pure transition rules live in
+`src/lib/tournament/result-state.ts`:
+
+```ts
+planResultTransition("enter" | "correct" | "clear", { stage, status, hasResult });
+```
+
+Only `stage: "league"` is accepted in Phase 11. Entering needs a `scheduled`
+match with no result and produces `completed`; correcting and clearing need a
+`completed` match with a result. Clearing produces `scheduled`. The server
+boundary (`src/lib/tournament/results.ts`) applies the plan inside one Firestore
+transaction per action, updates `leagueMatchesCompleted`, and moves the
+tournament between `fixtures_published` and `league_phase`. Bulk entry performs
+the same checks for up to 18 matches in one all-or-nothing transaction. A
+documented no-op `onLeagueResultsChanged(tournamentId)` is called after every
+successful enter/bulk/correct/clear so Phase 12 can recalculate standings
+without changing any route.
 
 ### Standings
 
@@ -337,6 +359,26 @@ publication and 144 fixtures afterwards; another organiser gets 404 and a plain 
 gets 403. Rules tests prove a fixture draft never leaks to a signed-in player or an
 anonymous reader, and that matchday windows are visible only while the tournament is
 published.
+
+### Phase 11 (implemented)
+
+`src/lib/tournament/result-state.test.ts` and
+`src/lib/validation/match.test.ts` cover the pure transition rules and every
+input schema (scores 0–99, bulk maximum 18, correction/clear reason 5–300,
+report reason 10–500, resolution note 5–300, unknown fields rejected).
+
+Emulator-backed integration tests (`tests/integration/results.test.ts`) prove the
+server boundary: entry writes the match, the completed counter and
+`league_phase` together; a second entry is rejected with a correction hint; two
+concurrent entries leave exactly one success and one 409; entry before
+publication is refused; corrections and clears require a reason and produce an
+audit entry with before/after values; clearing the last result returns the
+tournament to `fixtures_published`; bulk entry is all-or-nothing; another
+organiser gets 404 and a plain player gets 403; a Super Admin can act on any
+tournament; both players are notified with the recorded score; and result
+reports are participant-only, one open per player per match, resolved with a
+required note by the owner or Super Admin, with an audit entry and reporter
+notification.
 
 ### Later stages
 

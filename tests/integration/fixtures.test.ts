@@ -527,8 +527,15 @@ describe("fixture integrity", () => {
       .limit(1)
       .get();
     const match = matches.docs[0];
+    const original = match.data();
+    // Pick a player who is not part of this match, so the write is never a
+    // no-op and the schedule becomes structurally invalid.
+    const replacement = Array.from({ length: PLAYER_COUNT }, (_, index) => playerUid(index)).find(
+      (uid) => uid !== original.homeUid && uid !== original.awayUid,
+    );
+    expect(replacement).toBeDefined();
 
-    await match.ref.update({ homeUid: playerUid(1) });
+    await match.ref.update({ homeUid: replacement });
 
     const tampered = await verifyRoute(
       request("GET", `/api/organiser/tournaments/${TOURNAMENT_ID}/fixtures/verify`),

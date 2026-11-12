@@ -233,16 +233,16 @@ const TAB_AVAILABILITY: Readonly<
     notice: "Available after the draw is confirmed.",
   },
   results: {
-    statuses: ["league_phase", "knockout", "completed", "archived"],
-    notice: "Available once the league phase starts.",
+    statuses: ["fixtures_published", "league_phase", "knockout", "completed", "archived"],
+    notice: "Available once fixtures are published.",
   },
   knockout: {
     statuses: ["knockout", "completed", "archived"],
     notice: "Available after the league phase completes.",
   },
   "result-reports": {
-    statuses: ["league_phase", "knockout", "completed", "archived"],
-    notice: "Available once results are recorded.",
+    statuses: ["fixtures_published", "league_phase", "knockout", "completed", "archived"],
+    notice: "Available once fixtures are published.",
   },
   announcements: {
     statuses: [

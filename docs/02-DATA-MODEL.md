@@ -1,6 +1,6 @@
 # GCC — Firestore Data Model
 
-> **Status: implemented through Phase 6.** Document shapes live in
+> **Status: implemented through Phase 11.** Document shapes live in
 > `src/types/domain.ts`, path builders in `src/lib/firebase/paths.ts`, Zod input
 > schemas in `src/lib/validation/`, and Security Rules in `firestore.rules`.
 >
@@ -52,7 +52,7 @@
 | `tournaments/{id}/draw/current`               | status, pots `{1:[uid…],2:[…],3:[…],4:[…]}`, unassigned, method, shuffleSeed, algorithmVersion, locks, playersSnapshot, tiebreakSeed, confirmedAt, confirmedBy, timestamps                                                                                   | Owner/Super Admin before confirmation; public after                         |
 | `tournaments/{id}/fixtureDrafts/current`      | Generated unpublished fixtures and validation report                                                                                                                                                                                                         | Owner, Super Admin                                                          |
 | `tournaments/{id}/matches/{matchId}`          | tournamentId, stage, matchday, homeUid, awayUid, homeTag, awayTag, participants, status, scheduledAt, result, updatedAt                                                                                                                                      | Owner/Super Admin always; public once fixtures are published                |
-| `tournaments/{id}/resultReports/{id}`         | matchId, reportedBy, reportedByTag, reason, status, adminNote, resolvedBy, resolvedAt, createdAt                                                                                                                                                             | Reporter, owner, Super Admin                                                |
+| `tournaments/{id}/resultReports/{id}`         | tournamentId, matchId, reportedBy, reportedByTag, reason (10–500), status, adminNote, resolvedBy, resolvedAt, createdAt                                                                                                                                      | Reporter, owner, Super Admin                                                |
 | `tournaments/{id}/standings/{uid}`            | Derived gamerTag, MP, W, D, L, GF, GA, GD, Pts, position, qualificationBand                                                                                                                                                                                  | Public with a public tournament; owner and Super Admin always               |
 | `tournaments/{id}/knockoutTies/{id}`          | round, seeds, legs, aggregate, winnerUid, status                                                                                                                                                                                                             | Public with a public tournament; owner and Super Admin always               |
 | `tournaments/{id}/announcements/{id}`         | title, body, authorUid, publishedAt                                                                                                                                                                                                                          | Public with a public tournament; owner and Super Admin always               |
@@ -354,19 +354,33 @@ recorded by the tournament owner or a Super Admin; there is no participant
 submission, confirmation or dispute stage. Corrections require a reason, are
 audit-logged with before/after values and increment `editCount`.
 
+Phase 11 accepts results only for `stage: "league"` and only while the
+tournament is `fixtures_published` or `league_phase`. Entering a result writes
+all of the following in one transaction: the match result and `completed`
+status, `leagueMatchesCompleted + 1`, and the tournament status
+`fixtures_published → league_phase`. Clearing the last result returns the
+tournament to `fixtures_published`. `onLeagueResultsChanged` is a documented
+no-op called after every successful enter/bulk/correct/clear; Phase 12 will
+recalculate standings there. Bulk entry accepts at most 18 matches and is
+all-or-nothing. Every mutation is audited and both participants are notified.
+
 Fixtures become client-readable when the tournament reaches
 `fixtures_published`; drafts and suspended tournaments stay private.
 
 ### 3.11 `tournaments/{id}/resultReports/{id}` — player "Report a problem"
 
-Fields: `matchId`, `reportedBy`, `reportedByTag`, `reason` (max 500), `status`
-(`open`, `resolved`, `dismissed`), `adminNote`, `resolvedBy`, `resolvedAt`,
-`createdAt`.
+Fields: `tournamentId` (duplicated for the Super Admin collection-group
+inbox), `matchId`, `reportedBy`, `reportedByTag`, `reason` (10–500), `status`
+(`open`, `resolved`, `dismissed`), `adminNote` (5–300 when resolved), `resolvedBy`,
+`resolvedAt`, `createdAt`.
 
 A result report is a player-to-admin channel only. It never changes an official
-result. Reads are allowed for the reporter, the tournament owner and the Super
-Admin; writes remain deny-all. Any correction is made on the match document
-through the admin result workflow and recorded in `auditLogs`.
+result. Only the two match participants may open one, at most one open report
+per player per match, and only while the match is completed in a published
+tournament. Reads are allowed for the reporter, the tournament owner and the
+Super Admin; writes remain deny-all. Resolution requires a note, is audited,
+and notifies the reporter. Any correction is made on the match document through
+the admin result workflow and recorded in `auditLogs`.
 
 ### 3.12 `tournaments/{id}/standings/{uid}` — derived table row
 
@@ -565,13 +579,14 @@ hallOfFame/{id} ── tournamentId ── tournaments/{id}
 
 ## 5. Composite indexes
 
-`firestore.indexes.json` declares 53 composite indexes:
+`firestore.indexes.json` declares 56 composite indexes:
 
 | Collection group    | Fields                                                                                                       | Use                                                             |
 | ------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
 | `matches`           | `participants` ARRAY_CONTAINS + `matchday` ASC                                                               | A participant's fixtures by matchday                            |
 | `matches`           | `participants` ARRAY_CONTAINS + `scheduledAt` ASC                                                            | A participant's schedule                                        |
 | `matches`           | `participants` ARRAY_CONTAINS + `updatedAt` DESC                                                             | A player's match history                                        |
+| `matches`           | `participants` ARRAY_CONTAINS + `status` ASC + `updatedAt` DESC                                              | Completed match history, newest recorded first (Phase 11)       |
 | `matches`           | `tournamentId` ASC + `participants` ARRAY_CONTAINS + `updatedAt` DESC                                        | Scoped player history that rules can prove is public            |
 | `matches`           | `status` ASC + `matchday` ASC                                                                                | Operations queues                                               |
 | `tournaments`       | `status` ASC + `startsAt` ASC                                                                                | Public discovery                                                |
@@ -600,6 +615,8 @@ hallOfFame/{id} ── tournamentId ── tournaments/{id}
 | `adminApplications` | `status` ASC + `createdAt` DESC                                                                              | Review queue, newest first (non-pending tabs)                   |
 | `adminApplications` | `status` ASC + `createdAt` ASC                                                                               | Review queue, oldest pending first (Phase 6)                    |
 | `adminApplications` | `uid` ASC + `createdAt` DESC                                                                                 | Applicant history (Phase 6)                                     |
+| `resultReports`     | `status` ASC + `createdAt` DESC (collection scope)                                                           | Organiser report inbox filtered by status (Phase 11)            |
+| `resultReports`     | `status` ASC + `createdAt` DESC (collection group)                                                           | Super Admin cross-tournament oversight, filtered (Phase 11)     |
 
 The user-filter queries must include equality fields in canonical order
 (`role`, `status`, `country`, `preferredGame`) followed by `createdAt DESC`;
