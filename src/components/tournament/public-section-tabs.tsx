@@ -14,11 +14,13 @@ import { Tabs } from "@/components/ui/tabs";
 export function PublicSectionTabs({
   pots,
   fixtures,
+  table,
   results,
   children,
 }: {
   readonly pots: ReactNode | null;
   readonly fixtures: ReactNode | null;
+  readonly table: ReactNode | null;
   readonly results: ReactNode | null;
   readonly children: ReactNode;
 }) {
@@ -30,6 +32,10 @@ export function PublicSectionTabs({
 
   if (fixtures) {
     items.push({ id: "fixtures", label: "Fixtures", content: fixtures });
+  }
+
+  if (table) {
+    items.push({ id: "table", label: "Table", content: table });
   }
 
   if (results) {

@@ -13,6 +13,10 @@ const ENGINE_FILES = [
   "fixtures/index.ts",
   "fixtures/types.ts",
   "fixtures/validate.ts",
+  "standings/calculate.ts",
+  "standings/index.ts",
+  "standings/tiebreakers.ts",
+  "standings/types.ts",
 ] as const;
 
 function source(file: string): string {

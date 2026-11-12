@@ -9,6 +9,7 @@ import { z } from "zod";
 
 import { isMatchDurationMinutes, MATCH_DURATION_MINUTES_OPTIONS } from "@/lib/config/formats";
 import { PLATFORMS, type PlatformId } from "@/lib/config/games";
+import { TIEBREAKER_PROFILES } from "@/lib/engine/standings/types";
 import {
   countryCodeSchema,
   gameIdSchema,
@@ -95,6 +96,7 @@ export const tournamentUpdateSchema = z
       )
       .refine((value) => new Set(value).size === value.length, "Each country may appear once.")
       .optional(),
+    tiebreakerProfile: z.enum(TIEBREAKER_PROFILES).optional(),
   })
   .refine((value) => Object.keys(value).length > 0, "Provide at least one tournament field.");
 

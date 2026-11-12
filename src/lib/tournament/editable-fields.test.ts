@@ -83,6 +83,26 @@ describe("getEditableTournamentFields", () => {
     expect(editable.has("matchDurationMinutes")).toBe(false);
     expect(editable.has("registrationOpensAt")).toBe(false);
   });
+
+  it("allows the tie-break profile until the first league result is recorded", () => {
+    for (const status of ["draft", "registration_open", "fixtures_published"] as const) {
+      const editable = getEditableTournamentFields({
+        status,
+        registrationCount: 36,
+        leagueMatchesCompleted: 0,
+      });
+
+      expect(editable.has("tiebreakerProfile"), status).toBe(true);
+    }
+
+    const locked = getEditableTournamentFields({
+      status: "league_phase",
+      registrationCount: 36,
+      leagueMatchesCompleted: 1,
+    });
+
+    expect(locked.has("tiebreakerProfile")).toBe(false);
+  });
 });
 
 describe("filterTournamentPatch", () => {
@@ -109,6 +129,16 @@ describe("filterTournamentPatch", () => {
     );
     expect(published.ok).toBe(false);
     expect(published.locked).toEqual(["name", "season", "timezone"]);
+  });
+
+  it("reports the tie-break profile as locked after the first league result", () => {
+    const result = filterTournamentPatch(
+      { status: "league_phase", registrationCount: 36, leagueMatchesCompleted: 2 },
+      { tiebreakerProfile: "classic", description: "Still editable" },
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.locked).toEqual(["tiebreakerProfile"]);
   });
 });
 

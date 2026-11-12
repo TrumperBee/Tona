@@ -30,6 +30,7 @@ import { PublicFixturesPanel } from "@/components/tournament/public-fixtures-pan
 import { PublicPotsPanel } from "@/components/tournament/public-pots-panel";
 import { PublicResultsPanel } from "@/components/tournament/public-results-panel";
 import { PublicSectionTabs } from "@/components/tournament/public-section-tabs";
+import { PublicStandingsPanel } from "@/components/tournament/public-standings-panel";
 import { RegisterAction } from "@/components/tournament/register-action";
 import { TournamentDates } from "@/components/tournament/tournament-dates";
 import { PageHeader } from "@/components/shared/page-header";
@@ -49,6 +50,7 @@ import {
   getViewerRegistration,
 } from "@/lib/data/public-tournaments";
 import { getPublicFixtures } from "@/lib/data/public-fixtures";
+import { getPublicStandings, readTiebreakerProfile } from "@/lib/data/public-standings";
 import { formatDate } from "@/lib/utils/dates";
 import { getRegistrationState } from "@/lib/tournament/registration-state";
 
@@ -57,6 +59,10 @@ interface TournamentPageProps {
 }
 
 const getTournament = cache(getPublicTournamentBySlug);
+
+// The table is derived from recorded results; a short window keeps spectators
+// close to live without turning every visit into an uncached Firestore read.
+export const revalidate = 30;
 
 export async function generateMetadata({ params }: TournamentPageProps) {
   const { slug } = await params;
@@ -156,6 +162,7 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
   const participants = await getTournamentParticipants(tournament.id);
   const publicDraw = await getPublicDraw(tournament.id);
   const publicFixtures = await getPublicFixtures(tournament.id, tournament.status);
+  const publicStandings = await getPublicStandings(tournament.id, tournament.status);
 
   const facts = [
     { label: "Game", value: game.name, icon: Gamepad2 },
@@ -249,6 +256,16 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
               viewerUid={user?.userId ?? null}
               tournamentSlug={tournament.slug}
               timezone={timezone}
+            />
+          ) : null
+        }
+        table={
+          publicStandings && publicStandings.rows.length > 0 ? (
+            <PublicStandingsPanel
+              rows={publicStandings.rows}
+              profile={readTiebreakerProfile(tournament.tiebreakerProfile)}
+              provisional={publicStandings.provisional}
+              updatedAt={tournament.standingsUpdatedAt}
             />
           ) : null
         }
@@ -434,12 +451,35 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
                     description="When the organiser confirms the field and publishes fixtures, every matchday appears here with real home and away assignments."
                   />
                 )}
-                <EmptyState
-                  size="sm"
-                  icon={ListChecks}
-                  title="No standings yet"
-                  description="The league table is generated from verified results. It is never filled with sample scores."
-                />
+                {publicStandings && publicStandings.rows.length > 0 ? (
+                  <Card variant="elevated">
+                    <CardHeader>
+                      <CardTitle className="text-lg">League table</CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-sm leading-6 text-grey-400">
+                      <p>
+                        <span className="font-semibold text-white">
+                          {publicStandings.rows[0]?.gamerTag}
+                        </span>{" "}
+                        leads with {publicStandings.rows[0]?.points} points after{" "}
+                        {publicStandings.rows[0]?.played} matches. Open the Table tab for all{" "}
+                        {publicStandings.rows.length} players.
+                      </p>
+                      <p className="mt-2 text-xs text-grey-500">
+                        {publicStandings.provisional
+                          ? "Provisional: more results are still to be recorded."
+                          : "Final league table."}
+                      </p>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <EmptyState
+                    size="sm"
+                    icon={ListChecks}
+                    title="No standings yet"
+                    description="The league table is generated from verified results. It is never filled with sample scores."
+                  />
+                )}
               </div>
             </div>
 

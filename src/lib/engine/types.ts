@@ -38,20 +38,6 @@ export interface ConfirmedResult extends MatchScore {
 export type QualificationOutcome =
   "round-of-16" | "playoffs-seeded" | "playoffs-unseeded" | "eliminated";
 
-export interface StandingRow {
-  readonly participantId: ParticipantId;
-  readonly position: number;
-  readonly played: number;
-  readonly won: number;
-  readonly drawn: number;
-  readonly lost: number;
-  readonly goalsFor: number;
-  readonly goalsAgainst: number;
-  readonly goalDifference: number;
-  readonly points: number;
-  readonly qualification?: QualificationOutcome;
-}
-
 export interface FixtureGenerationConstraints {
   readonly participantsPerPot: number;
   readonly opponentsPerPot: number;

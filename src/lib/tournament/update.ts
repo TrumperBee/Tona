@@ -149,7 +149,14 @@ export async function updateTournament(
       throw new TournamentMutationError(
         "Some fields can no longer be changed for this competition.",
         403,
-        Object.fromEntries(filter.locked.map((field) => [field, "This field is locked."])),
+        Object.fromEntries(
+          filter.locked.map((field) => [
+            field,
+            field === "tiebreakerProfile"
+              ? "The tie-break profile is locked once the first league result is recorded."
+              : "This field is locked.",
+          ]),
+        ),
       );
     }
 
@@ -257,6 +264,10 @@ export async function updateTournament(
       if (patch.allowedCountries !== undefined) {
         stage("allowedCountries", restrictions.allowedCountries);
       }
+    }
+
+    if (patch.tiebreakerProfile !== undefined) {
+      stage("tiebreakerProfile", patch.tiebreakerProfile);
     }
 
     transaction.update(reference, update);

@@ -21,6 +21,12 @@ import {
   tournamentStatusAfterResultCleared,
   tournamentStatusAfterResultEntered,
 } from "@/lib/tournament/result-state";
+import {
+  buildStandingsPlan,
+  readStandingsContextInTransaction,
+  stageStandingsWrites,
+  standingsTournamentPatch,
+} from "@/lib/tournament/standings";
 import type {
   MatchResultBulkInput,
   MatchResultClearInput,
@@ -64,13 +70,10 @@ export interface OrganiserResultsView {
 }
 
 /**
- * Phase 12 replaces this no-op with standings recalculation. Keeping the call
- * inside each result server action means the later wiring is a one-line change.
+ * Standings are rebuilt inside every result transaction. This module never
+ * exposes a separate "recalculate later" path for ordinary result entry, so a
+ * committed result and its table can never disagree.
  */
-export async function onLeagueResultsChanged(tournamentId: string): Promise<void> {
-  // Intentionally empty in Phase 11: standings are designed but not implemented.
-  void tournamentId;
-}
 
 function toIsoString(value: unknown): string | null {
   if (
@@ -329,18 +332,16 @@ export async function enterMatchResult(
   const matchRef = firestore.doc(paths.tournamentMatch(tournamentId, input.matchId));
 
   const committed = await firestore.runTransaction(async (transaction) => {
-    const [tournamentSnapshot, matchSnapshot] = await Promise.all([
-      transaction.get(tournamentRef),
-      transaction.get(matchRef),
-    ]);
-
-    if (!tournamentSnapshot.exists) {
-      throw new TournamentMutationError("Tournament not found.", 404);
-    }
-
-    const tournament = tournamentSnapshot.data() as TournamentDocument;
+    const context = await readStandingsContextInTransaction(transaction, tournamentId);
+    const tournament = context.tournament;
     requireResultEntryStatus(tournament);
-    const match = readMatchOrThrow(matchSnapshot.exists, matchSnapshot.data(), tournamentId);
+
+    const matchDocument = context.matchDocs.find((document) => document.id === input.matchId);
+    const match = readMatchOrThrow(
+      Boolean(matchDocument?.exists),
+      matchDocument?.data(),
+      tournamentId,
+    );
     const plan = planResultTransition("enter", {
       stage: match.stage,
       status: match.status,
@@ -359,15 +360,21 @@ export async function enterMatchResult(
       enteredAt: now,
       editCount: 0,
     };
+    const standings = buildStandingsPlan(
+      context.source,
+      new Map([[input.matchId, { homeGoals: input.homeGoals, awayGoals: input.awayGoals }]]),
+      now,
+    );
 
     transaction.update(matchRef, {
       result,
       status: "completed",
       updatedAt: now,
     });
+    stageStandingsWrites(transaction, tournamentId, standings);
     transaction.update(tournamentRef, {
       status: tournamentStatusAfterResultEntered(tournament.status),
-      leagueMatchesCompleted: FieldValue.increment(1),
+      ...standingsTournamentPatch(standings),
       updatedAt: FieldValue.serverTimestamp(),
     });
 
@@ -397,8 +404,6 @@ export async function enterMatchResult(
       `Result recorded: you vs ${opponentTag}, ${ownGoals ?? 0}-${otherGoals ?? 0}`.slice(0, 120),
     body: `The tournament admin recorded your match in ${committed.tournament.name}. Open the match to see the score.`,
   });
-
-  await onLeagueResultsChanged(tournamentId);
 }
 
 /** Records many results in one all-or-nothing transaction. */
@@ -418,28 +423,16 @@ export async function enterMatchResultsBulk(
   const refs = ids.map((id) => firestore.doc(paths.tournamentMatch(tournamentId, id)));
 
   const committed = await firestore.runTransaction(async (transaction) => {
-    const snapshots = await Promise.all([
-      transaction.get(tournamentRef),
-      ...refs.map((ref) => transaction.get(ref)),
-    ]);
-    const tournamentSnapshot = snapshots[0];
-
-    if (!tournamentSnapshot?.exists) {
-      throw new TournamentMutationError("Tournament not found.", 404);
-    }
-
-    const tournament = tournamentSnapshot.data() as TournamentDocument;
+    const context = await readStandingsContextInTransaction(transaction, tournamentId);
+    const tournament = context.tournament;
     requireResultEntryStatus(tournament);
+    const byId = new Map(context.matchDocs.map((document) => [document.id, document] as const));
     const matches: MatchDocument[] = [];
+    const pending = new Map<string, { readonly homeGoals: number; readonly awayGoals: number }>();
 
-    input.results.forEach((result, index) => {
-      const snapshot = snapshots[index + 1];
-
-      if (!snapshot) {
-        throw new TournamentMutationError("Match not found.", 404);
-      }
-
-      const match = readMatchOrThrow(snapshot.exists, snapshot.data(), tournamentId);
+    for (const result of input.results) {
+      const snapshot = byId.get(result.matchId);
+      const match = readMatchOrThrow(Boolean(snapshot?.exists), snapshot?.data(), tournamentId);
       const plan = planResultTransition("enter", {
         stage: match.stage,
         status: match.status,
@@ -451,9 +444,14 @@ export async function enterMatchResultsBulk(
       }
 
       matches.push(match);
-    });
+      pending.set(result.matchId, {
+        homeGoals: result.homeGoals,
+        awayGoals: result.awayGoals,
+      });
+    }
 
     const now = Timestamp.now();
+    const standings = buildStandingsPlan(context.source, pending, now);
 
     input.results.forEach((result, index) => {
       transaction.update(refs[index]!, {
@@ -468,9 +466,10 @@ export async function enterMatchResultsBulk(
         updatedAt: now,
       });
     });
+    stageStandingsWrites(transaction, tournamentId, standings);
     transaction.update(tournamentRef, {
       status: tournamentStatusAfterResultEntered(tournament.status),
-      leagueMatchesCompleted: FieldValue.increment(input.results.length),
+      ...standingsTournamentPatch(standings),
       updatedAt: FieldValue.serverTimestamp(),
     });
 
@@ -530,8 +529,6 @@ export async function enterMatchResultsBulk(
     );
   }
 
-  await onLeagueResultsChanged(tournamentId);
-
   return { recorded: input.results.length };
 }
 
@@ -546,18 +543,16 @@ export async function correctMatchResult(
   const matchRef = firestore.doc(paths.tournamentMatch(tournamentId, input.matchId));
 
   const committed = await firestore.runTransaction(async (transaction) => {
-    const [tournamentSnapshot, matchSnapshot] = await Promise.all([
-      transaction.get(tournamentRef),
-      transaction.get(matchRef),
-    ]);
-
-    if (!tournamentSnapshot.exists) {
-      throw new TournamentMutationError("Tournament not found.", 404);
-    }
-
-    const tournament = tournamentSnapshot.data() as TournamentDocument;
+    const context = await readStandingsContextInTransaction(transaction, tournamentId);
+    const tournament = context.tournament;
     requireResultEntryStatus(tournament);
-    const match = readMatchOrThrow(matchSnapshot.exists, matchSnapshot.data(), tournamentId);
+
+    const matchDocument = context.matchDocs.find((document) => document.id === input.matchId);
+    const match = readMatchOrThrow(
+      Boolean(matchDocument?.exists),
+      matchDocument?.data(),
+      tournamentId,
+    );
     const plan = planResultTransition("correct", {
       stage: match.stage,
       status: match.status,
@@ -579,8 +574,18 @@ export async function correctMatchResult(
       lastEditedAt: now,
       editCount: previous.editCount + 1,
     };
+    const standings = buildStandingsPlan(
+      context.source,
+      new Map([[input.matchId, { homeGoals: input.homeGoals, awayGoals: input.awayGoals }]]),
+      now,
+    );
 
     transaction.update(matchRef, { result, updatedAt: now });
+    stageStandingsWrites(transaction, tournamentId, standings);
+    transaction.update(tournamentRef, {
+      ...standingsTournamentPatch(standings),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
 
     return { tournament, match, previousResult: previous };
   });
@@ -613,8 +618,6 @@ export async function correctMatchResult(
       `Result corrected: you vs ${opponentTag}, ${ownGoals ?? 0}-${otherGoals ?? 0}`.slice(0, 120),
     body: `The tournament admin corrected your match in ${committed.tournament.name}. Open the match to see the updated score.`,
   });
-
-  await onLeagueResultsChanged(tournamentId);
 }
 
 /** Clears a recorded result and returns the match to `scheduled`. */
@@ -628,18 +631,16 @@ export async function clearMatchResult(
   const matchRef = firestore.doc(paths.tournamentMatch(tournamentId, input.matchId));
 
   const committed = await firestore.runTransaction(async (transaction) => {
-    const [tournamentSnapshot, matchSnapshot] = await Promise.all([
-      transaction.get(tournamentRef),
-      transaction.get(matchRef),
-    ]);
-
-    if (!tournamentSnapshot.exists) {
-      throw new TournamentMutationError("Tournament not found.", 404);
-    }
-
-    const tournament = tournamentSnapshot.data() as TournamentDocument;
+    const context = await readStandingsContextInTransaction(transaction, tournamentId);
+    const tournament = context.tournament;
     requireResultEntryStatus(tournament);
-    const match = readMatchOrThrow(matchSnapshot.exists, matchSnapshot.data(), tournamentId);
+
+    const matchDocument = context.matchDocs.find((document) => document.id === input.matchId);
+    const match = readMatchOrThrow(
+      Boolean(matchDocument?.exists),
+      matchDocument?.data(),
+      tournamentId,
+    );
     const plan = planResultTransition("clear", {
       stage: match.stage,
       status: match.status,
@@ -651,16 +652,18 @@ export async function clearMatchResult(
     }
 
     const now = Timestamp.now();
-    const completed = Math.max(0, (tournament.leagueMatchesCompleted ?? 0) - 1);
+    const standings = buildStandingsPlan(context.source, new Map([[input.matchId, null]]), now);
+    const completed = standings.leagueMatchesCompleted;
 
     transaction.update(matchRef, {
       result: null,
       status: "scheduled",
       updatedAt: now,
     });
+    stageStandingsWrites(transaction, tournamentId, standings);
     transaction.update(tournamentRef, {
       status: tournamentStatusAfterResultCleared(tournament.status, completed),
-      leagueMatchesCompleted: completed,
+      ...standingsTournamentPatch(standings),
       updatedAt: FieldValue.serverTimestamp(),
     });
 
@@ -696,6 +699,4 @@ export async function clearMatchResult(
     title: (opponentTag) => `Result cleared: you vs ${opponentTag}`.slice(0, 120),
     body: `The tournament admin cleared the recorded result for your match in ${committed.tournament.name}. The fixture is awaiting a new result.`,
   });
-
-  await onLeagueResultsChanged(tournamentId);
 }

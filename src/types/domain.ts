@@ -7,6 +7,12 @@ import type { Timestamp } from "firebase/firestore";
 
 import type { TournamentFormatId } from "@/lib/config/formats";
 import type { GameId, PlatformId } from "@/lib/config/games";
+import type {
+  StandingBand,
+  StandingsForm,
+  TiebreakCriterion,
+  TiebreakerProfile,
+} from "@/lib/engine/standings/types";
 
 export const USER_ROLES = ["user", "organiser", "super_admin"] as const;
 export type UserRole = (typeof USER_ROLES)[number];
@@ -360,6 +366,13 @@ export interface TournamentDocument {
   readonly scheduleHash?: string | null;
   readonly fixturesPublishedAt?: Timestamp | null;
   readonly leagueMatchesCompleted?: number;
+  /**
+   * The tie-break profile used to order the league table. Set at creation and
+   * editable only until the first league result is recorded.
+   */
+  readonly tiebreakerProfile?: TiebreakerProfile;
+  /** Last successful full rebuild of the 36 standings documents. */
+  readonly standingsUpdatedAt?: Timestamp | null;
   readonly createdAt: Timestamp;
   readonly updatedAt: Timestamp;
 }
@@ -553,17 +566,32 @@ export interface ResultReportDocument {
 }
 
 export interface StandingDocument {
+  readonly tournamentId: string;
   readonly gamerTag: string;
-  readonly MP: number;
-  readonly W: number;
-  readonly D: number;
-  readonly L: number;
-  readonly GF: number;
-  readonly GA: number;
-  readonly GD: number;
-  readonly Pts: number;
+  readonly avatarUrl: string | null;
+  /** Deterministic lot derived from the draw's tie-break seed and the uid. */
+  readonly lot: number;
+  readonly played: number;
+  readonly won: number;
+  readonly drawn: number;
+  readonly lost: number;
+  readonly goalsFor: number;
+  readonly goalsAgainst: number;
+  readonly goalDifference: number;
+  readonly points: number;
+  readonly awayGoals: number;
+  readonly wins: number;
+  readonly awayWins: number;
+  readonly opponentPoints: number;
+  readonly opponentGoalDifference: number;
+  readonly opponentGoalsFor: number;
+  readonly form: readonly StandingsForm[];
   readonly position: number;
-  readonly qualificationBand: string | null;
+  readonly separatedBy: TiebreakCriterion | null;
+  readonly band: StandingBand;
+  /** True until all 144 league matches are recorded. */
+  readonly provisional: boolean;
+  readonly updatedAt: Timestamp;
 }
 
 export interface KnockoutLeg {

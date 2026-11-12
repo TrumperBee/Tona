@@ -1420,3 +1420,107 @@ list.
 (`participants CONTAINS + status ASC + updatedAt DESC`) and one public-profile read
 per opponent. Cursor pagination remains stable while new results arrive. The
 index must be deployed with `firebase deploy --only firestore:indexes`.
+
+---
+
+## ADR-061 - League standings are derived inside every result transaction
+
+**Date:** 2026-11-12
+**Status:** Accepted
+
+**Context.** The league table must never disagree with the recorded results, and it
+must be impossible for an organiser to edit a position, a point or a tie-break by
+hand. A separate "recalculate standings" job after each result would create a window
+where the match says one thing and the table says another.
+
+**Decision.** `src/lib/tournament/results.ts` rebuilds the complete table inside the
+same Firestore transaction as every enter, bulk, correct and clear. Firestore requires
+reads before writes, so the transaction reads the tournament, the current draw, all
+registrations and all matches first, applies the pending result change in memory, then
+writes the match, all 36 `standings/{uid}` documents and the tournament counters.
+A bulk batch computes once and writes once. Publication of fixtures writes the same
+36 zero-match rows from the confirmed draw so the Table tab exists before the first
+result. The pure engine in `src/lib/engine/standings/` performs the calculation; the
+server module only supplies identities and the deterministic lot seed.
+
+**Consequences.** A committed result and its table are atomic: a failed transaction
+leaves the previous table exactly as it was. No route accepts a table value, so manual
+standings edits are structurally impossible. The transaction reads at most 144 match
+documents and writes 36 standing documents plus counters, well under the 500-write
+limit. `standingsUpdatedAt` and `leagueMatchesCompleted` move with the table.
+
+---
+
+## ADR-062 - Tie-breakers are one sequential comparator with a deterministic lot
+
+**Date:** 2026-11-12
+**Status:** Accepted
+
+**Context.** The launch format needs a documented, reproducible order. Head-to-head
+mini-leagues are hard to explain and can produce cycles. A final alphabetical or
+manual fallback would silently rewrite the table whenever two records are equal.
+
+**Decision.** The `uefa` profile (default) sorts the whole table once by points, goal
+difference, goals scored, away goals, wins, away wins, opponents' aggregate points,
+opponents' aggregate goal difference, opponents' aggregate goals, then the lot. The
+`classic` profile uses points, goal difference, goals scored, wins, then the lot. Higher
+values rank first; the lot ranks ascending. `deriveLot(tiebreakSeed, uid)` hashes the
+draw's stored tie-break seed and the player id into a safe 53-bit integer, so the same
+tournament always produces the same order. A participant-id comparison is the final
+strict-order safety net.
+
+**Consequences.** Input array order can never change the table; the 1,000-run property
+test shuffles players and matches and compares the serialised rows. Every row exposes
+`separatedBy`, the first criterion that split it from the row above when points are
+level, so the UI can explain a tie instead of showing an unexplained order. No manual
+ordering exists anywhere in the product.
+
+---
+
+## ADR-063 - The tie-break profile locks after the first league result
+
+**Date:** 2026-11-12
+**Status:** Accepted
+
+**Context.** The profile is part of the published table's meaning. Changing it after
+results have been recorded would retroactively reorder matches that spectators already
+saw.
+
+**Decision.** `tiebreakerProfile` is accepted by the tournament PATCH schema and is
+editable while `leagueMatchesCompleted` is zero, including after fixtures are
+published. Once a result exists the editable-fields matrix removes it; the PATCH
+transaction re-reads the fresh tournament and returns 403 with a field error if a
+client still sends it. The organiser Settings select explains both profiles and shows
+the lock reason. The change is audited like every other tournament update.
+
+**Consequences.** A competition can choose its rules until the first ball is played and
+cannot rewrite them afterwards. Repairing a table never changes the profile; the
+recalculate action rebuilds with the stored profile. Super Admins are bound by the same
+lock because the rule lives inside the transaction, not in the UI.
+
+---
+
+## ADR-064 - Standings are server-rendered and repaired only by verify/recalculate
+
+**Date:** 2026-11-12
+**Status:** Accepted
+
+**Context.** Spectators and players need a live table, while the organiser needs a way
+to prove that a stored table matches the recorded results and to recover from a manual
+corruption or a bug without inventing values.
+
+**Decision.** `GET /api/organiser/tournaments/[id]/standings/verify` recomputes the
+table and compares every stored field, reporting missing rows, unexpected rows and
+field-level mismatches without writing. `POST .../standings/recalculate` rebuilds all
+rows inside one transaction and writes an audit entry. Both require the owner or Super
+Admin; another organiser gets 404 and a plain player 403. The public Table tab is a
+server-rendered projection of the stored rows with a 30-second revalidation window; the
+organiser Standings tab shows the same table plus the active profile and the two
+integrity actions. Player dashboards and profiles read only their own row for an active
+tournament and show an honest empty state when no table exists. `provisional` is derived
+from `leagueMatchesCompleted < 144`, never guessed.
+
+**Consequences.** There is one read model for every surface and no client-side table
+computation. Verification is read-only, so it cannot mask a bug. Repair is explicit and
+audited, and it cannot accept a score or a position. A table appears at publication and
+changes only when a real result changes.

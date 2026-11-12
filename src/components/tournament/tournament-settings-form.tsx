@@ -22,6 +22,12 @@ import { countryName } from "@/lib/config/countries";
 import { MATCH_DURATION_MINUTES_OPTIONS, STARTER_RULES_TEMPLATE } from "@/lib/config/formats";
 import { GAMES, getGame, getGamePlatforms, type GameId, type PlatformId } from "@/lib/config/games";
 import { timezoneOptions } from "@/lib/config/timezones";
+import {
+  TIEBREAKER_PROFILES,
+  TIEBREAKER_PROFILE_DESCRIPTIONS,
+  TIEBREAKER_PROFILE_LABELS,
+  type TiebreakerProfile,
+} from "@/lib/engine/standings/types";
 import { isNaiveDateTime, zonedToUtcIso } from "@/lib/utils/zoned-dates";
 import { validateStartsAtHorizon } from "@/lib/validation/tournament";
 import type { TournamentStatus } from "@/types/domain";
@@ -42,6 +48,7 @@ export interface TournamentSettingsInitial {
   readonly matchDurationMinutes: number;
   readonly allowedPlatforms: readonly PlatformId[] | null;
   readonly allowedCountries: readonly string[] | null;
+  readonly tiebreakerProfile: TiebreakerProfile;
 }
 
 export interface TournamentSettingsFormProps {
@@ -88,6 +95,7 @@ export function TournamentSettingsForm({
     matchDurationMinutes: initial.matchDurationMinutes,
     allowedPlatforms: initial.allowedPlatforms ?? getGamePlatforms(initial.gameId),
     allowedCountries: initial.allowedCountries ?? [],
+    tiebreakerProfile: initial.tiebreakerProfile,
   });
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -160,6 +168,10 @@ export function TournamentSettingsForm({
 
     if (!countryListsEqual(values.allowedCountries, initialCountries)) {
       patch.allowedCountries = values.allowedCountries;
+    }
+
+    if (values.tiebreakerProfile !== initial.tiebreakerProfile) {
+      patch.tiebreakerProfile = values.tiebreakerProfile;
     }
 
     if (Object.keys(patch).length === 0) {
@@ -462,6 +474,44 @@ export function TournamentSettingsForm({
             Publishing requires all three moments. A missing entry window simply reads as
             &quot;closed&quot; to players — no date is ever guessed.
           </p>
+        </CardContent>
+      </Card>
+
+      <Card variant="elevated">
+        <CardHeader>
+          <CardTitle>League table</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <FormField
+            htmlFor="settings-tiebreaker"
+            label="Tie-break profile"
+            hint="Applied in order to teams level on points. The lot is always the final fallback."
+            error={fieldErrors.tiebreakerProfile}
+          >
+            <Select
+              id="settings-tiebreaker"
+              value={values.tiebreakerProfile}
+              onChange={(event) =>
+                set("tiebreakerProfile", event.target.value as TiebreakerProfile)
+              }
+              disabled={!can("tiebreakerProfile")}
+            >
+              {TIEBREAKER_PROFILES.map((profile) => (
+                <option key={profile} value={profile}>
+                  {TIEBREAKER_PROFILE_LABELS[profile]}
+                </option>
+              ))}
+            </Select>
+          </FormField>
+
+          <p className="rounded-lg border border-white/10 bg-navy-950/50 p-3 text-xs leading-5 text-grey-400">
+            {TIEBREAKER_PROFILE_DESCRIPTIONS[values.tiebreakerProfile]}
+          </p>
+
+          {lockNotice(
+            "tiebreakerProfile",
+            "the first league result has been recorded, so the profile used to build the table cannot change.",
+          )}
         </CardContent>
       </Card>
 

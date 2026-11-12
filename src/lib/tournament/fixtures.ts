@@ -29,6 +29,12 @@ import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 import { createNotifications } from "@/lib/notifications";
 import { TournamentMutationError } from "@/lib/tournament/errors";
+import {
+  buildStandingsPlan,
+  standingsSourceFromDraw,
+  standingsTournamentPatch,
+  stageStandingsWrites,
+} from "@/lib/tournament/standings";
 import { canonicalScheduleHash } from "@/lib/tournament/fixture-hash";
 import type { FixtureWindowInput } from "@/lib/validation/fixtures";
 import type {
@@ -575,22 +581,6 @@ function newSeed(): string {
   return randomBytes(SEED_BYTES).toString("hex");
 }
 
-function zeroStanding(gamerTag: string): Record<string, unknown> {
-  return {
-    gamerTag,
-    MP: 0,
-    W: 0,
-    D: 0,
-    L: 0,
-    GF: 0,
-    GA: 0,
-    GD: 0,
-    Pts: 0,
-    position: 0,
-    qualificationBand: null,
-  };
-}
-
 function draftFixtureToRow(fixture: StoredDraftFixture): OrganiserFixtureRow {
   return {
     id: fixture.id,
@@ -1012,18 +1002,19 @@ export async function publishFixtures(
       });
     }
 
-    for (const uid of playerIds) {
-      transaction.set(
-        firestore.doc(paths.tournamentStanding(tournamentId, uid)),
-        zeroStanding(snapshots[uid]?.gamerTag ?? fallbackTag(uid)),
-      );
-    }
+    const standings = buildStandingsPlan(
+      standingsSourceFromDraw(tournamentId, tournament, drawSnapshot.data()),
+      new Map(),
+      now,
+    );
+
+    stageStandingsWrites(transaction, tournamentId, standings);
 
     transaction.update(tournamentRef, {
       status: "fixtures_published",
       scheduleHash: hash,
       fixturesPublishedAt: now,
-      leagueMatchesCompleted: 0,
+      ...standingsTournamentPatch(standings),
       updatedAt: FieldValue.serverTimestamp(),
     });
 
@@ -1142,6 +1133,7 @@ export async function resetFixtures(
       scheduleHash: null,
       fixturesPublishedAt: null,
       leagueMatchesCompleted: 0,
+      standingsUpdatedAt: null,
       updatedAt: FieldValue.serverTimestamp(),
     });
 

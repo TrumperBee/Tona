@@ -53,6 +53,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
   const editable = getEditableTournamentFields({
     status: tournament.status,
     registrationCount: tournament.registrationCount,
+    leagueMatchesCompleted: tournament.leagueMatchesCompleted ?? 0,
   });
 
   return (
@@ -80,6 +81,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           matchDurationMinutes: tournament.matchDurationMinutes,
           allowedPlatforms: tournament.allowedPlatforms,
           allowedCountries: tournament.allowedCountries,
+          tiebreakerProfile: tournament.tiebreakerProfile ?? "uefa",
         }}
       />
 

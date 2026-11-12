@@ -1,7 +1,7 @@
 // GCC - participant dashboard overview.
 // Real Firestore data only: the profile, memberships and zeroed statistics that
 // the server has actually written. Empty states explain what will appear.
-import { CalendarDays, Compass, UserRound } from "lucide-react";
+import { CalendarDays, Compass, ListOrdered, UserRound } from "lucide-react";
 import Link from "next/link";
 
 import { PageHeader, SectionHeading } from "@/components/shared/page-header";
@@ -11,6 +11,8 @@ import { EmptyState, StatCard } from "@/components/ui/data-display";
 import { requirePageSignedIn } from "@/lib/auth/page-access";
 import { getGame } from "@/lib/config/games";
 import { TOURNAMENT_STATUS_META } from "@/lib/config/tournament-status";
+import { getPlayerStandings } from "@/lib/data/player-standings";
+import { STANDING_BAND_LABELS } from "@/lib/engine/standings/types";
 import { getOwnProfile } from "@/lib/profile/server";
 
 export const metadata = { title: "Dashboard" };
@@ -38,6 +40,7 @@ export default async function DashboardPage() {
   const { user: privateProfile, publicProfile, memberships } = profile;
   const stats = publicProfile?.stats.overall;
   const game = getGame(privateProfile.preferredGame);
+  const standings = await getPlayerStandings(user.userId);
 
   return (
     <div className="space-y-8">
@@ -167,6 +170,74 @@ export default async function DashboardPage() {
                   </Card>
                 );
               })}
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section>
+        <SectionHeading
+          title="League positions"
+          description="Your current row in every tournament that is at or past its league phase. Positions change only when an admin records a real result."
+        />
+        <div className="mt-5">
+          {standings.length === 0 ? (
+            <EmptyState
+              icon={ListOrdered}
+              eyebrow="League positions"
+              title="No league table yet"
+              description="Your position appears after the organiser publishes fixtures and the first table is built. A tournament that has not reached that stage is not shown here."
+            />
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {standings.map((standing) => (
+                <Card key={standing.tournamentId}>
+                  <CardHeader>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <CardTitle className="text-lg">{standing.name}</CardTitle>
+                        <p className="mt-1 text-xs text-grey-500">
+                          {STANDING_BAND_LABELS[standing.band]}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-display text-2xl font-semibold tabular-nums text-white">
+                          {standing.position}
+                          <span className="ml-1 text-xs font-medium uppercase text-grey-500">
+                            pos
+                          </span>
+                        </p>
+                        <p className="text-xs tabular-nums text-grey-400">{standing.points} pts</p>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <p className="text-xs tabular-nums text-grey-400">
+                      MP {standing.played} · W {standing.won} · D {standing.drawn} · L{" "}
+                      {standing.lost}
+                    </p>
+                    <p className="text-xs tabular-nums text-grey-500">
+                      GF {standing.goalsFor} · GA {standing.goalsAgainst} · GD{" "}
+                      {standing.goalDifference > 0
+                        ? `+${standing.goalDifference}`
+                        : standing.goalDifference}
+                    </p>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <Link
+                        href={`/tournaments/${standing.slug}`}
+                        className="text-sm font-semibold text-electric-300 underline-offset-4 hover:underline"
+                      >
+                        Open table
+                      </Link>
+                      {standing.provisional ? (
+                        <Badge tone="warning">Provisional</Badge>
+                      ) : (
+                        <Badge tone="success">Final</Badge>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           )}
         </div>

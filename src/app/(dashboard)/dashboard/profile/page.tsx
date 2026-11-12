@@ -3,7 +3,7 @@
 // Reads the server-written private profile, public profile and membership
 // snapshots. Statistics are real values (zero for a new account), never sample
 // numbers. The avatar control uploads through the server route.
-import { CalendarDays, Gamepad2, Globe2, Pencil, Swords, Trophy } from "lucide-react";
+import { CalendarDays, Gamepad2, Globe2, ListOrdered, Pencil, Swords, Trophy } from "lucide-react";
 import Link from "next/link";
 
 import { AvatarUploader } from "@/components/profile/avatar-uploader";
@@ -17,6 +17,8 @@ import { countryFlag, countryName } from "@/lib/config/countries";
 import { getGame, PLATFORMS } from "@/lib/config/games";
 import { TOURNAMENT_STATUS_META } from "@/lib/config/tournament-status";
 import { getPlayerMatchHistory, type MatchOutcome } from "@/lib/data/player-match-history";
+import { getPlayerStandings } from "@/lib/data/player-standings";
+import { STANDING_BAND_LABELS } from "@/lib/engine/standings/types";
 import { getOwnProfile } from "@/lib/profile/server";
 import { firstQueryValue } from "@/lib/super-admin/query";
 import { formatDate } from "@/lib/utils/dates";
@@ -54,9 +56,10 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
   const params = await searchParams;
   const after = firstQueryValue(params.after);
   const before = firstQueryValue(params.before);
-  const [profile, history] = await Promise.all([
+  const [profile, history, standings] = await Promise.all([
     getOwnProfile(user.userId),
     getPlayerMatchHistory(user.userId, { after, before }),
+    getPlayerStandings(user.userId),
   ]);
 
   if (!profile) {
@@ -217,6 +220,65 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
                   </Card>
                 );
               })}
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section>
+        <SectionHeading
+          title="League positions"
+          description="Your current row in every tournament that is at or past its league phase."
+        />
+        <div className="mt-5">
+          {standings.length === 0 ? (
+            <EmptyState
+              icon={ListOrdered}
+              eyebrow="League positions"
+              title="No league table yet"
+              description="A position appears after the organiser publishes fixtures and the first table is built from recorded results."
+            />
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {standings.map((standing) => (
+                <Card key={standing.tournamentId}>
+                  <CardHeader>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <CardTitle className="text-lg">{standing.name}</CardTitle>
+                        <p className="mt-1 text-xs text-grey-500">
+                          {STANDING_BAND_LABELS[standing.band]}
+                        </p>
+                      </div>
+                      <p className="font-display text-2xl font-semibold tabular-nums text-white">
+                        {standing.position}
+                        <span className="ml-1 text-xs font-medium uppercase text-grey-500">
+                          pos
+                        </span>
+                      </p>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <p className="text-xs tabular-nums text-grey-400">
+                      {standing.points} pts · MP {standing.played} · W {standing.won} · D{" "}
+                      {standing.drawn} · L {standing.lost}
+                    </p>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <Link
+                        href={`/tournaments/${standing.slug}`}
+                        className="text-sm font-semibold text-electric-300 underline-offset-4 hover:underline"
+                      >
+                        Open table
+                      </Link>
+                      {standing.provisional ? (
+                        <Badge tone="warning">Provisional</Badge>
+                      ) : (
+                        <Badge tone="success">Final</Badge>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           )}
         </div>

@@ -97,6 +97,8 @@ export interface PublicTournamentDetail extends PublicTournamentSummary {
   readonly matchDurationMinutes: number | null;
   readonly allowedPlatforms: readonly string[] | null;
   readonly allowedCountries: readonly string[] | null;
+  readonly tiebreakerProfile: string;
+  readonly standingsUpdatedAt: string | null;
 }
 
 function toIsoString(value: unknown): string | null {
@@ -179,6 +181,8 @@ function mapDetail(id: string, data: Record<string, unknown>): PublicTournamentD
     matchDurationMinutes: readNumber(data.matchDurationMinutes),
     allowedPlatforms: readStringArray(data.allowedPlatforms),
     allowedCountries: readStringArray(data.allowedCountries),
+    tiebreakerProfile: data.tiebreakerProfile === "classic" ? "classic" : "uefa",
+    standingsUpdatedAt: toIsoString(data.standingsUpdatedAt),
   };
 }
 

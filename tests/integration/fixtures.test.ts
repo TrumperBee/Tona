@@ -439,10 +439,38 @@ describe("fixture publication", () => {
 
     const standings = await getFirebaseAdminFirestore()
       .collection(paths.tournamentStandings(TOURNAMENT_ID))
-      .limit(1)
+      .orderBy("position", "asc")
       .get();
     const standing = standings.docs[0]?.data() ?? {};
-    expect(standing).toMatchObject({ MP: 0, W: 0, D: 0, L: 0, GF: 0, GA: 0, GD: 0, Pts: 0 });
+    expect(standing).toMatchObject({
+      tournamentId: TOURNAMENT_ID,
+      played: 0,
+      won: 0,
+      drawn: 0,
+      lost: 0,
+      goalsFor: 0,
+      goalsAgainst: 0,
+      goalDifference: 0,
+      points: 0,
+      position: 1,
+      band: "direct",
+      provisional: true,
+      separatedBy: null,
+    });
+    expect(standing.form).toEqual([]);
+    expect(typeof standing.gamerTag).toBe("string");
+    expect(standings.docs.map((document) => document.data().position)).toEqual(
+      Array.from({ length: PLAYER_COUNT }, (_, index) => index + 1),
+    );
+    expect(new Set(standings.docs.map((document) => document.data().lot)).size).toBe(PLAYER_COUNT);
+    expect(
+      standings.docs.reduce<Record<string, number>>((counts, document) => {
+        const band = String(document.data().band);
+        counts[band] = (counts[band] ?? 0) + 1;
+        return counts;
+      }, {}),
+    ).toEqual({ direct: 8, playoff_seeded: 8, playoff_unseeded: 8, eliminated: 12 });
+    expect(tournament.standingsUpdatedAt).toBeTruthy();
 
     const firstMatch = await getFirebaseAdminFirestore()
       .doc(paths.tournamentMatch(TOURNAMENT_ID, "league-md01-m01"))

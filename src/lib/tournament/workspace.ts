@@ -236,6 +236,10 @@ const TAB_AVAILABILITY: Readonly<
     statuses: ["fixtures_published", "league_phase", "knockout", "completed", "archived"],
     notice: "Available once fixtures are published.",
   },
+  standings: {
+    statuses: ["fixtures_published", "league_phase", "knockout", "completed", "archived"],
+    notice: "Available once fixtures are published.",
+  },
   knockout: {
     statuses: ["knockout", "completed", "archived"],
     notice: "Available after the league phase completes.",
@@ -268,7 +272,7 @@ const TAB_AVAILABILITY: Readonly<
 };
 
 /**
- * Returns the ten workspace tabs with an honest availability flag and, when a
+ * Returns the eleven workspace tabs with an honest availability flag and, when a
  * tab is not usable yet, the exact condition that unlocks it. Overview and
  * Settings are always available; a suspended tournament keeps only them.
  *

@@ -1,13 +1,17 @@
-// GCC - emulator-backed integration tests for Phase 11 results and reports.
+// GCC - emulator-backed integration tests for Phase 11 results/reports and
+// Phase 12 standings.
 //
-// These run the real Admin SDK, the real result/report modules and the real
-// route guards against the Auth and Firestore emulators. They prove a result
-// updates the match, the completed counter and the tournament status in one
-// transaction; a second or concurrent entry is rejected; corrections and
-// clears require a reason and are audited; a bulk batch is all-or-nothing;
-// non-owners receive the same 404 as a missing tournament; players cannot enter
-// results; and result reports are participant-only, one open per player per
-// match, resolved by an owner with a note and a notification.
+// These run the real Admin SDK, the real result/report/standings modules and the
+// real route guards against the Auth and Firestore emulators. They prove a
+// result updates the match, the completed counter, the tournament status and
+// the derived table in one transaction; a second or concurrent entry is
+// rejected; corrections and clears require a reason and are audited; a bulk
+// batch is all-or-nothing; the stored table always equals a fresh recompute;
+// the tie-break profile locks after the first result; a manual recalculate
+// repairs a corrupted table but cannot invent one; non-owners receive the same
+// 404 as a missing tournament; players cannot enter results; and result reports
+// are participant-only, one open per player per match, resolved by an owner with
+// a note and a notification.
 import { NextRequest } from "next/server";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -25,10 +29,13 @@ vi.mock("next/headers", () => ({
 }));
 
 import { POST as reportRoute } from "@/app/api/tournaments/[id]/matches/[matchId]/report/route";
+import { PATCH as updateTournamentRoute } from "@/app/api/organiser/tournaments/[id]/route";
 import { POST as clearRoute } from "@/app/api/organiser/tournaments/[id]/results/clear/route";
 import { POST as correctRoute } from "@/app/api/organiser/tournaments/[id]/results/correct/route";
 import { POST as bulkRoute } from "@/app/api/organiser/tournaments/[id]/results/bulk/route";
 import { POST as enterRoute } from "@/app/api/organiser/tournaments/[id]/results/enter/route";
+import { POST as recalculateRoute } from "@/app/api/organiser/tournaments/[id]/standings/recalculate/route";
+import { GET as verifyStandingsRoute } from "@/app/api/organiser/tournaments/[id]/standings/verify/route";
 import { POST as resolveRoute } from "@/app/api/organiser/tournaments/[id]/result-reports/[reportId]/resolve/route";
 import { getFirebaseAdminAuth, getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
@@ -174,7 +181,7 @@ async function sessionFor(user: SeededUser): Promise<string> {
   return getFirebaseAdminAuth().createSessionCookie(idToken, { expiresIn: 60 * 60 * 1000 });
 }
 
-function request(method: "POST", path: string, body?: unknown): NextRequest {
+function request(method: "GET" | "POST" | "PATCH", path: string, body?: unknown): NextRequest {
   return new NextRequest(`http://localhost:3000${path}`, {
     method,
     headers: { origin: "http://localhost:3000", "content-type": "application/json" },
@@ -290,6 +297,39 @@ async function matchData(matchId: string): Promise<Record<string, unknown>> {
     .doc(paths.tournamentMatch(TOURNAMENT_ID, matchId))
     .get();
   return snapshot.data() ?? {};
+}
+
+async function standingRows(): Promise<Array<{ readonly uid: string } & Record<string, unknown>>> {
+  const snapshot = await getFirebaseAdminFirestore()
+    .collection(paths.tournamentStandings(TOURNAMENT_ID))
+    .orderBy("position", "asc")
+    .get();
+
+  return snapshot.docs.map((document) => ({ uid: document.id, ...document.data() }));
+}
+
+async function standingFor(
+  uid: string,
+): Promise<({ readonly uid: string } & Record<string, unknown>) | null> {
+  const snapshot = await getFirebaseAdminFirestore()
+    .doc(paths.tournamentStanding(TOURNAMENT_ID, uid))
+    .get();
+
+  return snapshot.exists ? { uid, ...snapshot.data() } : null;
+}
+
+async function verifyStandings(): Promise<Response> {
+  return verifyStandingsRoute(
+    request("GET", `/api/organiser/tournaments/${TOURNAMENT_ID}/standings/verify`),
+    enterContext(),
+  );
+}
+
+async function recalculate(): Promise<Response> {
+  return recalculateRoute(
+    request("POST", `/api/organiser/tournaments/${TOURNAMENT_ID}/standings/recalculate`),
+    enterContext(),
+  );
 }
 
 async function auditCount(action: string): Promise<number> {
@@ -675,5 +715,328 @@ describe("player result reports", () => {
       reportContext(reportId),
     );
     expect(notOwner.status).toBe(404);
+  });
+});
+
+describe("league standings", () => {
+  it("writes a derived table inside the result transaction and verifies it", async () => {
+    expect((await enter()).status).toBe(200);
+
+    const tournament = await tournamentData();
+    expect(tournament.leagueMatchesCompleted).toBe(1);
+    expect(tournament.standingsUpdatedAt).toBeTruthy();
+
+    const rows = await standingRows();
+    expect(rows.map((row) => row.uid)).toEqual([playerA.uid, playerC.uid, playerB.uid]);
+
+    expect(rows[0]).toMatchObject({
+      tournamentId: TOURNAMENT_ID,
+      gamerTag: "Alice",
+      position: 1,
+      played: 1,
+      won: 1,
+      drawn: 0,
+      lost: 0,
+      goalsFor: 3,
+      goalsAgainst: 1,
+      goalDifference: 2,
+      points: 3,
+      awayGoals: 0,
+      wins: 1,
+      awayWins: 0,
+      band: "direct",
+      provisional: true,
+      separatedBy: null,
+    });
+    expect(rows[0]?.form).toEqual(["W"]);
+
+    // Carol has not played, so she ranks above Bob on goal difference.
+    expect(rows[1]).toMatchObject({
+      position: 2,
+      played: 0,
+      points: 0,
+      goalDifference: 0,
+      separatedBy: null,
+    });
+    expect(rows[2]).toMatchObject({
+      uid: playerB.uid,
+      position: 3,
+      played: 1,
+      lost: 1,
+      goalsFor: 1,
+      goalsAgainst: 3,
+      goalDifference: -2,
+      points: 0,
+      separatedBy: "goalDifference",
+    });
+    expect(rows[2]?.form).toEqual(["L"]);
+
+    const verified = await verifyStandings();
+    expect(verified.status).toBe(200);
+    expect(await bodyOf(verified)).toMatchObject({
+      valid: true,
+      checked: 3,
+      completedMatches: 1,
+      profile: "uefa",
+      missing: [],
+      unexpected: [],
+      mismatches: [],
+    });
+  });
+
+  it("rebuilds the table when a result is corrected", async () => {
+    expect((await enter()).status).toBe(200);
+
+    const response = await correctRoute(
+      request("POST", `/api/organiser/tournaments/${TOURNAMENT_ID}/results/correct`, {
+        matchId: MATCH_A,
+        homeGoals: 0,
+        awayGoals: 1,
+        reason: "The home and away scores were swapped.",
+      }),
+      enterContext(),
+    );
+    expect(response.status).toBe(200);
+
+    const rows = await standingRows();
+    expect(rows.map((row) => row.uid)).toEqual([playerB.uid, playerC.uid, playerA.uid]);
+
+    const alice = await standingFor(playerA.uid);
+    expect(alice).toMatchObject({
+      position: 3,
+      played: 1,
+      won: 0,
+      drawn: 0,
+      lost: 1,
+      goalsFor: 0,
+      goalsAgainst: 1,
+      goalDifference: -1,
+      points: 0,
+    });
+    expect(alice?.form).toEqual(["L"]);
+
+    const bob = await standingFor(playerB.uid);
+    expect(bob).toMatchObject({
+      position: 1,
+      played: 1,
+      won: 1,
+      goalsFor: 1,
+      goalsAgainst: 0,
+      goalDifference: 1,
+      points: 3,
+      awayGoals: 1,
+      awayWins: 1,
+    });
+    expect(bob?.form).toEqual(["W"]);
+
+    const verified = await verifyStandings();
+    expect(await bodyOf(verified)).toMatchObject({ valid: true, completedMatches: 1 });
+  });
+
+  it("returns every row to zero after a result is cleared", async () => {
+    expect((await enter()).status).toBe(200);
+
+    const response = await clearRoute(
+      request("POST", `/api/organiser/tournaments/${TOURNAMENT_ID}/results/clear`, {
+        matchId: MATCH_A,
+        reason: "The match was never played.",
+      }),
+      enterContext(),
+    );
+    expect(response.status).toBe(200);
+
+    expect((await tournamentData()).leagueMatchesCompleted).toBe(0);
+
+    const rows = await standingRows();
+    expect(rows).toHaveLength(3);
+    expect(rows.map((row) => row.position)).toEqual([1, 2, 3]);
+
+    for (const row of rows) {
+      expect(row).toMatchObject({
+        played: 0,
+        won: 0,
+        drawn: 0,
+        lost: 0,
+        goalsFor: 0,
+        goalsAgainst: 0,
+        goalDifference: 0,
+        points: 0,
+        awayGoals: 0,
+        wins: 0,
+        awayWins: 0,
+        provisional: true,
+      });
+      expect(row.form).toEqual([]);
+    }
+
+    // Every row is level, so only the drawing of lots separates them.
+    expect(rows[0]?.separatedBy).toBeNull();
+    expect(rows[1]?.separatedBy).toBe("lot");
+    expect(rows[2]?.separatedBy).toBe("lot");
+
+    const verified = await verifyStandings();
+    expect(await bodyOf(verified)).toMatchObject({ valid: true, completedMatches: 0 });
+  });
+
+  it("recomputes once for a bulk batch and never drifts from a fresh table", async () => {
+    const response = await bulkRoute(
+      request("POST", `/api/organiser/tournaments/${TOURNAMENT_ID}/results/bulk`, {
+        results: [
+          { matchId: MATCH_A, homeGoals: 1, awayGoals: 0 },
+          { matchId: MATCH_B, homeGoals: 2, awayGoals: 2 },
+          { matchId: MATCH_C, homeGoals: 0, awayGoals: 3 },
+        ],
+      }),
+      enterContext(),
+    );
+    expect(response.status).toBe(200);
+
+    expect((await tournamentData()).leagueMatchesCompleted).toBe(3);
+
+    const rows = await standingRows();
+    expect(rows.map((row) => row.uid)).toEqual([playerC.uid, playerA.uid, playerB.uid]);
+
+    expect(rows[0]).toMatchObject({
+      uid: playerC.uid,
+      position: 1,
+      played: 2,
+      won: 1,
+      drawn: 1,
+      lost: 0,
+      goalsFor: 5,
+      goalsAgainst: 2,
+      goalDifference: 3,
+      points: 4,
+      awayWins: 1,
+    });
+
+    expect(rows[1]).toMatchObject({
+      uid: playerA.uid,
+      position: 2,
+      played: 2,
+      won: 1,
+      drawn: 1,
+      goalsFor: 3,
+      goalsAgainst: 2,
+      goalDifference: 1,
+      points: 4,
+      awayGoals: 2,
+    });
+
+    expect(rows[2]).toMatchObject({
+      uid: playerB.uid,
+      position: 3,
+      played: 2,
+      lost: 2,
+      goalsFor: 0,
+      goalsAgainst: 4,
+      goalDifference: -4,
+      points: 0,
+    });
+
+    const verified = await verifyStandings();
+    expect(await bodyOf(verified)).toMatchObject({
+      valid: true,
+      checked: 3,
+      completedMatches: 3,
+    });
+  });
+
+  it("keeps the table consistent when two entries race", async () => {
+    const [first, second] = await Promise.all([enter(), enter(MATCH_A, 0, 9)]);
+    expect([first.status, second.status].sort()).toEqual([200, 409]);
+
+    const match = await matchData(MATCH_A);
+    const result = match.result as { homeGoals: number; awayGoals: number };
+
+    const alice = await standingFor(playerA.uid);
+    const bob = await standingFor(playerB.uid);
+
+    expect(alice).toMatchObject({
+      played: 1,
+      goalsFor: result.homeGoals,
+      goalsAgainst: result.awayGoals,
+    });
+    expect(bob).toMatchObject({
+      played: 1,
+      goalsFor: result.awayGoals,
+      goalsAgainst: result.homeGoals,
+    });
+
+    const verified = await verifyStandings();
+    expect(await bodyOf(verified)).toMatchObject({ valid: true, completedMatches: 1 });
+
+    const rows = await standingRows();
+    expect(rows.reduce((total, row) => total + Number(row.played), 0)).toBe(2);
+  });
+
+  it("repairs a corrupted table with an audited recalculate", async () => {
+    expect((await enter()).status).toBe(200);
+
+    await getFirebaseAdminFirestore()
+      .doc(paths.tournamentStanding(TOURNAMENT_ID, playerA.uid))
+      .update({ points: 999, position: 3, played: 99 });
+
+    const before = await verifyStandings();
+    expect(before.status).toBe(200);
+    const beforeBody = await bodyOf(before);
+    expect(beforeBody.valid).toBe(false);
+    expect(beforeBody.mismatches).toEqual([
+      { uid: playerA.uid, fields: ["played", "points", "position"] },
+    ]);
+
+    const repaired = await recalculate();
+    expect(repaired.status).toBe(200);
+    expect(await bodyOf(repaired)).toMatchObject({
+      ok: true,
+      players: 3,
+      completedMatches: 1,
+      profile: "uefa",
+    });
+
+    const alice = await standingFor(playerA.uid);
+    expect(alice).toMatchObject({ played: 1, points: 3, position: 1 });
+
+    const after = await verifyStandings();
+    expect(await bodyOf(after)).toMatchObject({ valid: true, mismatches: [] });
+    expect(await auditCount("standings.recalculated")).toBe(1);
+  });
+
+  it("locks the tie-break profile after the first result", async () => {
+    const editable = await updateTournamentRoute(
+      request("PATCH", `/api/organiser/tournaments/${TOURNAMENT_ID}`, {
+        tiebreakerProfile: "classic",
+      }),
+      enterContext(),
+    );
+    expect(editable.status).toBe(200);
+    expect((await tournamentData()).tiebreakerProfile).toBe("classic");
+
+    expect((await enter()).status).toBe(200);
+
+    const locked = await updateTournamentRoute(
+      request("PATCH", `/api/organiser/tournaments/${TOURNAMENT_ID}`, {
+        tiebreakerProfile: "uefa",
+      }),
+      enterContext(),
+    );
+    expect(locked.status).toBe(403);
+    expect((await tournamentData()).tiebreakerProfile).toBe("classic");
+
+    // A locked profile does not corrupt the table or its verification.
+    const verified = await verifyStandings();
+    expect(await bodyOf(verified)).toMatchObject({ valid: true, profile: "classic" });
+  });
+
+  it("denies standings repair and verification to non-owners", async () => {
+    expect((await enter()).status).toBe(200);
+
+    sessionCookie.value = await sessionFor(otherOrganiser);
+    expect((await recalculate()).status).toBe(404);
+    expect((await verifyStandings()).status).toBe(404);
+
+    sessionCookie.value = await sessionFor(plainPlayer);
+    expect((await recalculate()).status).toBe(403);
+    expect((await verifyStandings()).status).toBe(403);
   });
 });

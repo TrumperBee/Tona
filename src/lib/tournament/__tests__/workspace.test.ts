@@ -240,6 +240,7 @@ describe("getWorkspaceTabs", () => {
       ],
       graphics: ["fixtures_published", "league_phase", "knockout", "completed", "archived"],
       results: ["fixtures_published", "league_phase", "knockout", "completed", "archived"],
+      standings: ["fixtures_published", "league_phase", "knockout", "completed", "archived"],
       "result-reports": ["fixtures_published", "league_phase", "knockout", "completed", "archived"],
       knockout: ["knockout", "completed", "archived"],
     };
@@ -283,8 +284,8 @@ describe("getWorkspaceTabs", () => {
   it("returns a tab for every workspace navigation item", () => {
     const tabs = getWorkspaceTabs(tournament("draft"));
 
-    expect(tabs).toHaveLength(10);
-    expect(new Set(tabs.map((tab) => tab.segment)).size).toBe(10);
+    expect(tabs).toHaveLength(11);
+    expect(new Set(tabs.map((tab) => tab.segment)).size).toBe(11);
   });
 
   it("returns only plain serialisable data for the client component", () => {

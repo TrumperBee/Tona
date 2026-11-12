@@ -13,6 +13,7 @@ import { FieldValue, type Transaction } from "firebase-admin/firestore";
 import { writeAuditLog } from "@/lib/audit/log";
 import type { SessionUser } from "@/lib/auth/session";
 import { DEFAULT_MATCH_DURATION_MINUTES, UCL_LEAGUE_PHASE_36 } from "@/lib/config/formats";
+import { DEFAULT_TIEBREAKER_PROFILE } from "@/lib/engine/standings/types";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 import { ACTIVE_SLOT_STATUSES } from "@/lib/organiser/overview";
@@ -136,6 +137,8 @@ export async function createTournamentDraft(
       season: input.season,
       allowedPlatforms: null,
       allowedCountries: null,
+      tiebreakerProfile: DEFAULT_TIEBREAKER_PROFILE,
+      standingsUpdatedAt: null,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });

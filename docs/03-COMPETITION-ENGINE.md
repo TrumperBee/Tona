@@ -1,10 +1,10 @@
 # GCC - Competition Engine
 
-> **Status: pot allocation implemented in Phase 9; league-phase fixtures implemented in Phase 10; results and result reports implemented in Phase 11; standings and knockout stages are still design.**
+> **Status: pot allocation implemented in Phase 9; league-phase fixtures implemented in Phase 10; results and result reports implemented in Phase 11; league standings and tie-breakers implemented in Phase 12; knockout stages remain design.**
 >
 > `src/lib/engine/` contains the real, fully tested Phase 9 pot allocation (`random.ts`,
-> `pots.ts`) and the Phase 10 fixture engine (`fixtures/`). Phase 12 implements
-> standings; Phase 13 knockouts.
+> `pots.ts`), the Phase 10 fixture engine (`fixtures/`) and the Phase 12 standings
+> engine (`standings/`). Phase 13 adds knockouts.
 
 ## 1. Principles
 
@@ -106,25 +106,66 @@ match with no result and produces `completed`; correcting and clearing need a
 boundary (`src/lib/tournament/results.ts`) applies the plan inside one Firestore
 transaction per action, updates `leagueMatchesCompleted`, and moves the
 tournament between `fixtures_published` and `league_phase`. Bulk entry performs
-the same checks for up to 18 matches in one all-or-nothing transaction. A
-documented no-op `onLeagueResultsChanged(tournamentId)` is called after every
-successful enter/bulk/correct/clear so Phase 12 can recalculate standings
-without changing any route.
+the same checks for up to 18 matches in one all-or-nothing transaction.
 
-### Standings
+Every enter/bulk/correct/clear also rebuilds the complete league table inside the
+same transaction (Phase 12). All reads happen first — tournament, draw,
+registrations and all matches — because Firestore requires reads before writes.
+The pending result change is applied in memory, the pure engine computes the
+table, and the match, all standing documents and the tournament counters are then
+written together. Bulk entry computes once for the whole batch; the transaction
+reads at most 144 match documents and writes 36 standing documents, staying far
+below the 500-write limit. A committed result and its table can therefore never
+disagree, and a failed transaction leaves the previous table untouched. After
+publication the same path writes 36 zero-match rows from the confirmed draw, so
+the Table tab exists before the first result without inventing a score.
+
+### Standings (implemented in Phase 12)
+
+Standings are derived data. There is no manual table row and no client write: every
+value comes from the entered players and the recorded, completed league results. The
+pure engine lives in `src/lib/engine/standings/`:
+
+```ts
+computeStandings({ players: { id, lot }[], matches, profile? }) -> StandingRow[]
+assignBands(rows) -> StandingRow[]
+compareStandingRows(a, b, profile) -> number
+deriveLot(tiebreakSeed, participantId) -> number
+```
 
 Inputs:
 
-- Participants.
-- Fixtures.
-- **Completed** results only. Results are entered by the tournament owner or Super Admin;
-  players never submit or confirm a score.
-- Format tiebreak order.
+- The confirmed field (36 players) and their deterministic `lot`.
+- **Completed** league results only. Unplayed fixtures and cleared results never
+  contribute; no score is inferred from client input.
+- The tournament's tie-break profile (`uefa`, the default, or `classic`).
 
 Outputs:
 
-- Ordered table with played, won, drawn, lost, goals for/against, goal difference, points.
-- Qualification outcome per participant derived from format bands.
+- One row per player with played, won, drawn, lost, goals for/against, goal
+  difference, points, away goals, wins, away wins and the last five results.
+- Opponents' aggregate points, goal difference and goals scored.
+- Position 1..N, the qualification band and — for a row tied on points with the row
+  above — the first criterion that separated them (`separatedBy`).
+
+The server boundary (`src/lib/tournament/standings.ts`) supplies identities from the
+draw snapshot (falling back to registrations, then match participants), derives each
+lot from the draw's stored `tiebreakSeed`, and writes the `standings/{uid}` documents.
+The seed fallback for a legacy tournament without a draw is `standings:{tournamentId}`,
+so the table is still reproducible. The profile may be changed only while
+`leagueMatchesCompleted` is zero; the PATCH transaction locks it after the first
+result, because the stored table was built with that profile.
+
+Two guarded routes exist for repair, never for editing a table row:
+
+- `POST /api/organiser/tournaments/[id]/standings/recalculate` rebuilds every row from
+  recorded results and audits the repair.
+- `GET /api/organiser/tournaments/[id]/standings/verify` recomputes the table and
+  compares every stored field. It reports additions, removals and mismatches without
+  mutating anything.
+
+`standingsUpdatedAt` on the tournament records the last rebuild. A row is
+`provisional` until all 144 league matches are recorded.
 
 ## 3. Fixture constraints (launch format)
 
@@ -277,25 +318,38 @@ re-check the same status server-side because the Admin SDK bypasses Security Rul
 ## 6. Standings and tiebreakers
 
 - Points: win = 3, draw = 1, loss = 0.
-- Only completed results affect standings. Unplayed or corrected results are never inferred
-  from client input.
-- Ordering plan:
+- Only completed results affect standings. Unplayed or cleared results never contribute,
+  and no result is inferred from client input.
+- The table is one sequential sort over the whole field, never a set of head-to-head
+  mini-leagues. Higher values rank first for every criterion except the lot, which ranks
+  ascending. A final participant-id comparison keeps the order strict even if two lots
+  collide.
+- The `uefa` profile (default) applies, in order:
   1. Points
   2. Goal difference
   3. Goals scored
-  4. Head-to-head points among tied participants
-  5. Head-to-head goal difference
-  6. Number of away goals scored
-  7. Number of wins
-  8. Deterministic final tiebreak (documented; no silent alphabet fallback)
-
-The exact order is confirmed with the format definition in Phase 12 and documented here
-before implementation. Tiebreak logic must be a pure, tested comparator with a stable
-result.
+  4. Away goals scored
+  5. Wins
+  6. Away wins
+  7. Opponents' aggregate points
+  8. Opponents' aggregate goal difference
+  9. Opponents' aggregate goals scored
+  10. Drawing of lots
+- The `classic` profile applies points, goal difference, goals scored, wins, then the
+  drawing of lots. It ignores the away and opponent aggregates.
+- **The lot is deterministic.** `deriveLot(tiebreakSeed, uid)` hashes the draw's stored
+  tie-break seed and the player id into a safe 53-bit integer. The same tournament and
+  field always produce the same lot order; input array order is never consulted. There is
+  no alphabetical or manual fallback.
+- `separatedBy` on each row records the first criterion that separated it from the row
+  above when the two are level on points. The public and organiser tables use it to
+  explain why positions differ, and every table shows the active profile's full criterion
+  order.
 
 ## 7. Qualification bands
 
-Positions are mapped using the format definition, not `if` statements:
+Positions are mapped by `assignBands`, using the format definition rather than scattered
+conditionals:
 
 | Positions | Outcome            |
 | --------- | ------------------ |
@@ -380,10 +434,47 @@ reports are participant-only, one open per player per match, resolved with a
 required note by the owner or Super Admin, with an audit entry and reporter
 notification.
 
+### Phase 12 (implemented)
+
+`src/lib/engine/__tests__/standings.test.ts` runs emulator-free and contains 25 tests:
+
+- **Hand-computed tables.** Played/won/drawn/lost, goals, away goals, points, form and
+  positions; last-five form with the newest last; a zero-match 36-player table ordered
+  by lot regardless of input order.
+- **One test per tie-break criterion.** Each synthetic comparison deliberately ties every
+  earlier criterion, then proves the named one decides: points, goal difference, goals
+  scored, away goals, wins, away wins, opponents' aggregate points, opponents' aggregate
+  goal difference, opponents' aggregate goals, and the lot. A separate test proves the
+  classic profile ignores away/opponent criteria.
+- **Worked criterion-5+ tables.** A one-win team with three draws and a two-win team both
+  finish on 6 points, GF 2, GA 0, GD 2, 0 away goals: criterion 5 (wins) puts the two-win
+  team above, and the other row records `separatedBy: "wins"`. Further worked tables
+  resolve equal records by away wins (criterion 6), opponents' aggregate points
+  (criterion 7: 6 vs 3), opponents' aggregate goal difference (criterion 8: 1 vs 0) and
+  opponents' aggregate goals (criterion 9: 4 vs 3).
+- **Qualification bands.** Exactly 8 direct, 8 seeded play-off, 8 unseeded play-off and
+  12 eliminated positions, with the 8/9, 16/17 and 24/25 boundaries correct.
+- **1,000-run property test.** Each run builds 36 players and 144 random complete results.
+  It asserts: the table is identical when both players and matches are shuffled; repeated
+  computation is identical; positions are 1..36 and every adjacent pair is strictly
+  ordered under the comparator; total points equal three per decisive match plus two per
+  draw; goals for equal goals against; and each row's played, points, goal difference and
+  all three opponent aggregates equal a brute-force recount over the raw matches.
+- **Purity.** The purity test now includes every standings engine file.
+
+Emulator-backed integration tests (`tests/integration/results.test.ts`) prove the server
+boundary: entry writes the match and the derived table in one transaction and a fresh
+verification matches all stored rows; correction moves the positions; clearing returns
+every row to zero and restores `fixtures_published`; a bulk batch recomputes once and
+verifies; two concurrent entries leave one success and a table consistent with the
+committed score; a manually corrupted row is reported by verify and repaired by the
+audited recalculate action; the tie-break profile can change before the first result and
+is refused with 403 afterwards; and another organiser gets 404 while a plain player gets
+403 for both repair routes. The fixture integration test also proves publication writes
+36 zero-match rows with positions 1..36, distinct lots and the 8/8/8/12 band split.
+
 ### Later stages
 
-- Standings: only confirmed results count; ordering is stable under ties.
-- Qualification: band boundaries (8/9, 16/17, 24/25) map correctly.
 - Knockout: bracket progression and winner propagation.
 
 ## 9. Interface discipline

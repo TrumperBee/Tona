@@ -13,6 +13,9 @@
 //   name, game and season only while no registration exists.
 // - slug is immutable from creation; formatId and maxParticipants are fixed
 //   by the platform format and never accepted from a client.
+// - Phase 12: the tie-break profile may change at any point until the first
+//   league result is recorded. Once a result exists the stored table was built
+//   with that profile, so changing it would silently rewrite history.
 import type { TournamentStatus } from "@/types/domain";
 
 export const TOURNAMENT_FIELD_IDS = [
@@ -30,6 +33,7 @@ export const TOURNAMENT_FIELD_IDS = [
   "matchDurationMinutes",
   "allowedPlatforms",
   "allowedCountries",
+  "tiebreakerProfile",
 ] as const;
 export type TournamentFieldId = (typeof TOURNAMENT_FIELD_IDS)[number];
 
@@ -48,6 +52,8 @@ export function isTournamentFieldId(value: string): value is TournamentFieldId {
 export interface EditabilityInput {
   readonly status: TournamentStatus;
   readonly registrationCount: number;
+  /** Completed league matches. The tie-break profile locks once this is > 0. */
+  readonly leagueMatchesCompleted?: number;
 }
 
 /** The set of fields a patch may carry for this tournament right now. */
@@ -66,6 +72,12 @@ export function getEditableTournamentFields(
     "registrationClosesAt",
     "startsAt",
   ]);
+
+  // The tie-break profile is part of the published table contract: changing it
+  // after the first result would retroactively reorder recorded matches.
+  if ((tournament.leagueMatchesCompleted ?? 0) === 0) {
+    editable.add("tiebreakerProfile");
+  }
 
   const hasRegistrations = tournament.registrationCount > 0;
 
