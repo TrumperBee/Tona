@@ -155,13 +155,18 @@ function registrationWrite(
 }
 
 /**
- * Registers the signed-in player for a tournament. One transaction re-reads
- * the tournament, re-checks the effective state and restrictions, writes the
+ * Registers a known player for a tournament. One transaction re-reads the
+ * tournament, re-checks the effective state and restrictions, writes the
  * public registration snapshot, increments the count and creates the
  * membership entry. Capacity is never exceeded.
+ *
+ * The caller supplies the authenticated session, so both the HTTP route (via
+ * `registerPlayer`) and trusted local tooling can reuse the exact same rules.
  */
-export async function registerPlayer(tournamentId: string): Promise<void> {
-  const user = await requireUser();
+export async function registerPlayerForUser(
+  user: SessionUser,
+  tournamentId: string,
+): Promise<void> {
   await assertPlatformWritable(user);
   await requireActivePlayer(user);
   const player = await loadPlayerSnapshot(user.userId);
@@ -241,6 +246,15 @@ export async function registerPlayer(tournamentId: string): Promise<void> {
       link: `/organiser/tournaments/${tournamentId}/registrations`,
     }).catch(() => undefined);
   }
+}
+
+/**
+ * Registers the signed-in player for a tournament. Thin wrapper that resolves
+ * the session and delegates to `registerPlayerForUser`.
+ */
+export async function registerPlayer(tournamentId: string): Promise<void> {
+  const user = await requireUser();
+  await registerPlayerForUser(user, tournamentId);
 }
 
 /**

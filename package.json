@@ -18,6 +18,7 @@
     "emulators": "firebase emulators:start",
     "test:rules": "firebase emulators:exec --only firestore,auth \"vitest run --config vitest.rules.config.ts\"",
     "test:integration": "firebase emulators:exec --only firestore,auth \"vitest run --config vitest.integration.config.ts\"",
+    "dev:seed": "tsx --tsconfig scripts/dev/tsconfig.json scripts/dev/seed/index.ts",
     "rules:deploy": "firebase deploy --only firestore:rules,firestore:indexes",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
@@ -49,6 +50,7 @@
     "prettier": "^3.9.10",
     "prettier-plugin-tailwindcss": "^0.8.1",
     "tailwindcss": "^3.4.19",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^5.1.0"
   }
