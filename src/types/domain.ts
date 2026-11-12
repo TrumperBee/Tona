@@ -352,6 +352,14 @@ export interface TournamentDocument {
   readonly allowedPlatforms: readonly PlatformId[] | null;
   /** ISO 3166-1 alpha-2 codes, or null when every country may enter. */
   readonly allowedCountries: readonly string[] | null;
+  /**
+   * Set when the organiser publishes the league-phase schedule. The hash is the
+   * canonical SHA-256 of the 144 fixtures and is re-checked before every
+   * integrity report. Optional on documents written before Phase 10.
+   */
+  readonly scheduleHash?: string | null;
+  readonly fixturesPublishedAt?: Timestamp | null;
+  readonly leagueMatchesCompleted?: number;
   readonly createdAt: Timestamp;
   readonly updatedAt: Timestamp;
 }
@@ -429,12 +437,14 @@ export interface DrawDocument {
 }
 
 export interface DraftFixture {
+  /** Deterministic id: `league-md{NN}-m{NN}`. */
   readonly id: string;
   readonly matchday: number;
   readonly homeUid: string;
   readonly awayUid: string;
   readonly homeTag: string;
   readonly awayTag: string;
+  /** Informational only; derived from the matchday window at publish time. */
   readonly scheduledAt: Timestamp | null;
 }
 
@@ -443,14 +453,59 @@ export interface FixtureValidationIssue {
   readonly message: string;
 }
 
+export interface FixtureDraftReport {
+  readonly algorithmVersion: number;
+  readonly attemptSeed: string;
+  readonly attempts: number;
+  readonly colouringNodes: number;
+  readonly maxHomeAwayStreak: number;
+  readonly playersWithStreak3Plus: number;
+  readonly perMatchdayCounts: readonly number[];
+}
+
+export interface FixtureDraftPlayerStats {
+  readonly playerId: string;
+  readonly pot: number;
+  readonly home: number;
+  readonly away: number;
+  readonly opponentsByPot: readonly number[];
+}
+
+export interface FixtureDraftStats {
+  readonly matchCount: number;
+  readonly perMatchdayCounts: readonly number[];
+  readonly perPlayer: readonly FixtureDraftPlayerStats[];
+}
+
+/**
+ * Server-written fixture draft inside `tournaments/{id}/fixtureDrafts/current`.
+ * It stays private until the schedule is published. `scheduleHash` is the
+ * canonical SHA-256 over the fixture list, so a later integrity check can prove
+ * the stored matches are byte-for-byte the draft that was validated.
+ */
 export interface FixtureDraftDocument {
+  readonly seed: string;
+  readonly algorithmVersion: number;
+  readonly fixtures: readonly DraftFixture[];
+  readonly report: FixtureDraftReport;
+  readonly stats: FixtureDraftStats;
+  readonly scheduleHash: string;
   readonly generatedBy: string;
   readonly generatedAt: Timestamp;
-  readonly fixtures: readonly DraftFixture[];
+  readonly generationCount: number;
   readonly validation: {
     readonly valid: boolean;
     readonly issues: readonly FixtureValidationIssue[];
   };
+}
+
+/** One published league-phase matchday window. Informational, never a result. */
+export interface MatchdayDocument {
+  readonly number: number;
+  readonly startsOn: Timestamp;
+  readonly endsOn: Timestamp;
+  readonly createdAt: Timestamp;
+  readonly updatedAt: Timestamp;
 }
 
 export interface MatchResult {

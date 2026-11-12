@@ -3,7 +3,17 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-const ENGINE_FILES = ["index.ts", "pots.ts", "random.ts", "types.ts"] as const;
+const ENGINE_FILES = [
+  "index.ts",
+  "pots.ts",
+  "random.ts",
+  "types.ts",
+  "fixtures/colouring.ts",
+  "fixtures/generate.ts",
+  "fixtures/index.ts",
+  "fixtures/types.ts",
+  "fixtures/validate.ts",
+] as const;
 
 function source(file: string): string {
   return readFileSync(fileURLToPath(new URL(`../${file}`, import.meta.url)), "utf8");

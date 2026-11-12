@@ -26,6 +26,7 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 
 import { OrganisedBy } from "@/components/tournament/organised-by";
+import { PublicFixturesPanel } from "@/components/tournament/public-fixtures-panel";
 import { PublicPotsPanel } from "@/components/tournament/public-pots-panel";
 import { PublicSectionTabs } from "@/components/tournament/public-section-tabs";
 import { RegisterAction } from "@/components/tournament/register-action";
@@ -46,6 +47,7 @@ import {
   getTournamentParticipants,
   getViewerRegistration,
 } from "@/lib/data/public-tournaments";
+import { getPublicFixtures } from "@/lib/data/public-fixtures";
 import { formatDate } from "@/lib/utils/dates";
 import { getRegistrationState } from "@/lib/tournament/registration-state";
 
@@ -152,6 +154,7 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
 
   const participants = await getTournamentParticipants(tournament.id);
   const publicDraw = await getPublicDraw(tournament.id);
+  const publicFixtures = await getPublicFixtures(tournament.id, tournament.status);
 
   const facts = [
     { label: "Game", value: game.name, icon: Gamepad2 },
@@ -237,6 +240,16 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
 
       <PublicSectionTabs
         pots={publicDraw ? <PublicPotsPanel draw={publicDraw} timezone={timezone} /> : null}
+        fixtures={
+          publicFixtures ? (
+            <PublicFixturesPanel
+              matches={publicFixtures.matches}
+              matchdays={publicFixtures.matchdays}
+              viewerUid={user?.userId ?? null}
+              timezone={timezone}
+            />
+          ) : null
+        }
       >
         <section className="border-b border-white/10">
           <div className="container grid gap-6 py-10 lg:grid-cols-[1.4fr_0.6fr] lg:items-start">
@@ -396,12 +409,25 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
               </Card>
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <EmptyState
-                  size="sm"
-                  icon={Swords}
-                  title="Fixtures not published"
-                  description="When the organiser confirms the field and publishes fixtures, every matchday appears here with real home and away assignments."
-                />
+                {publicFixtures ? (
+                  <Card variant="elevated">
+                    <CardHeader>
+                      <CardTitle className="text-lg">Fixtures published</CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-sm leading-6 text-grey-400">
+                      {publicFixtures.matches.length} matches across eight matchdays. Open the
+                      Fixtures tab to browse each matchday and, if you are playing, your own
+                      matches.
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <EmptyState
+                    size="sm"
+                    icon={Swords}
+                    title="Fixtures not published"
+                    description="When the organiser confirms the field and publishes fixtures, every matchday appears here with real home and away assignments."
+                  />
+                )}
                 <EmptyState
                   size="sm"
                   icon={ListChecks}

@@ -340,6 +340,20 @@ async function seed(): Promise<void> {
         fixtures: [],
         validation: { valid: true, issues: [] },
       }),
+      setDoc(doc(db, "tournaments/published/matchdays/1"), {
+        number: 1,
+        startsOn: now,
+        endsOn: now,
+        createdAt: now,
+        updatedAt: now,
+      }),
+      setDoc(doc(db, "tournaments/draft/matchdays/1"), {
+        number: 1,
+        startsOn: now,
+        endsOn: now,
+        createdAt: now,
+        updatedAt: now,
+      }),
       setDoc(doc(db, "tournaments/public/matches/m1"), {
         tournamentId: "public",
         stage: "league",
@@ -662,6 +676,7 @@ describe("public reads", () => {
     await assertSucceeds(getDoc(doc(db, "tournaments/public/draw/current")));
     await assertSucceeds(getDoc(doc(db, "tournaments/public/standings/alice")));
     await assertSucceeds(getDoc(doc(db, "tournaments/published/matches/m1")));
+    await assertSucceeds(getDoc(doc(db, "tournaments/published/matchdays/1")));
     await assertSucceeds(getDoc(doc(db, "tournaments/public/knockoutTies/t1")));
     await assertSucceeds(getDoc(doc(db, "tournaments/public/announcements/a1")));
   });
@@ -673,6 +688,17 @@ describe("public reads", () => {
     await assertFails(getDoc(doc(db, "tournaments/suspended")));
     await assertFails(getDoc(doc(db, "tournaments/public/fixtureDrafts/current")));
     await assertFails(getDoc(doc(db, "tournaments/public/resultReports/r1")));
+  });
+
+  it("keeps a fixture draft private from players while exposing published matchdays", async () => {
+    // A signed-in player is not the owner: the draft never reaches them.
+    await assertFails(getDoc(doc(user("alice"), "tournaments/public/fixtureDrafts/current")));
+    await assertFails(getDoc(doc(user("bob"), "tournaments/public/fixtureDrafts/current")));
+
+    // Matchday windows only appear once the tournament has published fixtures.
+    await assertSucceeds(getDoc(doc(user("alice"), "tournaments/published/matchdays/1")));
+    await assertFails(getDoc(doc(user("alice"), "tournaments/public/matchdays/1")));
+    await assertFails(getDoc(doc(user("alice"), "tournaments/draft/matchdays/1")));
   });
 
   it("does not expose an unconfirmed draw but exposes a confirmed one", async () => {
@@ -850,6 +876,7 @@ describe("client writes", () => {
       "tournaments/public/draw/current",
       "tournaments/public/fixtureDrafts/current",
       "tournaments/public/matches/m1",
+      "tournaments/published/matchdays/1",
       "tournaments/public/resultReports/r1",
       "tournaments/public/standings/alice",
       "tournaments/public/knockoutTies/t1",

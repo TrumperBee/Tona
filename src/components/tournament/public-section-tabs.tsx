@@ -3,21 +3,34 @@
 // GCC - public tournament section tabs.
 //
 // The overview is the existing server-rendered detail body. The Pots tab only
-// exists after the draw is confirmed, so a draft draw has no public surface at
-// all. Server elements are passed through as ReactNode, never as component
-// references.
+// exists after the draw is confirmed, and the Fixtures tab only after the
+// schedule is published, so neither a draft draw nor a private draft has a
+// public surface at all. Server elements are passed through as ReactNode, never
+// as component references.
 import type { ReactNode } from "react";
 
 import { Tabs } from "@/components/ui/tabs";
 
 export function PublicSectionTabs({
   pots,
+  fixtures,
   children,
 }: {
   readonly pots: ReactNode | null;
+  readonly fixtures: ReactNode | null;
   readonly children: ReactNode;
 }) {
-  if (!pots) {
+  const items = [{ id: "overview", label: "Overview", content: children }];
+
+  if (pots) {
+    items.push({ id: "pots", label: "Pots", content: pots });
+  }
+
+  if (fixtures) {
+    items.push({ id: "fixtures", label: "Fixtures", content: fixtures });
+  }
+
+  if (items.length === 1) {
     return <>{children}</>;
   }
 
@@ -26,10 +39,7 @@ export function PublicSectionTabs({
       ariaLabel="Tournament sections"
       listClassName="container"
       panelClassName="pt-0"
-      items={[
-        { id: "overview", label: "Overview", content: children },
-        { id: "pots", label: "Pots", content: pots },
-      ]}
+      items={items}
     />
   );
 }

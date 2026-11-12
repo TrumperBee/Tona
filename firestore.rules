@@ -155,6 +155,13 @@ service cloud.firestore {
           isSuperAdmin();
       }
 
+      // Informational matchday windows share the match visibility boundary.
+      match /matchdays/{matchday} {
+        allow read: if isPublishedTournament(tournamentId) ||
+          isTournamentOwner(tournamentId) ||
+          isSuperAdmin();
+      }
+
       // Result reports are a player-to-admin "Report a problem" channel. They
       // are readable by the reporter, the tournament owner and the Super Admin.
       // They never change an official result; writes remain deny-all.

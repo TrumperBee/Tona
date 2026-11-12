@@ -1156,3 +1156,143 @@ are deliberate and traceable. Once fixture work starts, the only path is to remo
 that work first; the platform never rewrites a draw under published fixtures. The
 transparency panel shows the method and seed so players can see whether the draw was
 seeded, manual or mixed.
+
+---
+
+## ADR-051 - Fixtures are built in three deterministic steps
+
+**Date:** 2026-11-12
+**Status:** Accepted
+
+**Context.** The launch format needs 144 matches where every one of 36 players has
+eight matches, faces two opponents from each pot (including their own pot), has one
+home and one away match against each pot, plays exactly once per matchday and never
+faces the same opponent twice. Solving all of that with a single general-purpose
+constraint search would be slow and hard to explain.
+
+**Decision.** `src/lib/engine/fixtures/` builds the schedule constructively. Step A
+turns each pot into a seeded ring (one home and one away within the pot) and joins
+each pot pair with a seeded bijection that contributes two matches per position, one
+oriented each way. The result is an 8-regular graph with balanced home/away edges.
+Step B assigns the eight matchdays as a proper 8-edge-colouring using an Algorithm X
+/ Dancing Links exact cover with a 50,000-node budget. If the budget is exhausted, the
+whole build retries from `deriveSeed(seed, "attempt-k")`, up to 50 attempts, and then
+throws `FixtureGenerationError("attempts-exhausted")`. Step C is a 240-iteration
+seeded walk that may flip a whole block's orientation or permute matchday labels; it
+never changes a pairing, so pot quotas and the 4/4 split survive by construction.
+
+**Consequences.** The constructive proof is short enough to test directly: ring
+adjacency gives two pot-mates, the bijection gives two opponents per other pot with
+one home and one away, and every colour class covers all 36 players. Because Step C
+can move a match between matchdays, the validator must still be the authority; it is
+run on every generated draft. Step B is deterministic but bounded, so a pathological
+seed fails loudly rather than degrading into an invalid schedule. The attempt seed and
+node count are stored in the draft and audit log.
+
+---
+
+## ADR-052 - The fixture validator is independent and the canonical hash gates publication
+
+**Date:** 2026-11-12
+**Status:** Accepted
+
+**Context.** A validator that reuses the generator's internal helpers can share the
+same bug and approve a schedule the rules do not actually allow. A draft can also be
+edited between generation and publication, including display tags that should not
+change the fixture identity.
+
+**Decision.** `validate.ts` imports nothing from the generator or the colouring
+module. It re-derives pots, pair uniqueness, matchday coverage, per-player counts and
+per-pot home/away totals from the input and returns typed codes. The server runs it
+after every generation and again inside the publication transaction. The canonical
+hash sorts fixtures by matchday, home id and away id, then SHA-256s newline-terminated
+`matchday\0homeId\0awayId` lines using ids only. Publication stores that hash on the
+draft and on the tournament; verification recomputes it from the stored matches and
+compares it with both. A hash mismatch is an integrity failure even when the
+structural validator happens to pass.
+
+**Consequences.** Generation cannot approve itself, and a direct Firestore edit to a
+match is detectable after the fact. Display-tag corrections do not invalidate the
+hash. The cost is one extra validation and hash pass at publish, both well under a
+second for 144 rows. The verifier never edits anything and never reports success from
+a missing tournament hash.
+
+---
+
+## ADR-053 - Fixture drafts are private and publication is one transaction
+
+**Date:** 2026-11-12
+**Status:** Accepted
+
+**Context.** A fixture draft is transitional and may be regenerated several times.
+Showing it publicly would confuse players and expose a schedule that is not final.
+Publication must not expose a half-written league phase.
+
+**Decision.** `fixtureDrafts/current` is readable only by the owner and the Super
+Admin. The public page, the public fixture loader and `/dashboard/fixtures` require a
+published tournament status before reading matches. Publication runs in one Firestore
+transaction that re-reads the tournament, draw, draft and existing match, re-runs the
+validator and the hash, then writes exactly 144 matches (`league-md{NN}-m{NN}`), eight
+matchday windows and 36 zeroed standings before updating the tournament to
+`fixtures_published`. That is 189 writes, below the 500-write limit. A concurrent
+second publish loses the tournament-document conflict and returns 409; the integration
+test asserts exactly one set of 144/8/36 documents and one audit entry.
+
+**Consequences.** There is no public draft leak and no partially published league.
+Regeneration is allowed only while the tournament is still `pots_confirmed`. Reset is
+the only way back, and it is refused once any match is completed or carries a result.
+Player notifications run after the transaction in chunks of 18, so a notification
+failure cannot roll back a valid publication.
+
+---
+
+## ADR-054 - Matchday windows are informational and editable
+
+**Date:** 2026-11-12
+**Status:** Accepted
+
+**Context.** Organisers need to communicate when each matchday is expected to be
+played, but those dates can move because of real-world scheduling. Storing the window
+as part of the fixture identity would make an innocent date change look like schedule
+tampering.
+
+**Decision.** Publication accepts eight optional windows. When omitted, matchday 1
+starts at the tournament's `startsAt`, each later matchday starts seven days after the
+previous one, and each window lasts six days. The windows are stored as their own
+`matchdays/{n}` documents and can be edited by the owner or Super Admin at any
+published stage through `PATCH .../fixtures/matchdays/[n]`. The edit validates the
+date order, audits the before/after values and never touches a match, a result or the
+canonical schedule hash. Each match stores the window start as an informational
+`scheduledAt`.
+
+**Consequences.** Organisers can correct dates without regenerating or republishing
+144 matches. The schedule hash stays stable because it deliberately excludes windows
+and tags. Public and player views format the stored timestamps in the tournament time
+zone.
+
+---
+
+## ADR-055 - Player fixtures use one collection-group query with a server visibility check
+
+**Date:** 2026-11-12
+**Status:** Accepted
+
+**Context.** A player may compete in several tournaments, so `/dashboard/fixtures`
+needs every match where the player is a participant without first knowing which
+tournaments to read. Firestore Security Rules cannot prove a broad cross-tournament
+query is safe, and the Admin SDK bypasses rules anyway.
+
+**Decision.** `getPlayerFixtures` runs one `collectionGroup("matches")` query with
+`participants array-contains uid` and `orderBy("matchday")`, limited to 200 rows. It
+uses the existing composite collection-group index on `participants CONTAINS` +
+`matchday ASC`. The server reads the referenced tournaments and drops any match whose
+tournament is not in a published status (`fixtures_published`, `league_phase`,
+`knockout`, `completed`, `archived`). Opponent names, avatars and countries come from
+public profile documents; missing profiles fall back to the snapshot tags on the match.
+The page returns an honest empty state when nothing is published.
+
+**Consequences.** The dashboard costs one indexed collection-group query, one batched
+set of tournament reads and one set of public-profile reads, regardless of how many
+tournaments the player has entered. Visibility is enforced twice: the rules protect
+client reads, and the data module enforces the same rule for Admin SDK reads. The
+composite index must be deployed with `firebase deploy --only firestore:indexes`.
