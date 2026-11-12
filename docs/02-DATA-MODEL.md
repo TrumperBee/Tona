@@ -49,7 +49,7 @@
 | `tournaments/{id}`                            | ownerUid, slug, nameLower, name, description, gameId, formatId, coverImageUrl, logoUrl, rules, timezone, registration/starts dates, matchDurationMinutes, allowedPlatforms, allowedCountries, maxParticipants, registrationCount, status, season, timestamps | Public unless `draft`/`suspended`/`cancelled`; owner and Super Admin always |
 | `tournamentSlugs/{slug}`                      | `{ tournamentId, createdAt }` slug reservation                                                                                                                                                                                                               | Nobody (server only)                                                        |
 | `tournaments/{id}/registrations/{uid}`        | tournamentId, gamerTag, gamerTagLower, country, photoUrl, status, registeredAt                                                                                                                                                                               | Public with a public tournament; owner and Super Admin always               |
-| `tournaments/{id}/draw/current`               | pots `{1:[uid…],2:[…],3:[…],4:[…]}`, method, shuffleSeed, confirmedAt, confirmedBy                                                                                                                                                                           | Owner/Super Admin before confirmation; public after                         |
+| `tournaments/{id}/draw/current`               | status, pots `{1:[uid…],2:[…],3:[…],4:[…]}`, unassigned, method, shuffleSeed, algorithmVersion, locks, playersSnapshot, tiebreakSeed, confirmedAt, confirmedBy, timestamps                                                                                   | Owner/Super Admin before confirmation; public after                         |
 | `tournaments/{id}/fixtureDrafts/current`      | Generated unpublished fixtures and validation report                                                                                                                                                                                                         | Owner, Super Admin                                                          |
 | `tournaments/{id}/matches/{matchId}`          | tournamentId, stage, matchday, homeUid, awayUid, homeTag, awayTag, participants, status, scheduledAt, result, updatedAt                                                                                                                                      | Owner/Super Admin always; public once fixtures are published                |
 | `tournaments/{id}/resultReports/{id}`         | matchId, reportedBy, reportedByTag, reason, status, adminNote, resolvedBy, resolvedAt, createdAt                                                                                                                                                             | Reporter, owner, Super Admin                                                |
@@ -282,17 +282,41 @@ is never deleted. **Writers:** server only.
 
 ```text
 {
+  status: "draft" | "confirmed",
   pots: { "1": string[9], "2": string[9], "3": string[9], "4": string[9] },
-  method: "manual" | "shuffle",
-  shuffleSeed: string | null,
+  unassigned: string[],
+  method: "shuffle" | "manual" | "mixed",
+  shuffleSeed: string | null,          // 64 hex chars, server-generated
+  algorithmVersion: number,            // 1 for the cyrb128 + mulberry32 draw
+  locks: { [uid]: "1" | "2" | "3" | "4" }, // pins that survive a re-shuffle
+  playersSnapshot: { [uid]: { gamerTag, avatarUrl, country } },
+  tiebreakSeed: string | null,         // issued only on confirmation
+  createdAt: Timestamp,
+  updatedAt: Timestamp,
   confirmedAt: Timestamp | null,
   confirmedBy: string | null
 }
 ```
 
-Pots are plain: no country restrictions. Every admin shuffle records the actor,
-method and seed in the audit log (Phase 9). The public can read the draw only
-after `confirmedAt` is set and the tournament is public.
+Pots are plain: no country or association restrictions. The field is exactly
+36 registered players in four pots of nine. A draft may also hold an
+`unassigned` list while the organiser is still placing players. `method`
+describes how the current allocation was produced: `shuffle` (seeded),
+`manual` (every move by hand) or `mixed` (seeded shuffle with pinned players).
+`playersSnapshot` is a display-safe copy so the confirmed draw renders even if a
+profile changes later.
+
+Every draw mutation re-reads the tournament, the draw and the registered field
+inside one transaction. The client never supplies a seed, a pot list or a
+count. `shuffleSeed` is generated with `crypto.randomBytes`; the allocation is
+produced by the pure seeded engine. Confirmation re-validates the stored pots
+against the registered field, sets `status: "confirmed"`, issues
+`tiebreakSeed`, moves the tournament to `pots_confirmed` and notifies the 36
+players. A confirmed draw is read-only until an explicit undo, which is allowed
+only while no fixture draft or match exists. The public can read the draw only
+after confirmation and only while the tournament itself is public.
+
+**Writers:** server only.
 
 ### 3.9 `tournaments/{id}/fixtureDrafts/current` — unpublished schedule
 

@@ -98,21 +98,71 @@ function steps(
   });
 }
 
+/** The fixed launch field: four pots of nine. */
+export const DRAW_FIELD_SIZE = 36;
+
+export interface PotsAvailability {
+  readonly available: boolean;
+  /** The exact reason the draw cannot be prepared yet, or null when it can. */
+  readonly reason: string | null;
+}
+
+type WorkspaceTournament = Pick<TournamentDocument, "status"> &
+  Partial<Pick<TournamentDocument, "registrationCount" | "maxParticipants">>;
+
+/**
+ * The draw opens only when registration has closed with exactly the full field.
+ * A closed registration with a short field cannot be confirmed, so the pots
+ * stage explains the exact count instead of offering an impossible draw.
+ */
+export function getPotsAvailability(tournament: WorkspaceTournament): PotsAvailability {
+  if (tournament.status !== "registration_closed") {
+    return { available: false, reason: null };
+  }
+
+  // Without a count only the status gate can be enforced (unit tests and
+  // partial documents); every real caller passes the full tournament.
+  if (typeof tournament.registrationCount !== "number") {
+    return { available: true, reason: null };
+  }
+
+  if (tournament.registrationCount !== DRAW_FIELD_SIZE) {
+    return {
+      available: false,
+      reason: `The draw needs exactly ${DRAW_FIELD_SIZE} registered players; this competition has ${tournament.registrationCount}.`,
+    };
+  }
+
+  return { available: true, reason: null };
+}
+
 /**
  * Returns the seven lifecycle steps with their state for one tournament.
  * `done` stages are behind it, `current` is where its status sits, and every
  * later stage carries the exact condition that unlocks it.
  */
-export function getWorkspaceSteps(
-  tournament: Pick<TournamentDocument, "status">,
-): readonly WorkspaceStep[] {
+export function getWorkspaceSteps(tournament: WorkspaceTournament): readonly WorkspaceStep[] {
   switch (tournament.status) {
     case "draft":
       return steps("setup");
     case "registration_open":
       return steps("registration", "setup");
-    case "registration_closed":
-      return steps("pots", "setup", "registration");
+    case "registration_closed": {
+      const base = steps("pots", "setup", "registration");
+      const availability = getPotsAvailability(tournament);
+
+      if (availability.available) {
+        return base;
+      }
+
+      // The stage is reached, but the field cannot be drawn yet. Mark it locked
+      // with the exact count so the stepper and the page agree on the reason.
+      return base.map((item) =>
+        item.id === "pots"
+          ? step("pots", "locked", availability.reason ?? LOCK_REASONS.pots)
+          : item,
+      );
+    }
     case "pots_confirmed":
       return steps("fixtures", "setup", "registration", "pots");
     case "fixtures_published":

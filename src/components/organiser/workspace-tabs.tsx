@@ -88,7 +88,7 @@ export function WorkspaceTabs({ tournamentId, tabs }: WorkspaceTabsProps) {
                 <Lock aria-hidden="true" className="mt-0.5 h-3 w-3 shrink-0 text-grey-600" />
                 <span>
                   <span className="font-semibold text-grey-400">{item?.label ?? tab.segment}</span>
-                  <span className="text-grey-500"> — {tab.notice}</span>
+                  <span className="text-grey-400"> — {tab.notice}</span>
                 </span>
               </li>
             );

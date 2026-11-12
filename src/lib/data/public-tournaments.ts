@@ -16,7 +16,7 @@ import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 import { isGameId, type GameId } from "@/lib/config/games";
 import { getRegistrationState } from "@/lib/tournament/registration-state";
-import { isTournamentStatus, type TournamentStatus } from "@/types/domain";
+import { isTournamentStatus, type DrawMethod, type TournamentStatus } from "@/types/domain";
 
 const PUBLIC_STATUSES: readonly TournamentStatus[] = [
   "registration_open",
@@ -439,6 +439,119 @@ export async function getViewerRegistration(
     const snapshot = await firestore.doc(paths.tournamentRegistration(tournamentId, uid)).get();
 
     return snapshot.exists ? mapRegistration(snapshot) : null;
+  } catch {
+    return null;
+  }
+}
+
+export interface PublicDrawPlayer {
+  readonly uid: string;
+  readonly gamerTag: string;
+  readonly avatarUrl: string | null;
+  readonly country: string;
+}
+
+export interface PublicDrawPot {
+  readonly pot: "1" | "2" | "3" | "4";
+  readonly players: readonly PublicDrawPlayer[];
+}
+
+export interface PublicDraw {
+  readonly pots: readonly PublicDrawPot[];
+  readonly method: DrawMethod;
+  readonly shuffleSeed: string | null;
+  readonly algorithmVersion: number;
+  readonly confirmedAt: string | null;
+}
+
+const DRAW_POT_KEYS = ["1", "2", "3", "4"] as const;
+
+function readDrawMethod(value: unknown): DrawMethod {
+  return value === "shuffle" || value === "mixed" || value === "manual" ? value : "manual";
+}
+
+function readDrawSnapshotPlayers(value: unknown): PublicDrawPlayer[] {
+  if (typeof value !== "object" || value === null) {
+    return [];
+  }
+
+  const players: PublicDrawPlayer[] = [];
+
+  for (const [uid, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof entry !== "object" || entry === null) {
+      continue;
+    }
+
+    const data = entry as Record<string, unknown>;
+
+    if (typeof data.gamerTag !== "string") {
+      continue;
+    }
+
+    players.push({
+      uid,
+      gamerTag: data.gamerTag,
+      avatarUrl: typeof data.avatarUrl === "string" ? data.avatarUrl : null,
+      country: typeof data.country === "string" ? data.country : "",
+    });
+  }
+
+  return players;
+}
+
+/**
+ * The confirmed draw for a public tournament page. A draft draw is invisible:
+ * this returns null until the document is confirmed and carries a timestamp.
+ * Never throws.
+ */
+export async function getPublicDraw(tournamentId: string): Promise<PublicDraw | null> {
+  try {
+    const snapshot = await getFirebaseAdminFirestore()
+      .doc(paths.tournamentDrawCurrent(tournamentId))
+      .get();
+
+    if (!snapshot.exists) {
+      return null;
+    }
+
+    const data = snapshot.data();
+
+    if (!data || data.status !== "confirmed" || !data.confirmedAt) {
+      return null;
+    }
+
+    const playersByUid = new Map(
+      readDrawSnapshotPlayers(data.playersSnapshot).map((player) => [player.uid, player]),
+    );
+    const potsData =
+      typeof data.pots === "object" && data.pots !== null
+        ? (data.pots as Record<string, unknown>)
+        : {};
+
+    const pots: PublicDrawPot[] = DRAW_POT_KEYS.map((pot) => {
+      const ids = Array.isArray(potsData[pot])
+        ? potsData[pot].filter((uid): uid is string => typeof uid === "string")
+        : [];
+
+      return {
+        pot,
+        players: ids
+          .map((uid) => playersByUid.get(uid))
+          .filter((player): player is PublicDrawPlayer => player !== undefined),
+      };
+    });
+
+    if (pots.every((entry) => entry.players.length === 0)) {
+      return null;
+    }
+
+    return {
+      pots,
+      method: readDrawMethod(data.method),
+      shuffleSeed: typeof data.shuffleSeed === "string" ? data.shuffleSeed : null,
+      algorithmVersion: typeof data.algorithmVersion === "number" ? data.algorithmVersion : 1,
+      confirmedAt: toIsoString(data.confirmedAt),
+    };
   } catch {
     return null;
   }

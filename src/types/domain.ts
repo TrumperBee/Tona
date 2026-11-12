@@ -390,10 +390,40 @@ export interface RegistrationDocument {
 
 export type PotNumber = "1" | "2" | "3" | "4";
 
+export const DRAW_STATUSES = ["draft", "confirmed"] as const;
+export type DrawStatus = (typeof DRAW_STATUSES)[number];
+
+export const DRAW_METHODS = ["shuffle", "manual", "mixed"] as const;
+export type DrawMethod = (typeof DRAW_METHODS)[number];
+
+/** Bumped whenever the allocation algorithm changes in a replay-breaking way. */
+export const DRAW_ALGORITHM_VERSION = 1;
+
+/** Display-safe player snapshot copied into the draw at generation time. */
+export interface DrawPlayerSnapshot {
+  readonly gamerTag: string;
+  readonly avatarUrl: string | null;
+  readonly country: string;
+}
+
+/**
+ * Server-written draw inside `tournaments/{id}/draw/current`.
+ *
+ * The document is private until `status` is `confirmed`. `shuffleSeed` makes a
+ * seeded allocation replayable; `tiebreakSeed` is only issued on confirmation.
+ */
 export interface DrawDocument {
+  readonly status: DrawStatus;
   readonly pots: Readonly<Record<PotNumber, readonly string[]>>;
-  readonly method: "manual" | "shuffle";
+  readonly unassigned: readonly string[];
+  readonly method: DrawMethod;
   readonly shuffleSeed: string | null;
+  readonly algorithmVersion: number;
+  readonly locks: Readonly<Record<string, PotNumber>>;
+  readonly playersSnapshot: Readonly<Record<string, DrawPlayerSnapshot>>;
+  readonly tiebreakSeed: string | null;
+  readonly createdAt: Timestamp;
+  readonly updatedAt: Timestamp;
   readonly confirmedAt: Timestamp | null;
   readonly confirmedBy: string | null;
 }

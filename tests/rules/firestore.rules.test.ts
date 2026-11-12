@@ -304,6 +304,36 @@ async function seed(): Promise<void> {
         confirmedAt: null,
         confirmedBy: null,
       }),
+      setDoc(doc(db, "tournaments/draft/draw/current"), {
+        status: "draft",
+        pots: { "1": ["alice"], "2": [], "3": [], "4": [] },
+        unassigned: [],
+        method: "manual",
+        shuffleSeed: null,
+        algorithmVersion: 1,
+        locks: {},
+        playersSnapshot: {},
+        tiebreakSeed: null,
+        createdAt: now,
+        updatedAt: now,
+        confirmedAt: null,
+        confirmedBy: null,
+      }),
+      setDoc(doc(db, "tournaments/cancelled/draw/current"), {
+        status: "confirmed",
+        pots: { "1": ["alice"], "2": [], "3": [], "4": [] },
+        unassigned: [],
+        method: "manual",
+        shuffleSeed: null,
+        algorithmVersion: 1,
+        locks: {},
+        playersSnapshot: {},
+        tiebreakSeed: null,
+        createdAt: now,
+        updatedAt: now,
+        confirmedAt: now,
+        confirmedBy: "organiser-a",
+      }),
       setDoc(doc(db, "tournaments/public/fixtureDrafts/current"), {
         generatedBy: "organiser-a",
         generatedAt: now,
@@ -650,6 +680,8 @@ describe("public reads", () => {
 
     await assertFails(getDoc(doc(db, "tournaments/public/draw/unconfirmed")));
     await assertSucceeds(getDoc(doc(db, "tournaments/public/draw/current")));
+    // A confirmed draw on a cancelled competition is not public (ADR-044).
+    await assertFails(getDoc(doc(db, "tournaments/cancelled/draw/current")));
   });
 });
 
@@ -659,8 +691,11 @@ describe("organiser ownership", () => {
 
     await assertSucceeds(getDoc(doc(organiserA, "tournaments/draft")));
     await assertSucceeds(getDoc(doc(organiserA, "tournaments/draft/fixtureDrafts/current")));
+    // A draft draw is private to the owner even before confirmation.
+    await assertSucceeds(getDoc(doc(organiserA, "tournaments/draft/draw/current")));
     await assertFails(getDoc(doc(organiserA, "tournaments/other-draft")));
     await assertFails(getDoc(doc(organiserA, "tournaments/other-draft/fixtureDrafts/current")));
+    await assertFails(getDoc(doc(organiserA, "tournaments/other-draft/draw/current")));
   });
 });
 

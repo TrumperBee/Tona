@@ -32,7 +32,7 @@ export interface PlayerEntrySnapshot {
 }
 
 /** Reads the public profile fields a registration snapshot copies. */
-async function loadPlayerSnapshot(uid: string): Promise<PlayerEntrySnapshot> {
+export async function loadPlayerSnapshot(uid: string): Promise<PlayerEntrySnapshot> {
   const snapshot = await getFirebaseAdminFirestore().doc(paths.publicProfile(uid)).get();
   const data = snapshot.data() as Partial<PublicProfileDocument> | undefined;
 

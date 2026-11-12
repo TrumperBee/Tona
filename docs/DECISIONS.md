@@ -1076,3 +1076,83 @@ both values and redeploying, which is intentionally a deployment action rather t
 a console action. The console can never demote or reassign the pinned account. The
 unit and integration tests cover the match, both mismatch directions, the missing
 UID case and the irrelevance of the old verified flag.
+
+---
+
+## ADR-048 - The draw is seeded server-side and replayable
+
+**Date:** 2026-11-12
+**Status:** Accepted
+
+**Context.** A pot draw is a fairness decision. A client-side shuffle or a
+client-supplied seed could be reproduced, steered or disputed. Players need a way to
+trust that the allocation was not edited after the fact.
+
+**Decision.** The shuffle runs only on the server. A fresh 32-byte seed is generated
+with `crypto.randomBytes` and stored as `shuffleSeed` alongside `algorithmVersion`.
+The allocation itself is produced by the pure engine: cyrb128 hashes the seed string
+and expands it into a mulberry32 stream, `nextInt` uses rejection sampling for
+uniformity and `shuffle` is Fisher-Yates. Every seed and algorithm version is
+recorded in the audit log. The engine may not import Firebase, Next.js, React or
+`process.env`, and may never call `Math.random`; an ESLint rule and a purity test
+enforce both.
+
+Pins are stored as `locks` and survive a re-shuffle. The organiser can still move a
+player by hand (`method: "mixed"`), and every move is audited.
+
+**Consequences.** A completed shuffle can be replayed from the stored seed and
+algorithm version. Changing the algorithm in a replay-breaking way requires a new
+`algorithmVersion`. The seed is public after confirmation, which reveals nothing
+useful because the result is already public and the draw is no longer editable. A
+manual draw records `method: "manual"` and relies on the audit log rather than a
+seed, which is honest rather than pretending a manual draw was random.
+
+---
+
+## ADR-049 - The draw opens only for a closed, exactly full field
+
+**Date:** 2026-11-12
+**Status:** Accepted
+
+**Context.** The launch format is fixed at 36 participants in four pots of nine.
+Allowing a draw while registration is open or the field is short creates a draw that
+cannot be confirmed and can change underneath the organiser.
+
+**Decision.** `getPotsAvailability` and the pots page unlock only when the tournament
+status is `registration_closed` **and** exactly 36 players are registered. Every
+other case shows the exact reason (for example, “this competition has 31”). The
+check belongs to the shared workspace model, so the lifecycle stepper and the page
+agree. Confirmation re-reads the registered field and the stored pots inside one
+transaction and validates four pots of nine against the live registrations; a
+concurrent double-confirm leaves exactly one winner and one audit entry.
+
+**Consequences.** A short field is visibly stuck at the pots stage with an actionable
+message instead of an unusable board. The client may not send counts, pots or seeds;
+the server derives all three. A closed registration can still be re-opened by the
+normal lifecycle rules if the organiser needs to fill the field.
+
+---
+
+## ADR-050 - A confirmed draw is read-only, with one guarded escape hatch
+
+**Date:** 2026-11-12
+**Status:** Accepted
+
+**Context.** After confirmation the draw becomes public and is the input to fixture
+generation. Silent edits would invalidate published fixtures and destroy trust.
+Real tournaments still need a correction path before fixtures exist.
+
+**Decision.** A confirmed draw cannot be shuffled, moved, pinned or cleared.
+`unconfirm` returns it to draft and the tournament to `registration_closed` only
+while no fixture draft and no match exist, requires a 5–300 character reason, and is
+audited. `replace` swaps one outgoing registered player for one incoming player in
+the same pot slot, keeps the field at exactly 36, applies the Phase 8 platform and
+country rules, and is likewise blocked once fixture work exists. Both actions notify
+the affected players. The public Pots tab renders only a confirmed draw; a draft is
+invisible even on a public tournament.
+
+**Consequences.** Fixtures can be generated against a stable, public draw. Corrections
+are deliberate and traceable. Once fixture work starts, the only path is to remove
+that work first; the platform never rewrites a draw under published fixtures. The
+transparency panel shows the method and seed so players can see whether the draw was
+seeded, manual or mixed.

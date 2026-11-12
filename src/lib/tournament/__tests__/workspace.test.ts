@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  DRAW_FIELD_SIZE,
+  getPotsAvailability,
   getWorkspaceSteps,
   getWorkspaceTabs,
   WORKSPACE_STEP_IDS,
@@ -126,6 +128,63 @@ describe("getWorkspaceSteps", () => {
     expect(getWorkspaceSteps(tournament("draft")).map((item) => item.id)).toEqual(
       WORKSPACE_STEP_IDS,
     );
+  });
+});
+
+describe("getPotsAvailability", () => {
+  it("is unavailable outside registration_closed", () => {
+    for (const status of TOURNAMENT_STATUSES) {
+      if (status === "registration_closed") {
+        continue;
+      }
+
+      expect(getPotsAvailability({ status, registrationCount: 36 }).available, status).toBe(false);
+    }
+  });
+
+  it("opens only with exactly the 36-player field", () => {
+    expect(DRAW_FIELD_SIZE).toBe(36);
+    expect(getPotsAvailability({ status: "registration_closed", registrationCount: 36 })).toEqual({
+      available: true,
+      reason: null,
+    });
+  });
+
+  it("explains the exact short or over-full field instead of offering a draw", () => {
+    const short = getPotsAvailability({
+      status: "registration_closed",
+      registrationCount: 31,
+    });
+
+    expect(short.available).toBe(false);
+    expect(short.reason).toContain("exactly 36");
+    expect(short.reason).toContain("31");
+
+    const over = getPotsAvailability({
+      status: "registration_closed",
+      registrationCount: 37,
+    });
+
+    expect(over.available).toBe(false);
+    expect(over.reason).toContain("37");
+  });
+
+  it("falls back to the status gate when a partial document has no count", () => {
+    expect(getPotsAvailability({ status: "registration_closed" })).toEqual({
+      available: true,
+      reason: null,
+    });
+  });
+
+  it("locks the pots step with the count reason when the field is not 36", () => {
+    const steps = byId(getWorkspaceSteps({ status: "registration_closed", registrationCount: 30 }));
+
+    expect(steps.get("pots")?.state).toBe("locked");
+    expect(steps.get("pots")?.lockReason).toContain("30");
+
+    const full = byId(getWorkspaceSteps({ status: "registration_closed", registrationCount: 36 }));
+
+    expect(full.get("pots")?.state).toBe("current");
   });
 });
 
