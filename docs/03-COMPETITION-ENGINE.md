@@ -438,11 +438,13 @@ league closed, and tournament completion only writes the champion, runner-up,
 
 ### 5.5 UI
 
-- **Organiser Knockout tab** — a stage stepper (League closed, Play-offs, Round of
-  16, Quarter-finals, Semi-finals, Final, Completed), draw previews with Redo and
+- **Organiser Knockout tab** — opens during the league phase and stays available
+  for the rest of the competition, because that is where the league phase is
+  closed. It contains a stage stepper (League closed, Play-offs, Round of 16,
+  Quarter-finals, Semi-finals, Final, Completed), draw previews with Redo and
   Publish, tie cards with leg scores and links to result entry, a "Record decider"
-  dialog, and "Close league phase" / "Complete tournament" actions with locked-state
-  reasons.
+  dialog, and "Close league phase" / "Complete tournament" actions with
+  locked-state reasons.
 - **Public Knockout tab** on `/tournaments/[slug]` — a horizontally scrollable
   bracket built from published ties only, play-off tie cards, qualification status
   next to table rows once the league closes, and a champion banner after completion.

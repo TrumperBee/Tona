@@ -647,10 +647,18 @@ export async function getOrganiserKnockout(tournamentId: string): Promise<Organi
     };
   });
 
+  // Count the real completed league match documents rather than trusting a
+  // cached counter; the close action checks the same documents, so the button
+  // and the server boundary always agree.
+  const leagueMatchesCompleted = matchesSnapshot.docs.filter((document) => {
+    const data = document.data();
+    return data.stage === "league" && data.status === "completed";
+  }).length;
+
   return {
     tournament: access.tournament,
     rounds,
-    leagueMatchesCompleted: access.tournament.leagueMatchesCompleted ?? 0,
+    leagueMatchesCompleted,
     leagueMatchesTotal: LEAGUE_MATCH_TOTAL,
     leagueClosed: Boolean(access.tournament.leaguePhaseClosedAt),
     championTag:

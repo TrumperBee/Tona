@@ -8,6 +8,7 @@ import {
   WORKSPACE_STEP_IDS,
   type WorkspaceStep,
 } from "@/lib/tournament/workspace";
+import { LEAGUE_MATCH_COUNT } from "@/lib/engine/fixtures/types";
 import { TOURNAMENT_STATUSES, type TournamentStatus } from "@/types/domain";
 
 function byId(steps: readonly WorkspaceStep[]) {
@@ -121,6 +122,27 @@ describe("getWorkspaceSteps", () => {
           status === "cancelled" ? "cancelled" : "suspended",
         );
       }
+    }
+  });
+
+  it("tells the organiser how to unlock the bracket once all league results are in", () => {
+    const complete = byId(
+      getWorkspaceSteps({ status: "league_phase", leagueMatchesCompleted: LEAGUE_MATCH_COUNT }),
+    );
+
+    expect(complete.get("league")?.state).toBe("current");
+    expect(complete.get("knockout")?.state).toBe("locked");
+    expect(complete.get("knockout")?.lockReason).toContain("Knockout tab");
+    expect(complete.get("knockout")?.lockReason).toContain(String(LEAGUE_MATCH_COUNT));
+
+    for (const completed of [0, LEAGUE_MATCH_COUNT - 1]) {
+      const partial = byId(
+        getWorkspaceSteps({ status: "league_phase", leagueMatchesCompleted: completed }),
+      );
+
+      expect(partial.get("knockout")?.lockReason, String(completed)).toBe(
+        "Available after the league phase completes.",
+      );
     }
   });
 
@@ -242,7 +264,7 @@ describe("getWorkspaceTabs", () => {
       results: ["fixtures_published", "league_phase", "knockout", "completed", "archived"],
       standings: ["fixtures_published", "league_phase", "knockout", "completed", "archived"],
       "result-reports": ["fixtures_published", "league_phase", "knockout", "completed", "archived"],
-      knockout: ["knockout", "completed", "archived"],
+      knockout: ["league_phase", "knockout", "completed", "archived"],
     };
 
     for (const [segment, statuses] of Object.entries(expectations)) {

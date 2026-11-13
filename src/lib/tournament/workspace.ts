@@ -7,6 +7,7 @@
 //   2. Which workspace tools are usable right now? (the tab notices)
 // Both functions are total over TournamentStatus: no status can crash them.
 import { organiserTournamentWorkspace } from "@/lib/config/navigation";
+import { LEAGUE_MATCH_COUNT } from "@/lib/engine/fixtures/types";
 import type { TournamentDocument, TournamentStatus } from "@/types/domain";
 
 /** The seven lifecycle stages every GCC competition follows, in order. */
@@ -108,7 +109,9 @@ export interface PotsAvailability {
 }
 
 type WorkspaceTournament = Pick<TournamentDocument, "status"> &
-  Partial<Pick<TournamentDocument, "registrationCount" | "maxParticipants">>;
+  Partial<
+    Pick<TournamentDocument, "registrationCount" | "maxParticipants" | "leagueMatchesCompleted">
+  >;
 
 /**
  * The draw opens only when registration has closed with exactly the full field.
@@ -167,8 +170,26 @@ export function getWorkspaceSteps(tournament: WorkspaceTournament): readonly Wor
       return steps("fixtures", "setup", "registration", "pots");
     case "fixtures_published":
       return steps("league", "setup", "registration", "pots", "fixtures");
-    case "league_phase":
-      return steps("league", "setup", "registration", "pots", "fixtures");
+    case "league_phase": {
+      const base = steps("league", "setup", "registration", "pots", "fixtures");
+
+      if ((tournament.leagueMatchesCompleted ?? 0) < LEAGUE_MATCH_COUNT) {
+        return base;
+      }
+
+      // The league is played out but not closed yet. The organiser must open the
+      // Knockout tab to close it, so the stepper names that exact next action
+      // instead of claiming the stage is still unreachable.
+      return base.map((item) =>
+        item.id === "knockout"
+          ? step(
+              "knockout",
+              "locked",
+              `All ${LEAGUE_MATCH_COUNT} league results are recorded. Open the Knockout tab and close the league phase to unlock the bracket.`,
+            )
+          : item,
+      );
+    }
     case "knockout":
       return steps("knockout", "setup", "registration", "pots", "fixtures", "league");
     case "completed":
@@ -241,7 +262,9 @@ const TAB_AVAILABILITY: Readonly<
     notice: "Available once fixtures are published.",
   },
   knockout: {
-    statuses: ["knockout", "completed", "archived"],
+    // The league phase is included because closing it happens on the Knockout
+    // tab; without this the organiser could never reach the close action.
+    statuses: ["league_phase", "knockout", "completed", "archived"],
     notice: "Available after the league phase completes.",
   },
   "result-reports": {
