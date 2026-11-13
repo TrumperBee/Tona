@@ -1,10 +1,10 @@
 # GCC - Competition Engine
 
-> **Status: pot allocation implemented in Phase 9; league-phase fixtures implemented in Phase 10; results and result reports implemented in Phase 11; league standings and tie-breakers implemented in Phase 12; knockout stages remain design.**
+> **Status: pot allocation implemented in Phase 9; league-phase fixtures implemented in Phase 10; results and result reports implemented in Phase 11; league standings and tie-breakers implemented in Phase 12; knockout stages, seeded draws and tournament completion implemented in Phase 13.**
 >
 > `src/lib/engine/` contains the real, fully tested Phase 9 pot allocation (`random.ts`,
-> `pots.ts`), the Phase 10 fixture engine (`fixtures/`) and the Phase 12 standings
-> engine (`standings/`). Phase 13 adds knockouts.
+> `pots.ts`), the Phase 10 fixture engine (`fixtures/`), the Phase 12 standings engine
+> (`standings/`) and the Phase 13 knockout engine (`knockout/`).
 
 ## 1. Principles
 
@@ -100,13 +100,16 @@ confirm one. The pure transition rules live in
 planResultTransition("enter" | "correct" | "clear", { stage, status, hasResult });
 ```
 
-Only `stage: "league"` is accepted in Phase 11. Entering needs a `scheduled`
-match with no result and produces `completed`; correcting and clearing need a
-`completed` match with a result. Clearing produces `scheduled`. The server
+Only the league stage is handled by the league result module. Knockout legs are
+dispatched to `src/lib/tournament/knockout-results.ts` (Phase 13), which recomputes
+the tie and never rebuilds league standings. For league matches, entering needs a
+`scheduled` match with no result and produces `completed`; correcting and clearing
+need a `completed` match with a result. Clearing produces `scheduled`. The server
 boundary (`src/lib/tournament/results.ts`) applies the plan inside one Firestore
 transaction per action, updates `leagueMatchesCompleted`, and moves the
 tournament between `fixtures_published` and `league_phase`. Bulk entry performs
-the same checks for up to 18 matches in one all-or-nothing transaction.
+the same checks for up to 18 matches in one all-or-nothing transaction and
+refuses knockout matches.
 
 Every enter/bulk/correct/clear also rebuilds the complete league table inside the
 same transaction (Phase 12). All reads happen first — tournament, draw,
@@ -314,6 +317,169 @@ Visibility follows the lifecycle: a fixture draft is readable only by the owner 
 the Super Admin. Matches, matchdays and standings become client-readable only once
 the tournament reaches a published status. The public page and `/dashboard/fixtures`
 re-check the same status server-side because the Admin SDK bypasses Security Rules.
+
+## 5. Knockout stages (implemented in Phase 13)
+
+The knockout bracket is **defined by this platform**. It is inspired by the modern
+36-team European format but it is not an exact copy of UEFA's path, and the product
+never claims that it is.
+
+### 5.1 Bracket definition
+
+After the league phase closes, positions 1–8 go directly to the Round of 16 and
+positions 9–24 enter the knockout play-off. Positions 25–36 are eliminated.
+
+Play-off groups (the draw is random within each group, always one seeded player
+against one unseeded player):
+
+| Group | Seeded | Unseeded |
+| ----- | ------ | -------- |
+| A     | 9, 10  | 23, 24   |
+| B     | 11, 12 | 21, 22   |
+| C     | 13, 14 | 19, 20   |
+| D     | 15, 16 | 17, 18   |
+
+Each group produces two ties, so the play-off has eight ties and sixteen legs by
+default.
+
+The Round of 16 places the direct qualifiers against the play-off winners in the
+fixed order `[1, 8, 4, 5, 2, 7, 3, 6]`. Within each qualifying pair the two group
+winners are assigned randomly:
+
+- group D winners vs seeds 1 and 2,
+- group C winners vs seeds 3 and 4,
+- group B winners vs seeds 5 and 6,
+- group A winners vs seeds 7 and 8.
+
+Because of that order, seeds 1 and 2 are always on opposite halves and can only meet
+in the final. Quarter-finals pair adjacent Round-of-16 bracket slots, and
+semi-finals pair adjacent quarter-final slots. The final is always one match.
+
+Home advantage in a two-legged tie: the lower-ranked player hosts leg 1 and the
+higher-ranked player hosts leg 2. A single leg or the final lists the higher-ranked
+player first.
+
+Each round defaults to two legs. The organiser may set `legs` to `1` or `2` per round
+in `knockoutConfig` only before that round is drawn; the final is always one leg.
+There is **no away-goals rule**. A tie level on aggregate after every leg is stored
+as `needs_decider` and the organiser records the winner, the method (`extra_time` or
+`penalties`), an optional note and, for penalties, a consistent penalty score.
+
+### 5.2 Pure engine
+
+`src/lib/engine/knockout/` is pure TypeScript and imports only its own types and the
+shared seeded PRNG (`../random`):
+
+```ts
+buildPlayoffTies({ standings, seed, legs }) -> KnockoutTie[]
+buildRoundOf16Ties({ directQualifiers, playoffWinners, seed, legs }) -> KnockoutTie[]
+buildNextRound(previousTies, legs) -> KnockoutTie[]
+resolveTie(tie, matches) -> { status, aggregate, legsPlayed, winnerUid, decidedBy }
+applyDecider(resolution, tie, decider) -> TieResolution
+validateKnockoutRound({ round, ties }) -> { valid, issues[] }
+validateProgression(previousTies, nextTies) -> { valid, issues[] }
+```
+
+`buildPlayoffTies` randomises only the unseeded order inside each group.
+`buildRoundOf16Ties` randomises only the winner-to-seed assignment inside each
+qualifying pair. `buildNextRound` is deterministic from R16 onward and pairs adjacent
+bracket slots. Randomness comes from the server seed; the client never supplies a
+tie, seed or match id.
+
+The independent validator re-derives counts, bracket slots, unique participants,
+seeded/unseeded group pairing, direct-qualifier placement, seeds 1/2 separation and
+the adjacent-slot path. Generation and validation live in separate modules, so a
+generator bug cannot silently validate itself.
+
+A tie stores `higherSeedUid`, `lowerSeedUid`, the corresponding league positions,
+`group`, `sourceTieIds`, the leg count and an optional winner. The pure engine type
+has no status field; the server stores `status` alongside it as
+`pending | in_progress | needs_decider | completed`.
+
+### 5.3 Data and routes
+
+- `tournaments/{id}/knockoutTies/{tieId}` — server-written, public-read once the
+  tournament is in a knockout/public status. It carries the round, bracket slot,
+  legs, seeds, tags, group, source ties, leg match ids, aggregate, status, winner,
+  `decidedBy`, decider note and penalty score.
+- `tournaments/{id}/knockoutDrafts/{round}` — owner/Super-Admin-only draw previews.
+- `tournaments/{id}/matches/{tieId}-l{leg}` — normal match documents with
+  `stage: playoff | r16 | qf | sf | final`, `matchday: 0`, `scheduledAt: null`,
+  `tieId` and `leg`. Existing result entry, notifications, match pages and history
+  work unchanged.
+- Tournament fields: `leaguePhaseClosedAt`, `knockoutConfig`, `knockoutRounds`,
+  `championUid`, `runnerUpUid`, `completedAt`.
+
+Routes under `/api/organiser/tournaments/[id]/knockout/`:
+
+| Route                      | Purpose                                                                                                            |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `POST close-league`        | Requires exactly 144 completed league matches; freezes standings, moves to `knockout` and notifies all 36 players. |
+| `POST draw`                | Generates a validated private draft with a server seed. The previous round must be fully decided.                  |
+| `POST publish`             | Idempotently writes the public ties and one match per leg, then notifies the involved players.                     |
+| `POST reset-round`         | Deletes only an unpublished draft; published rounds are immutable.                                                 |
+| `POST ties/[tieId]/decide` | Records the extra-time/penalty decider for a level tie.                                                            |
+| `POST complete`            | Requires a decided final; sets the champion, runner-up and `completedAt`.                                          |
+
+Result entry and correction are shared with Phase 11. For knockout legs the server
+dispatches to `knockout-results.ts`, which recomputes the tie from all legs in one
+transaction. Correcting or clearing a leg is blocked once the **next** round has been
+published. Bulk entry accepts league matches only.
+
+### 5.4 Frozen league table
+
+Closing the league phase is the freeze point. A transaction reads the tournament and
+all matches, requires exactly 144 completed league matches, sets `provisional: false`
+on every standing, and moves the tournament to `knockout` with `leaguePhaseClosedAt`.
+From then on, knockout results never call the standings builder. The stored table,
+its positions, bands and tie-break explanations remain exactly as they were when the
+league closed, and tournament completion only writes the champion, runner-up,
+`completedAt`, status and membership status.
+
+### 5.5 UI
+
+- **Organiser Knockout tab** — a stage stepper (League closed, Play-offs, Round of
+  16, Quarter-finals, Semi-finals, Final, Completed), draw previews with Redo and
+  Publish, tie cards with leg scores and links to result entry, a "Record decider"
+  dialog, and "Close league phase" / "Complete tournament" actions with locked-state
+  reasons.
+- **Public Knockout tab** on `/tournaments/[slug]` — a horizontally scrollable
+  bracket built from published ties only, play-off tie cards, qualification status
+  next to table rows once the league closes, and a champion banner after completion.
+- **Player dashboard** — knockout status (active, qualified and waiting, eliminated,
+  runner-up, champion), the current aggregate and a link to the next leg.
+
+### 5.6 Tests for Phase 13
+
+`src/lib/engine/__tests__/knockout.test.ts` runs emulator-free and covers:
+
+- determinism for play-off and Round-of-16 draws;
+- 2,000-seed property tests that every generated play-off and Round-of-16 draw passes
+  the independent validator;
+- the bracket never puts seeds 1 and 2 on the same half, over the property run;
+- fairness: within each play-off group every unseeded player faces each seeded player
+  with probability 1/2 ±0.05 over 2,000 seeds;
+- every `resolveTie` outcome: aggregate win, level after two legs needing a decider,
+  extra time, penalties, single leg and cleared/unplayed legs;
+- mutation tests for every validator code and bracket-path validation from R16 to
+  the final.
+
+Emulator-backed integration tests (`tests/integration/knockout.test.ts`) prove the
+server boundary. The main case builds a complete 36-player competition — shuffled
+draw, 144 entered results, closed league, every knockout round including a penalty
+decider, and completion — and asserts the champion, runner-up, a completed 23-tie
+bracket, 45 knockout matches, a single-leg final and a league table identical to the
+one frozen at closure. Further cases prove closing needs all 144 results, every draw
+requires its predecessor to be fully decided, corrections are locked after the next
+round is published, another organiser gets 404 and a player gets 403, concurrent
+publish writes one set of eight ties and sixteen matches, and completion needs a
+decided final. Rules tests keep `knockoutDrafts` owner/Super-Admin-only while
+`knockoutTies` is publicly readable.
+
+The same end-to-end runner is exposed as `npm run simulate`. It starts the emulators,
+builds a complete tournament through the real routes and prints the champion,
+runner-up, per-round tie/match/decider counts and whether the league table stayed
+frozen.
 
 ## 6. Standings and tiebreakers
 

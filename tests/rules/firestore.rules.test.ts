@@ -442,6 +442,16 @@ async function seed(): Promise<void> {
         winnerUid: null,
         status: "scheduled",
       }),
+      setDoc(doc(db, "tournaments/public/knockoutDrafts/playoff"), {
+        round: "playoff",
+        seed: "seed",
+        legs: 2,
+        ties: [],
+        generatedBy: "organiser-a",
+        generatedAt: now,
+        generationCount: 1,
+        validation: { valid: true, issues: [] },
+      }),
       setDoc(doc(db, "tournaments/public/announcements/a1"), {
         title: "Kick-off",
         body: "Welcome",
@@ -687,6 +697,7 @@ describe("public reads", () => {
     await assertFails(getDoc(doc(db, "tournaments/draft")));
     await assertFails(getDoc(doc(db, "tournaments/suspended")));
     await assertFails(getDoc(doc(db, "tournaments/public/fixtureDrafts/current")));
+    await assertFails(getDoc(doc(db, "tournaments/public/knockoutDrafts/playoff")));
     await assertFails(getDoc(doc(db, "tournaments/public/resultReports/r1")));
   });
 
@@ -694,6 +705,8 @@ describe("public reads", () => {
     // A signed-in player is not the owner: the draft never reaches them.
     await assertFails(getDoc(doc(user("alice"), "tournaments/public/fixtureDrafts/current")));
     await assertFails(getDoc(doc(user("bob"), "tournaments/public/fixtureDrafts/current")));
+    await assertFails(getDoc(doc(user("alice"), "tournaments/public/knockoutDrafts/playoff")));
+    await assertFails(getDoc(doc(user("bob"), "tournaments/public/knockoutDrafts/playoff")));
 
     // Matchday windows only appear once the tournament has published fixtures.
     await assertSucceeds(getDoc(doc(user("alice"), "tournaments/published/matchdays/1")));
@@ -717,10 +730,12 @@ describe("organiser ownership", () => {
 
     await assertSucceeds(getDoc(doc(organiserA, "tournaments/draft")));
     await assertSucceeds(getDoc(doc(organiserA, "tournaments/draft/fixtureDrafts/current")));
+    await assertSucceeds(getDoc(doc(organiserA, "tournaments/public/knockoutDrafts/playoff")));
     // A draft draw is private to the owner even before confirmation.
     await assertSucceeds(getDoc(doc(organiserA, "tournaments/draft/draw/current")));
     await assertFails(getDoc(doc(organiserA, "tournaments/other-draft")));
     await assertFails(getDoc(doc(organiserA, "tournaments/other-draft/fixtureDrafts/current")));
+    await assertFails(getDoc(doc(organiserA, "tournaments/other-draft/knockoutDrafts/playoff")));
     await assertFails(getDoc(doc(organiserA, "tournaments/other-draft/draw/current")));
   });
 });
@@ -875,6 +890,7 @@ describe("client writes", () => {
       "tournaments/public/registrations/alice",
       "tournaments/public/draw/current",
       "tournaments/public/fixtureDrafts/current",
+      "tournaments/public/knockoutDrafts/playoff",
       "tournaments/public/matches/m1",
       "tournaments/published/matchdays/1",
       "tournaments/public/resultReports/r1",

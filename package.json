@@ -18,6 +18,7 @@
     "emulators": "firebase emulators:start",
     "test:rules": "firebase emulators:exec --only firestore,auth \"vitest run --config vitest.rules.config.ts\"",
     "test:integration": "firebase emulators:exec --only firestore,auth \"vitest run --config vitest.integration.config.ts\"",
+    "simulate": "firebase emulators:exec --only firestore,auth \"vitest run --config vitest.simulate.config.ts\"",
     "dev:seed": "tsx --tsconfig scripts/dev/tsconfig.json scripts/dev/seed/index.ts",
     "rules:deploy": "firebase deploy --only firestore:rules,firestore:indexes",
     "format": "prettier --write .",

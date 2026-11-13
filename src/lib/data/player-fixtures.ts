@@ -10,7 +10,7 @@ import "server-only";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 import { isFixturesPublicStatus } from "@/lib/data/public-fixtures";
-import type { MatchStatus, TournamentDocument, TournamentStatus } from "@/types/domain";
+import type { MatchStatus, StageType, TournamentDocument, TournamentStatus } from "@/types/domain";
 
 const MATCH_LIMIT = 200;
 
@@ -20,6 +20,8 @@ export interface PlayerFixtureRow {
   readonly tournamentName: string;
   readonly tournamentSlug: string;
   readonly tournamentStatus: TournamentStatus;
+  readonly stage: StageType;
+  readonly leg: number | null;
   readonly matchday: number;
   readonly opponentUid: string;
   readonly opponentTag: string;
@@ -165,6 +167,15 @@ export async function getPlayerFixtures(uid: string): Promise<PlayerFixtureRow[]
           tournamentName: readText(match.tournament.name, "Tournament"),
           tournamentSlug: match.tournament.slug,
           tournamentStatus: match.tournament.status,
+          stage:
+            data.stage === "playoff" ||
+            data.stage === "r16" ||
+            data.stage === "qf" ||
+            data.stage === "sf" ||
+            data.stage === "final"
+              ? data.stage
+              : "league",
+          leg: typeof data.leg === "number" ? data.leg : null,
           matchday: typeof data.matchday === "number" ? data.matchday : 0,
           opponentUid: match.opponentUid,
           opponentTag:
@@ -187,6 +198,13 @@ export async function getPlayerFixtures(uid: string): Promise<PlayerFixtureRow[]
 
         if (first !== second) {
           return first - second;
+        }
+
+        const stageOrder: readonly StageType[] = ["league", "playoff", "r16", "qf", "sf", "final"];
+        const stageDelta = stageOrder.indexOf(a.stage) - stageOrder.indexOf(b.stage);
+
+        if (stageDelta !== 0) {
+          return stageDelta;
         }
 
         return a.matchday - b.matchday;

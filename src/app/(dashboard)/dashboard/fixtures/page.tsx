@@ -31,7 +31,7 @@ export default async function FixturesPage() {
       <PageHeader
         eyebrow="Player dashboard"
         title="My fixtures"
-        description="Every published league-phase match you are part of, across all competitions. A fixture appears only after its organiser publishes the schedule."
+        description="Every published league-phase and knockout match you are part of, across all competitions. A fixture appears only after its organiser publishes the schedule."
         actions={
           <Link href="/tournaments" className={buttonStyles({ variant: "secondary", size: "sm" })}>
             Find tournaments
@@ -100,7 +100,10 @@ export default async function FixturesPage() {
                               </Link>
                             </CardTitle>
                             <p className="mt-1 text-xs text-grey-500">
-                              Matchday {fixture.matchday} ·{" "}
+                              {fixture.stage === "league"
+                                ? `Matchday ${fixture.matchday}`
+                                : `Knockout${fixture.leg ? ` · Leg ${fixture.leg}` : ""}`}{" "}
+                              ·{" "}
                               {fixture.scheduledAt
                                 ? formatDate(fixture.scheduledAt)
                                 : "Date to be confirmed"}

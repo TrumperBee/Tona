@@ -27,6 +27,7 @@ import { cache } from "react";
 
 import { OrganisedBy } from "@/components/tournament/organised-by";
 import { PublicFixturesPanel } from "@/components/tournament/public-fixtures-panel";
+import { PublicKnockoutPanel } from "@/components/tournament/public-knockout-panel";
 import { PublicPotsPanel } from "@/components/tournament/public-pots-panel";
 import { PublicResultsPanel } from "@/components/tournament/public-results-panel";
 import { PublicSectionTabs } from "@/components/tournament/public-section-tabs";
@@ -50,6 +51,7 @@ import {
   getViewerRegistration,
 } from "@/lib/data/public-tournaments";
 import { getPublicFixtures } from "@/lib/data/public-fixtures";
+import { getPublicKnockout } from "@/lib/data/public-knockout";
 import { getPublicStandings, readTiebreakerProfile } from "@/lib/data/public-standings";
 import { formatDate } from "@/lib/utils/dates";
 import { getRegistrationState } from "@/lib/tournament/registration-state";
@@ -163,6 +165,8 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
   const publicDraw = await getPublicDraw(tournament.id);
   const publicFixtures = await getPublicFixtures(tournament.id, tournament.status);
   const publicStandings = await getPublicStandings(tournament.id, tournament.status);
+  const publicKnockout = await getPublicKnockout(tournament.id, tournament.status);
+  const leagueMatches = publicFixtures?.matches.filter((match) => match.matchday > 0) ?? [];
 
   const facts = [
     { label: "Game", value: game.name, icon: Gamepad2 },
@@ -251,7 +255,7 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
         fixtures={
           publicFixtures ? (
             <PublicFixturesPanel
-              matches={publicFixtures.matches}
+              matches={leagueMatches}
               matchdays={publicFixtures.matchdays}
               viewerUid={user?.userId ?? null}
               tournamentSlug={tournament.slug}
@@ -271,9 +275,10 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
         }
         results={
           publicFixtures ? (
-            <PublicResultsPanel matches={publicFixtures.matches} tournamentSlug={tournament.slug} />
+            <PublicResultsPanel matches={leagueMatches} tournamentSlug={tournament.slug} />
           ) : null
         }
+        knockout={publicKnockout ? <PublicKnockoutPanel knockout={publicKnockout} /> : null}
       >
         <section className="border-b border-white/10">
           <div className="container grid gap-6 py-10 lg:grid-cols-[1.4fr_0.6fr] lg:items-start">
@@ -432,6 +437,33 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
               </Card>
 
               <div className="grid gap-4 sm:grid-cols-2">
+                {publicKnockout?.champion ? (
+                  <Card variant="gold">
+                    <CardHeader>
+                      <CardTitle className="text-lg">Champion</CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex items-center gap-3 text-sm leading-6 text-grey-300">
+                      <Avatar
+                        name={publicKnockout.champion.gamerTag}
+                        src={publicKnockout.champion.avatarUrl}
+                        size="md"
+                      />
+                      <div>
+                        <p className="font-semibold text-white">
+                          {publicKnockout.champion.gamerTag}
+                        </p>
+                        {publicKnockout.runnerUp ? (
+                          <p className="text-xs text-grey-400">
+                            Runner-up: {publicKnockout.runnerUp.gamerTag}
+                          </p>
+                        ) : null}
+                        <p className="mt-1 text-xs text-grey-500">
+                          Open the Knockout tab for every published round.
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : null}
                 {publicFixtures ? (
                   <Card variant="elevated">
                     <CardHeader>

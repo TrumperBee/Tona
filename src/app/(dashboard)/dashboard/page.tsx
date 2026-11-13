@@ -1,7 +1,7 @@
 // GCC - participant dashboard overview.
 // Real Firestore data only: the profile, memberships and zeroed statistics that
 // the server has actually written. Empty states explain what will appear.
-import { CalendarDays, Compass, ListOrdered, UserRound } from "lucide-react";
+import { CalendarDays, Compass, ListOrdered, Swords, UserRound } from "lucide-react";
 import Link from "next/link";
 
 import { PageHeader, SectionHeading } from "@/components/shared/page-header";
@@ -11,6 +11,7 @@ import { EmptyState, StatCard } from "@/components/ui/data-display";
 import { requirePageSignedIn } from "@/lib/auth/page-access";
 import { getGame } from "@/lib/config/games";
 import { TOURNAMENT_STATUS_META } from "@/lib/config/tournament-status";
+import { getPlayerKnockoutStatus } from "@/lib/data/player-knockout";
 import { getPlayerStandings } from "@/lib/data/player-standings";
 import { STANDING_BAND_LABELS } from "@/lib/engine/standings/types";
 import { getOwnProfile } from "@/lib/profile/server";
@@ -41,6 +42,7 @@ export default async function DashboardPage() {
   const stats = publicProfile?.stats.overall;
   const game = getGame(privateProfile.preferredGame);
   const standings = await getPlayerStandings(user.userId);
+  const knockout = await getPlayerKnockoutStatus(user.userId);
 
   return (
     <div className="space-y-8">
@@ -238,6 +240,91 @@ export default async function DashboardPage() {
                   </CardContent>
                 </Card>
               ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section>
+        <SectionHeading
+          title="Knockout status"
+          description="Your latest published knockout tie in every competition that reached the bracket. A level tie is settled by the organiser's extra-time or penalty decider."
+        />
+        <div className="mt-5">
+          {knockout.length === 0 ? (
+            <EmptyState
+              icon={Swords}
+              eyebrow="Knockout status"
+              title="No knockout bracket yet"
+              description="When a competition you entered closes its league phase and publishes a round, your tie and its result appear here."
+            />
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {knockout.map((entry) => {
+                const meta =
+                  entry.outcome === "champion"
+                    ? { label: "Champion", tone: "gold" as const }
+                    : entry.outcome === "runner_up"
+                      ? { label: "Runner-up", tone: "success" as const }
+                      : entry.outcome === "active"
+                        ? { label: "Still in the bracket", tone: "info" as const }
+                        : entry.outcome === "eliminated"
+                          ? { label: "Knockout run ended", tone: "danger" as const }
+                          : { label: "Waiting for the next draw", tone: "neutral" as const };
+                const href =
+                  entry.outcome === "active" && entry.nextMatchId
+                    ? `/tournaments/${entry.slug}/matches/${entry.nextMatchId}`
+                    : `/tournaments/${entry.slug}`;
+
+                return (
+                  <Card key={entry.tournamentId}>
+                    <CardHeader>
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <CardTitle className="text-lg">{entry.name}</CardTitle>
+                          <p className="mt-1 text-xs text-grey-500">
+                            {entry.roundLabel ?? "Knockout"}
+                          </p>
+                        </div>
+                        <Badge tone={meta.tone}>{meta.label}</Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-2 text-sm leading-6 text-grey-400">
+                      {entry.opponentTag && entry.roundLabel ? (
+                        <p>
+                          {entry.roundLabel} vs{" "}
+                          <span className="font-medium text-grey-100">{entry.opponentTag}</span>
+                        </p>
+                      ) : (
+                        <p>
+                          {entry.outcome === "eliminated"
+                            ? "You did not reach the published bracket."
+                            : "The next round has not been drawn yet."}
+                        </p>
+                      )}
+                      {entry.goalsFor !== null &&
+                      entry.goalsAgainst !== null &&
+                      entry.played > 0 ? (
+                        <p className="text-xs tabular-nums text-grey-500">
+                          Aggregate {entry.goalsFor}–{entry.goalsAgainst} after {entry.played}{" "}
+                          {entry.played === 1 ? "leg" : "legs"}
+                        </p>
+                      ) : null}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                        <Link
+                          href={href}
+                          className="text-sm font-semibold text-electric-300 underline-offset-4 hover:underline"
+                        >
+                          {entry.outcome === "active" ? "Open your tie" : "Open tournament"}
+                        </Link>
+                        {entry.tieStatus === "needs_decider" ? (
+                          <Badge tone="warning">Decider pending</Badge>
+                        ) : null}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           )}
         </div>

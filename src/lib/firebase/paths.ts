@@ -29,6 +29,7 @@ export const SUBCOLLECTIONS = {
   registrations: "registrations",
   draw: "draw",
   fixtureDrafts: "fixtureDrafts",
+  knockoutDrafts: "knockoutDrafts",
   matches: "matches",
   matchdays: "matchdays",
   resultReports: "resultReports",
@@ -140,6 +141,10 @@ export const paths = {
     collectionPath(COLLECTIONS.tournaments, tournamentId, SUBCOLLECTIONS.knockoutTies),
   tournamentKnockoutTie: (tournamentId: string, tieId: string) =>
     documentPath(COLLECTIONS.tournaments, tournamentId, SUBCOLLECTIONS.knockoutTies, tieId),
+  tournamentKnockoutDrafts: (tournamentId: string) =>
+    collectionPath(COLLECTIONS.tournaments, tournamentId, SUBCOLLECTIONS.knockoutDrafts),
+  tournamentKnockoutDraft: (tournamentId: string, round: string) =>
+    documentPath(COLLECTIONS.tournaments, tournamentId, SUBCOLLECTIONS.knockoutDrafts, round),
   tournamentAnnouncements: (tournamentId: string) =>
     collectionPath(COLLECTIONS.tournaments, tournamentId, SUBCOLLECTIONS.announcements),
   tournamentAnnouncement: (tournamentId: string, announcementId: string) =>

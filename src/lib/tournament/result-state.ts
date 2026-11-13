@@ -2,17 +2,27 @@
 //
 // Results are entered by the tournament owner or Super Admin only. This module
 // contains no I/O so the legal transitions can be unit-tested directly. Phase 11
-// supports league-stage matches; Phase 13 widens the stage list.
+// introduced league results; Phase 13 widens the stage list to the knockout.
 import type { MatchStatus, StageType, TournamentStatus } from "@/types/domain";
 
-/** Stages whose results this phase can record. Knockouts arrive in Phase 13. */
-export const RESULT_ENTRY_STAGES: readonly StageType[] = ["league"];
+/** Stages whose results this phase can record. */
+export const RESULT_ENTRY_STAGES: readonly StageType[] = [
+  "league",
+  "playoff",
+  "r16",
+  "qf",
+  "sf",
+  "final",
+];
 
 /** Tournament statuses in which league results may be entered or corrected. */
 export const RESULT_ENTRY_TOURNAMENT_STATUSES: readonly TournamentStatus[] = [
   "fixtures_published",
   "league_phase",
 ];
+
+/** Tournament status in which knockout results may be entered or corrected. */
+export const KNOCKOUT_RESULT_ENTRY_STATUSES: readonly TournamentStatus[] = ["knockout"];
 
 export type ResultAction = "enter" | "correct" | "clear";
 
@@ -34,8 +44,13 @@ export type ResultTransitionResult =
   | { readonly ok: true; readonly plan: ResultTransitionPlan }
   | { readonly ok: false; readonly message: string };
 
-export function isResultEntryTournamentStatus(status: TournamentStatus): boolean {
-  return RESULT_ENTRY_TOURNAMENT_STATUSES.includes(status);
+export function isResultEntryTournamentStatus(
+  status: TournamentStatus,
+  stage: StageType = "league",
+): boolean {
+  return stage === "league"
+    ? RESULT_ENTRY_TOURNAMENT_STATUSES.includes(status)
+    : KNOCKOUT_RESULT_ENTRY_STATUSES.includes(status);
 }
 
 /** The tournament status to store after entering one league result. */
@@ -64,7 +79,7 @@ export function planResultTransition(
   input: ResultTransitionInput,
 ): ResultTransitionResult {
   if (!RESULT_ENTRY_STAGES.includes(input.stage)) {
-    return { ok: false, message: "Only league-phase results can be recorded right now." };
+    return { ok: false, message: "That stage does not accept results." };
   }
 
   if (action === "enter") {

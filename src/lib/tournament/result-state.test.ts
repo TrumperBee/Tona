@@ -89,14 +89,16 @@ describe("planResultTransition", () => {
     ).toBe(false);
   });
 
-  it("refuses non-league stages in Phase 11", () => {
-    const result = planResultTransition("enter", {
-      stage: "final",
-      status: "scheduled",
-      hasResult: false,
-    });
-
-    expect(result.ok).toBe(false);
+  it("accepts every knockout stage", () => {
+    for (const stage of ["playoff", "r16", "qf", "sf", "final"] as const) {
+      expect(
+        planResultTransition("enter", {
+          stage,
+          status: "scheduled",
+          hasResult: false,
+        }).ok,
+      ).toBe(true);
+    }
   });
 });
 
@@ -112,10 +114,12 @@ describe("tournament status helpers", () => {
     expect(tournamentStatusAfterResultCleared("completed", 0)).toBe("completed");
   });
 
-  it("accepts only the two result-entry statuses", () => {
+  it("separates league and knockout result-entry statuses", () => {
     expect(isResultEntryTournamentStatus("fixtures_published")).toBe(true);
     expect(isResultEntryTournamentStatus("league_phase")).toBe(true);
     expect(isResultEntryTournamentStatus("pots_confirmed")).toBe(false);
     expect(isResultEntryTournamentStatus("knockout")).toBe(false);
+    expect(isResultEntryTournamentStatus("knockout", "r16")).toBe(true);
+    expect(isResultEntryTournamentStatus("league_phase", "r16")).toBe(false);
   });
 });

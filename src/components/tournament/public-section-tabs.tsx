@@ -16,12 +16,14 @@ export function PublicSectionTabs({
   fixtures,
   table,
   results,
+  knockout,
   children,
 }: {
   readonly pots: ReactNode | null;
   readonly fixtures: ReactNode | null;
   readonly table: ReactNode | null;
   readonly results: ReactNode | null;
+  readonly knockout: ReactNode | null;
   readonly children: ReactNode;
 }) {
   const items = [{ id: "overview", label: "Overview", content: children }];
@@ -40,6 +42,10 @@ export function PublicSectionTabs({
 
   if (results) {
     items.push({ id: "results", label: "Results", content: results });
+  }
+
+  if (knockout) {
+    items.push({ id: "knockout", label: "Knockout", content: knockout });
   }
 
   if (items.length === 1) {

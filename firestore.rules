@@ -148,6 +148,11 @@ service cloud.firestore {
         allow read: if isTournamentOwner(tournamentId) || isSuperAdmin();
       }
 
+      // Unpublished knockout brackets stay private until the round is published.
+      match /knockoutDrafts/{round} {
+        allow read: if isTournamentOwner(tournamentId) || isSuperAdmin();
+      }
+
       // Fixtures become public once the tournament reaches fixtures_published.
       match /matches/{matchId} {
         allow read: if isPublishedTournament(tournamentId) ||

@@ -1524,3 +1524,42 @@ from `leagueMatchesCompleted < 144`, never guessed.
 computation. Verification is read-only, so it cannot mask a bug. Repair is explicit and
 audited, and it cannot accept a score or a position. A table appears at publication and
 changes only when a real result changes.
+
+---
+
+## ADR-065 - Knockout bracket is independently defined and server-drawn
+
+**Date:** 2026-11-13
+**Status:** Accepted
+
+**Context.** Phase 13 adds the knockout stages after the 36-team league phase. The
+bracket must be reproducible, auditable and fair, and it must reuse the existing
+competition engine and server patterns. It must not pretend to be an exact copy of
+UEFA's path, and results stay owner/Super-Admin entered.
+
+**Decision.** The bracket is defined by GCC in `src/lib/engine/knockout/` and documented
+in `docs/03-COMPETITION-ENGINE.md`. Positions 1-8 go straight to the Round of 16;
+9-16 are seeded and 17-24 unseeded in four fixed play-off groups (A: 9-10 v 23-24,
+B: 11-12 v 21-22, C: 13-14 v 19-20, D: 15-16 v 17-18). The eight play-off winners
+complete the Round of 16 against direct qualifiers in the order `[1, 8, 4, 5, 2, 7, 3, 6]`,
+so seeds 1 and 2 can only meet in the final. Quarter-finals and semi-finals pair adjacent
+bracket slots, and the final is always one leg. Draws are pure functions of a
+server-generated seed; the client never supplies a tie, seed or match id.
+
+Generated rounds are stored as private `knockoutDrafts/{round}` documents and only become
+public `knockoutTies/{tieId}` plus leg match documents on publish. Every draft is replayed
+through an independent validator that re-derives counts, group pairing, direct-qualifier
+placement and the bracket path. A round can be redrawn only before it is published, and
+an unpublished draft can be reset while a published one is immutable.
+
+**Consequences.**
+
+- There is no away-goals rule. A tie level on aggregate after all legs is stored as
+  `needs_decider`; the organiser records the winner, method (`extra_time` or `penalties`),
+  an optional note and, for penalties, a consistent penalty score.
+- Closing the league phase freezes the table: `provisional` becomes false for every row
+  and knockout results never rebuild standings.
+- Result entry and correction dispatch to `knockout-results.ts`, which recomputes the tie
+  from its legs in one transaction and locks a round once the next round is published.
+- `npm run simulate` runs the same end-to-end runner as the integration test against the
+  emulators and prints the per-round summary, so the full path stays verifiable.

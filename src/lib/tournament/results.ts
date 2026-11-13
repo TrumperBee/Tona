@@ -14,6 +14,11 @@ import { requireTournamentOwnerOrSuperAdmin } from "@/lib/auth/guards";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 import { createNotification } from "@/lib/notifications";
+import {
+  clearKnockoutMatchResult,
+  correctKnockoutMatchResult,
+  enterKnockoutMatchResult,
+} from "@/lib/tournament/knockout-results";
 import { TournamentMutationError } from "@/lib/tournament/errors";
 import {
   isResultEntryTournamentStatus,
@@ -33,7 +38,7 @@ import type {
   MatchResultCorrectionInput,
   MatchResultEntryInput,
 } from "@/lib/validation/match";
-import type { MatchDocument, TournamentDocument } from "@/types/domain";
+import type { MatchDocument, StageType, TournamentDocument } from "@/types/domain";
 
 export interface OrganiserResultPlayer {
   readonly uid: string;
@@ -321,12 +326,42 @@ function readMatchOrThrow(
   return data as unknown as MatchDocument;
 }
 
+/**
+ * Reads just the stage of one match after the ownership guard. Knockout legs
+ * are routed to their own transaction module so league standings are never
+ * rebuilt by a knockout result.
+ */
+async function readMatchStage(tournamentId: string, matchId: string): Promise<StageType> {
+  const firestore = getFirebaseAdminFirestore();
+  const snapshot = await firestore.doc(paths.tournamentMatch(tournamentId, matchId)).get();
+  const data = snapshot.data();
+
+  if (!snapshot.exists || !data || data.tournamentId !== tournamentId) {
+    throw new TournamentMutationError("Match not found.", 404);
+  }
+
+  return data.stage === "playoff" ||
+    data.stage === "r16" ||
+    data.stage === "qf" ||
+    data.stage === "sf" ||
+    data.stage === "final"
+    ? data.stage
+    : "league";
+}
+
 /** Records one result and moves the tournament into the league phase. */
 export async function enterMatchResult(
   tournamentId: string,
   input: MatchResultEntryInput,
 ): Promise<void> {
   const access = await requireTournamentOwnerOrSuperAdmin(tournamentId);
+  const stage = await readMatchStage(tournamentId, input.matchId);
+
+  if (stage !== "league") {
+    await enterKnockoutMatchResult(access, tournamentId, input);
+    return;
+  }
+
   const firestore = getFirebaseAdminFirestore();
   const tournamentRef = firestore.doc(paths.tournament(tournamentId));
   const matchRef = firestore.doc(paths.tournamentMatch(tournamentId, input.matchId));
@@ -418,6 +453,15 @@ export async function enterMatchResultsBulk(
   }
 
   const access = await requireTournamentOwnerOrSuperAdmin(tournamentId);
+  const stages = await Promise.all(
+    ids.map(async (id) => ({ id, stage: await readMatchStage(tournamentId, id) })),
+  );
+  const knockout = stages.find((entry) => entry.stage !== "league");
+
+  if (knockout) {
+    throw new TournamentMutationError("Knockout results are entered one match at a time.", 409);
+  }
+
   const firestore = getFirebaseAdminFirestore();
   const tournamentRef = firestore.doc(paths.tournament(tournamentId));
   const refs = ids.map((id) => firestore.doc(paths.tournamentMatch(tournamentId, id)));
@@ -538,6 +582,13 @@ export async function correctMatchResult(
   input: MatchResultCorrectionInput,
 ): Promise<void> {
   const access = await requireTournamentOwnerOrSuperAdmin(tournamentId);
+  const stage = await readMatchStage(tournamentId, input.matchId);
+
+  if (stage !== "league") {
+    await correctKnockoutMatchResult(access, tournamentId, input);
+    return;
+  }
+
   const firestore = getFirebaseAdminFirestore();
   const tournamentRef = firestore.doc(paths.tournament(tournamentId));
   const matchRef = firestore.doc(paths.tournamentMatch(tournamentId, input.matchId));
@@ -626,6 +677,13 @@ export async function clearMatchResult(
   input: MatchResultClearInput,
 ): Promise<void> {
   const access = await requireTournamentOwnerOrSuperAdmin(tournamentId);
+  const stage = await readMatchStage(tournamentId, input.matchId);
+
+  if (stage !== "league") {
+    await clearKnockoutMatchResult(access, tournamentId, input);
+    return;
+  }
+
   const firestore = getFirebaseAdminFirestore();
   const tournamentRef = firestore.doc(paths.tournament(tournamentId));
   const matchRef = firestore.doc(paths.tournamentMatch(tournamentId, input.matchId));
