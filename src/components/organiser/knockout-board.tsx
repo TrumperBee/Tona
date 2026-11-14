@@ -19,7 +19,6 @@ import {
   ShieldCheck,
   Trophy,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -27,6 +26,7 @@ import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog } from "@/components/ui/dialog";
 import { Input, Select, Textarea } from "@/components/ui/input";
+import { useRefreshPreservingScroll } from "@/lib/hooks/use-refresh-preserving-scroll";
 
 export type KnockoutBoardLeg = 1 | 2;
 
@@ -196,8 +196,352 @@ function tieStatusLabel(status: KnockoutBoardTie["status"]): string {
   }
 }
 
+// These row and card components live at module scope on purpose. Declaring a
+// component inside another component's render body gives it a new identity on
+// every render, so React unmounts and recreates its whole subtree. Any input
+// inside it then loses focus after the first character (ADR-066).
+interface LegRowProps {
+  readonly tie: KnockoutBoardTie;
+  readonly match: KnockoutBoardMatch;
+  readonly onEdit: (state: EditState) => void;
+}
+
+function LegRow({ tie, match, onEdit }: LegRowProps) {
+  return (
+    <li className="space-y-2 rounded-lg border border-white/10 bg-navy-950/50 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
+          Leg {match.leg} of {tie.legs}
+        </span>
+        <Badge tone={match.status === "completed" ? "success" : "neutral"}>
+          {match.status === "completed" ? "Result" : "Due"}
+        </Badge>
+      </div>
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+        <p className="truncate text-sm font-medium text-grey-100">{match.homeTag}</p>
+        <span className="text-xs text-grey-500">vs</span>
+        <p className="truncate text-right text-sm font-medium text-grey-100">{match.awayTag}</p>
+      </div>
+
+      {match.status === "completed" ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="font-display text-lg font-semibold tabular-nums text-white">
+            {match.homeGoals} – {match.awayGoals}
+          </p>
+          <div className="flex gap-1.5">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                onEdit({
+                  tieId: tie.tieId,
+                  matchId: match.id,
+                  mode: "correct",
+                  homeTag: match.homeTag,
+                  awayTag: match.awayTag,
+                  home: String(match.homeGoals ?? ""),
+                  away: String(match.awayGoals ?? ""),
+                  reason: "",
+                })
+              }
+            >
+              Correct
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                onEdit({
+                  tieId: tie.tieId,
+                  matchId: match.id,
+                  mode: "clear",
+                  homeTag: match.homeTag,
+                  awayTag: match.awayTag,
+                  home: "",
+                  away: "",
+                  reason: "",
+                })
+              }
+            >
+              Clear
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button
+          variant="secondary"
+          size="sm"
+          className="w-full"
+          leftIcon={<Save aria-hidden="true" className="h-3.5 w-3.5" />}
+          onClick={() =>
+            onEdit({
+              tieId: tie.tieId,
+              matchId: match.id,
+              mode: "enter",
+              homeTag: match.homeTag,
+              awayTag: match.awayTag,
+              home: "",
+              away: "",
+              reason: "",
+            })
+          }
+        >
+          Record leg score
+        </Button>
+      )}
+    </li>
+  );
+}
+
+interface TieCardProps {
+  readonly tie: KnockoutBoardTie;
+  readonly onEdit: (state: EditState) => void;
+  readonly onDecider: (state: DeciderState) => void;
+}
+
+function TieCard({ tie, onEdit, onDecider }: TieCardProps) {
+  const winnerTag =
+    tie.winnerUid === tie.higherSeedUid
+      ? tie.higherSeedTag
+      : tie.winnerUid === tie.lowerSeedUid
+        ? tie.lowerSeedTag
+        : null;
+  const isFinal = tie.legs === 1;
+  const tieIdLabel = `Tie ${tie.bracketSlot}`;
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <CardTitle className="text-base">
+            {tie.higherSeedTag} <span className="text-grey-500">vs</span> {tie.lowerSeedTag}
+          </CardTitle>
+          <Badge tone="neutral">{tieIdLabel}</Badge>
+          {tie.group ? <Badge tone="info">Group {tie.group}</Badge> : null}
+          <Badge tone={tieStatusTone(tie.status)}>{tieStatusLabel(tie.status)}</Badge>
+        </div>
+        <span className="text-xs tabular-nums text-grey-500">
+          {tie.aggregate.higherGoals} – {tie.aggregate.lowerGoals} aggregate
+        </span>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid gap-2 sm:grid-cols-2">
+          {tie.matches.map((match) => (
+            <LegRow key={match.id} tie={tie} match={match} onEdit={onEdit} />
+          ))}
+        </div>
+
+        {winnerTag ? (
+          <p className="flex items-center gap-2 rounded-lg border border-success/25 bg-success/[0.06] px-3 py-2 text-sm text-success-soft">
+            <Trophy aria-hidden="true" className="h-4 w-4 shrink-0" />
+            {winnerTag} advances
+            {tie.decidedBy === "aggregate"
+              ? " on aggregate"
+              : tie.decidedBy === "extra_time"
+                ? " after extra time"
+                : tie.decidedBy === "penalties"
+                  ? ` on penalties (${tie.penalties?.higher}–${tie.penalties?.lower})`
+                  : ""}
+            .
+          </p>
+        ) : null}
+
+        {tie.status === "needs_decider" ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning/30 bg-warning/[0.06] p-3">
+            <p className="text-xs leading-5 text-warning-soft">
+              Level after {tie.legsPlayed} {tie.legsPlayed === 1 ? "leg" : "legs"}. Choose the
+              winner by extra time or penalties.
+            </p>
+            <Button
+              size="sm"
+              leftIcon={<Flag aria-hidden="true" className="h-3.5 w-3.5" />}
+              onClick={() =>
+                onDecider({
+                  tieId: tie.tieId,
+                  higherSeedUid: tie.higherSeedUid,
+                  higherSeedTag: tie.higherSeedTag,
+                  lowerSeedUid: tie.lowerSeedUid,
+                  lowerSeedTag: tie.lowerSeedTag,
+                  winnerUid: tie.higherSeedUid,
+                  method: "extra_time",
+                  note: "",
+                  higherPenalties: "",
+                  lowerPenalties: "",
+                })
+              }
+            >
+              Record decider
+            </Button>
+          </div>
+        ) : null}
+
+        {tie.status === "completed" && isFinal ? (
+          <p className="text-xs text-grey-500">
+            This tie completed the final. Use the completion action below to record the champion.
+          </p>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+interface RoundCardProps {
+  readonly round: KnockoutBoardRound;
+  readonly rounds: readonly KnockoutBoardRound[];
+  readonly leagueClosed: boolean;
+  readonly busy: string | null;
+  readonly legs: Readonly<Record<string, KnockoutBoardLeg>>;
+  readonly onSelectLegs: (round: string, legs: KnockoutBoardLeg) => void;
+  readonly onDraw: (round: KnockoutBoardRound) => void;
+  readonly onReset: (round: KnockoutBoardRound) => void;
+  readonly onPublish: (round: string) => void;
+  readonly onEdit: (state: EditState) => void;
+  readonly onDecider: (state: DeciderState) => void;
+}
+
+function legsForRound(
+  round: KnockoutBoardRound,
+  legs: Readonly<Record<string, KnockoutBoardLeg>>,
+): KnockoutBoardLeg {
+  return round.round === "final" ? 1 : (legs[round.round] ?? round.legs);
+}
+
+function RoundCard({
+  round,
+  rounds,
+  leagueClosed,
+  busy,
+  legs,
+  onSelectLegs,
+  onDraw,
+  onReset,
+  onPublish,
+  onEdit,
+  onDecider,
+}: RoundCardProps) {
+  const index = rounds.findIndex((entry) => entry.round === round.round);
+  const previous = index > 0 ? rounds[index - 1] : null;
+  const prerequisitesMet = round.round === "playoff" ? leagueClosed : Boolean(previous?.complete);
+  const drawDisabled = round.published || !prerequisitesMet;
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <GitBranch aria-hidden="true" className="h-4 w-4 text-electric-300" />
+          <CardTitle className="text-lg">{round.label}</CardTitle>
+          <Badge tone="neutral">{round.legs === 1 ? "Single match" : `${round.legs} legs`}</Badge>
+          {round.published ? (
+            <Badge tone={round.complete ? "success" : "info"}>
+              {round.complete ? "Complete" : "Published"}
+            </Badge>
+          ) : round.draft ? (
+            <Badge tone="warning">Draft</Badge>
+          ) : (
+            <Badge tone="neutral">Not drawn</Badge>
+          )}
+        </div>
+
+        {!round.published ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {round.round !== "final" ? (
+              <Select
+                aria-label={`${round.label} leg count`}
+                className="h-9 w-32"
+                value={String(legsForRound(round, legs))}
+                onChange={(event) =>
+                  onSelectLegs(round.round, Number.parseInt(event.target.value, 10) === 1 ? 1 : 2)
+                }
+              >
+                <option value="1">Single match</option>
+                <option value="2">Two legs</option>
+              </Select>
+            ) : null}
+            <Button
+              size="sm"
+              variant={round.draft ? "secondary" : "primary"}
+              loading={busy === `draw-${round.round}`}
+              leftIcon={<Play aria-hidden="true" className="h-3.5 w-3.5" />}
+              disabled={drawDisabled}
+              onClick={() => onDraw(round)}
+            >
+              {round.draft ? "Redraw" : "Draw round"}
+            </Button>
+            {round.draft ? (
+              <>
+                <Button
+                  size="sm"
+                  loading={busy === `publish-${round.round}`}
+                  leftIcon={<ShieldCheck aria-hidden="true" className="h-3.5 w-3.5" />}
+                  onClick={() => onPublish(round.round)}
+                >
+                  Publish
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  loading={busy === `reset-${round.round}`}
+                  leftIcon={<RefreshCcw aria-hidden="true" className="h-3.5 w-3.5" />}
+                  onClick={() => onReset(round)}
+                >
+                  Discard
+                </Button>
+              </>
+            ) : null}
+          </div>
+        ) : null}
+      </CardHeader>
+
+      <CardContent className="space-y-3">
+        {round.published ? (
+          round.ties.length > 0 ? (
+            round.ties.map((tie) => (
+              <TieCard key={tie.tieId} tie={tie} onEdit={onEdit} onDecider={onDecider} />
+            ))
+          ) : (
+            <p className="text-sm text-grey-400">No ties are published for this round yet.</p>
+          )
+        ) : round.draft ? (
+          <>
+            <p className="text-xs leading-5 text-grey-500">
+              Draft generated {round.draft.generatedAt} · generation {round.draft.generationCount}.
+              Nothing here is public until you publish it, and the draft can still be redrawn or
+              discarded.
+            </p>
+            <ul className="grid gap-2 sm:grid-cols-2">
+              {round.draft.ties.map((tie) => (
+                <li
+                  key={tie.tieId}
+                  className="rounded-lg border border-dashed border-white/15 bg-navy-950/40 p-3 text-sm"
+                >
+                  <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-eyebrow text-grey-500">
+                    <span>Tie {tie.bracketSlot}</span>
+                    {tie.group ? <span>Group {tie.group}</span> : null}
+                  </div>
+                  <p className="mt-1 truncate text-grey-100">
+                    <span className="tabular-nums text-grey-500">{tie.higherSeedPosition}</span>{" "}
+                    {tie.higherSeedTag} <span className="text-grey-500">vs</span>{" "}
+                    <span className="tabular-nums text-grey-500">{tie.lowerSeedPosition}</span>{" "}
+                    {tie.lowerSeedTag}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <p className="text-sm leading-6 text-grey-400">
+            {round.round === "playoff"
+              ? "Draw the play-offs once the league phase is closed. Seeded positions 9–16 are paired with unseeded positions 17–24."
+              : `Draw the ${round.label.toLowerCase()} after every tie in the previous round is decided.`}
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function KnockoutBoard(props: KnockoutBoardProps) {
-  const router = useRouter();
+  const refresh = useRefreshPreservingScroll();
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [legs, setLegs] = useState<Record<string, KnockoutBoardLeg>>({});
@@ -225,7 +569,7 @@ export function KnockoutBoard(props: KnockoutBoardProps) {
     }
 
     setNotice({ tone: "success", message: success });
-    router.refresh();
+    refresh();
     return true;
   }
 
@@ -396,309 +740,6 @@ export function KnockoutBoard(props: KnockoutBoardProps) {
     }
   }
 
-  function LegRow({
-    tie,
-    match,
-  }: {
-    readonly tie: KnockoutBoardTie;
-    readonly match: KnockoutBoardMatch;
-  }) {
-    return (
-      <li className="space-y-2 rounded-lg border border-white/10 bg-navy-950/50 p-3">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
-            Leg {match.leg} of {tie.legs}
-          </span>
-          <Badge tone={match.status === "completed" ? "success" : "neutral"}>
-            {match.status === "completed" ? "Result" : "Due"}
-          </Badge>
-        </div>
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-          <p className="truncate text-sm font-medium text-grey-100">{match.homeTag}</p>
-          <span className="text-xs text-grey-500">vs</span>
-          <p className="truncate text-right text-sm font-medium text-grey-100">{match.awayTag}</p>
-        </div>
-
-        {match.status === "completed" ? (
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="font-display text-lg font-semibold tabular-nums text-white">
-              {match.homeGoals} – {match.awayGoals}
-            </p>
-            <div className="flex gap-1.5">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  setEdit({
-                    tieId: tie.tieId,
-                    matchId: match.id,
-                    mode: "correct",
-                    homeTag: match.homeTag,
-                    awayTag: match.awayTag,
-                    home: String(match.homeGoals ?? ""),
-                    away: String(match.awayGoals ?? ""),
-                    reason: "",
-                  })
-                }
-              >
-                Correct
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  setEdit({
-                    tieId: tie.tieId,
-                    matchId: match.id,
-                    mode: "clear",
-                    homeTag: match.homeTag,
-                    awayTag: match.awayTag,
-                    home: "",
-                    away: "",
-                    reason: "",
-                  })
-                }
-              >
-                Clear
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <Button
-            variant="secondary"
-            size="sm"
-            className="w-full"
-            leftIcon={<Save aria-hidden="true" className="h-3.5 w-3.5" />}
-            onClick={() =>
-              setEdit({
-                tieId: tie.tieId,
-                matchId: match.id,
-                mode: "enter",
-                homeTag: match.homeTag,
-                awayTag: match.awayTag,
-                home: "",
-                away: "",
-                reason: "",
-              })
-            }
-          >
-            Record leg score
-          </Button>
-        )}
-      </li>
-    );
-  }
-
-  function TieCard({ tie }: { readonly tie: KnockoutBoardTie }) {
-    const winnerTag =
-      tie.winnerUid === tie.higherSeedUid
-        ? tie.higherSeedTag
-        : tie.winnerUid === tie.lowerSeedUid
-          ? tie.lowerSeedTag
-          : null;
-    const isFinal = tie.legs === 1;
-    const tieIdLabel = `Tie ${tie.bracketSlot}`;
-
-    return (
-      <Card>
-        <CardHeader className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <CardTitle className="text-base">
-              {tie.higherSeedTag} <span className="text-grey-500">vs</span> {tie.lowerSeedTag}
-            </CardTitle>
-            <Badge tone="neutral">{tieIdLabel}</Badge>
-            {tie.group ? <Badge tone="info">Group {tie.group}</Badge> : null}
-            <Badge tone={tieStatusTone(tie.status)}>{tieStatusLabel(tie.status)}</Badge>
-          </div>
-          <span className="text-xs tabular-nums text-grey-500">
-            {tie.aggregate.higherGoals} – {tie.aggregate.lowerGoals} aggregate
-          </span>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid gap-2 sm:grid-cols-2">
-            {tie.matches.map((match) => (
-              <LegRow key={match.id} tie={tie} match={match} />
-            ))}
-          </div>
-
-          {winnerTag ? (
-            <p className="flex items-center gap-2 rounded-lg border border-success/25 bg-success/[0.06] px-3 py-2 text-sm text-success-soft">
-              <Trophy aria-hidden="true" className="h-4 w-4 shrink-0" />
-              {winnerTag} advances
-              {tie.decidedBy === "aggregate"
-                ? " on aggregate"
-                : tie.decidedBy === "extra_time"
-                  ? " after extra time"
-                  : tie.decidedBy === "penalties"
-                    ? ` on penalties (${tie.penalties?.higher}–${tie.penalties?.lower})`
-                    : ""}
-              .
-            </p>
-          ) : null}
-
-          {tie.status === "needs_decider" ? (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning/30 bg-warning/[0.06] p-3">
-              <p className="text-xs leading-5 text-warning-soft">
-                Level after {tie.legsPlayed} {tie.legsPlayed === 1 ? "leg" : "legs"}. Choose the
-                winner by extra time or penalties.
-              </p>
-              <Button
-                size="sm"
-                leftIcon={<Flag aria-hidden="true" className="h-3.5 w-3.5" />}
-                onClick={() =>
-                  setDecider({
-                    tieId: tie.tieId,
-                    higherSeedUid: tie.higherSeedUid,
-                    higherSeedTag: tie.higherSeedTag,
-                    lowerSeedUid: tie.lowerSeedUid,
-                    lowerSeedTag: tie.lowerSeedTag,
-                    winnerUid: tie.higherSeedUid,
-                    method: "extra_time",
-                    note: "",
-                    higherPenalties: "",
-                    lowerPenalties: "",
-                  })
-                }
-              >
-                Record decider
-              </Button>
-            </div>
-          ) : null}
-
-          {tie.status === "completed" && isFinal ? (
-            <p className="text-xs text-grey-500">
-              This tie completed the final. Use the completion action below to record the champion.
-            </p>
-          ) : null}
-        </CardContent>
-      </Card>
-    );
-  }
-
-  function RoundCard({ round }: { readonly round: KnockoutBoardRound }) {
-    const index = props.rounds.findIndex((entry) => entry.round === round.round);
-    const previous = index > 0 ? props.rounds[index - 1] : null;
-    const prerequisitesMet =
-      round.round === "playoff" ? props.leagueClosed : Boolean(previous?.complete);
-    const drawDisabled = round.published || !prerequisitesMet;
-
-    return (
-      <Card>
-        <CardHeader className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <GitBranch aria-hidden="true" className="h-4 w-4 text-electric-300" />
-            <CardTitle className="text-lg">{round.label}</CardTitle>
-            <Badge tone="neutral">{round.legs === 1 ? "Single match" : `${round.legs} legs`}</Badge>
-            {round.published ? (
-              <Badge tone={round.complete ? "success" : "info"}>
-                {round.complete ? "Complete" : "Published"}
-              </Badge>
-            ) : round.draft ? (
-              <Badge tone="warning">Draft</Badge>
-            ) : (
-              <Badge tone="neutral">Not drawn</Badge>
-            )}
-          </div>
-
-          {!round.published ? (
-            <div className="flex flex-wrap items-center gap-2">
-              {round.round !== "final" ? (
-                <Select
-                  aria-label={`${round.label} leg count`}
-                  className="h-9 w-32"
-                  value={String(legsFor(round))}
-                  onChange={(event) =>
-                    setLegs((current) => ({
-                      ...current,
-                      [round.round]: Number.parseInt(event.target.value, 10) === 1 ? 1 : 2,
-                    }))
-                  }
-                >
-                  <option value="1">Single match</option>
-                  <option value="2">Two legs</option>
-                </Select>
-              ) : null}
-              <Button
-                size="sm"
-                variant={round.draft ? "secondary" : "primary"}
-                loading={busy === `draw-${round.round}`}
-                leftIcon={<Play aria-hidden="true" className="h-3.5 w-3.5" />}
-                disabled={drawDisabled}
-                onClick={() => drawRound(round)}
-              >
-                {round.draft ? "Redraw" : "Draw round"}
-              </Button>
-              {round.draft ? (
-                <>
-                  <Button
-                    size="sm"
-                    loading={busy === `publish-${round.round}`}
-                    leftIcon={<ShieldCheck aria-hidden="true" className="h-3.5 w-3.5" />}
-                    onClick={() => setConfirmPublish(round.round)}
-                  >
-                    Publish
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    loading={busy === `reset-${round.round}`}
-                    leftIcon={<RefreshCcw aria-hidden="true" className="h-3.5 w-3.5" />}
-                    onClick={() => resetRound(round)}
-                  >
-                    Discard
-                  </Button>
-                </>
-              ) : null}
-            </div>
-          ) : null}
-        </CardHeader>
-
-        <CardContent className="space-y-3">
-          {round.published ? (
-            round.ties.length > 0 ? (
-              round.ties.map((tie) => <TieCard key={tie.tieId} tie={tie} />)
-            ) : (
-              <p className="text-sm text-grey-400">No ties are published for this round yet.</p>
-            )
-          ) : round.draft ? (
-            <>
-              <p className="text-xs leading-5 text-grey-500">
-                Draft generated {round.draft.generatedAt} · generation {round.draft.generationCount}
-                . Nothing here is public until you publish it, and the draft can still be redrawn or
-                discarded.
-              </p>
-              <ul className="grid gap-2 sm:grid-cols-2">
-                {round.draft.ties.map((tie) => (
-                  <li
-                    key={tie.tieId}
-                    className="rounded-lg border border-dashed border-white/15 bg-navy-950/40 p-3 text-sm"
-                  >
-                    <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-eyebrow text-grey-500">
-                      <span>Tie {tie.bracketSlot}</span>
-                      {tie.group ? <span>Group {tie.group}</span> : null}
-                    </div>
-                    <p className="mt-1 truncate text-grey-100">
-                      <span className="tabular-nums text-grey-500">{tie.higherSeedPosition}</span>{" "}
-                      {tie.higherSeedTag} <span className="text-grey-500">vs</span>{" "}
-                      <span className="tabular-nums text-grey-500">{tie.lowerSeedPosition}</span>{" "}
-                      {tie.lowerSeedTag}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            </>
-          ) : (
-            <p className="text-sm leading-6 text-grey-400">
-              {round.round === "playoff"
-                ? "Draw the play-offs once the league phase is closed. Seeded positions 9–16 are paired with unseeded positions 17–24."
-                : `Draw the ${round.label.toLowerCase()} after every tie in the previous round is decided.`}
-            </p>
-          )}
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
     <div className="space-y-4">
       {notice ? (
@@ -793,7 +834,20 @@ export function KnockoutBoard(props: KnockoutBoardProps) {
       </Card>
 
       {props.rounds.map((round) => (
-        <RoundCard key={round.round} round={round} />
+        <RoundCard
+          key={round.round}
+          round={round}
+          rounds={props.rounds}
+          leagueClosed={props.leagueClosed}
+          busy={busy}
+          legs={legs}
+          onSelectLegs={(id, value) => setLegs((current) => ({ ...current, [id]: value }))}
+          onDraw={drawRound}
+          onReset={resetRound}
+          onPublish={setConfirmPublish}
+          onEdit={setEdit}
+          onDecider={setDecider}
+        />
       ))}
 
       {props.tournamentStatus === "knockout" &&

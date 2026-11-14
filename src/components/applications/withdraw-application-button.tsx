@@ -1,14 +1,14 @@
 "use client";
 
 // GCC - withdraw a pending organiser application.
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useRefreshPreservingScroll } from "@/lib/hooks/use-refresh-preserving-scroll";
 
 export function WithdrawApplicationButton({ applicationId }: { readonly applicationId: string }) {
-  const router = useRouter();
+  const refresh = useRefreshPreservingScroll();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +31,7 @@ export function WithdrawApplicationButton({ applicationId }: { readonly applicat
       }
 
       setOpen(false);
-      router.refresh();
+      refresh();
     } catch {
       setError("The application could not be withdrawn. Check your connection and try again.");
     } finally {

@@ -1,13 +1,13 @@
 "use client";
 
 // GCC - revoke organiser privileges with a required reason.
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { FormField } from "@/components/ui/form-field";
 import { Textarea } from "@/components/ui/input";
+import { useRefreshPreservingScroll } from "@/lib/hooks/use-refresh-preserving-scroll";
 
 export interface RevokeOrganiserButtonProps {
   readonly uid: string;
@@ -15,7 +15,7 @@ export interface RevokeOrganiserButtonProps {
 }
 
 export function RevokeOrganiserButton({ uid, gamerTag }: RevokeOrganiserButtonProps) {
-  const router = useRouter();
+  const refresh = useRefreshPreservingScroll();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +45,7 @@ export function RevokeOrganiserButton({ uid, gamerTag }: RevokeOrganiserButtonPr
 
       setOpen(false);
       setReason("");
-      router.refresh();
+      refresh();
     } catch {
       setError("The role change could not be saved. Check your connection and try again.");
     } finally {

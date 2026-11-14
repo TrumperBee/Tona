@@ -7,12 +7,12 @@
 // in their notification. The eligibility shown here mirrors the pure server
 // transition matrix; the server re-checks everything inside its transaction.
 import { ArrowRightLeft, PauseCircle, PlayCircle, XCircle } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input, Textarea } from "@/components/ui/input";
+import { useRefreshPreservingScroll } from "@/lib/hooks/use-refresh-preserving-scroll";
 import { canTransition, type TournamentStatus } from "@/types/domain";
 
 const REASON_MIN = 5;
@@ -60,7 +60,7 @@ export function TournamentRowActions({
   readonly name: string;
   readonly status: TournamentStatus;
 }) {
-  const router = useRouter();
+  const refresh = useRefreshPreservingScroll();
 
   const canSuspend = canTransition(status, "suspended");
   const canUnsuspend = status === "suspended";
@@ -170,7 +170,7 @@ export function TournamentRowActions({
     }
 
     setDialog(null);
-    router.refresh();
+    refresh();
   }
 
   const title =

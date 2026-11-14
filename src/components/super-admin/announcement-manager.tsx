@@ -5,7 +5,6 @@
 // Create, edit, publish, unpublish and soft-delete. Every write goes through a
 // server route; this component never touches Firestore directly.
 import { Pencil, Pin, Plus, Send, Trash2, Undo2 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Badge, Card } from "@/components/ui/card";
@@ -15,6 +14,7 @@ import { EmptyState } from "@/components/ui/data-display";
 import { FormField } from "@/components/ui/form-field";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { Switch } from "@/components/ui/checkbox";
+import { useRefreshPreservingScroll } from "@/lib/hooks/use-refresh-preserving-scroll";
 import type { AnnouncementSeverity } from "@/types/domain";
 
 export interface AnnouncementItem {
@@ -83,7 +83,7 @@ function formFromItem(item: AnnouncementItem): FormState {
 }
 
 export function AnnouncementManager({ items }: { readonly items: readonly AnnouncementItem[] }) {
-  const router = useRouter();
+  const refresh = useRefreshPreservingScroll();
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<AnnouncementItem | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -155,7 +155,7 @@ export function AnnouncementManager({ items }: { readonly items: readonly Announ
 
       setEditorOpen(false);
       setNotice(editing ? "Announcement updated." : "Announcement created.");
-      router.refresh();
+      refresh();
     } catch {
       setError("The announcement could not be saved. Check your connection and try again.");
     } finally {
@@ -182,7 +182,7 @@ export function AnnouncementManager({ items }: { readonly items: readonly Announ
       }
 
       setNotice(publish ? "Announcement published." : "Announcement unpublished.");
-      router.refresh();
+      refresh();
     } catch {
       setNotice("The announcement could not be updated.");
     } finally {
@@ -208,7 +208,7 @@ export function AnnouncementManager({ items }: { readonly items: readonly Announ
 
       setDeleteTarget(null);
       setNotice("Announcement deleted.");
-      router.refresh();
+      refresh();
     } catch {
       setNotice("The announcement could not be deleted.");
     } finally {

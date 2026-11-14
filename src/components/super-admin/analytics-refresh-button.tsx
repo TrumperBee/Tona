@@ -2,17 +2,17 @@
 
 // GCC - manual analytics refresh.
 import { RefreshCw } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useRefreshPreservingScroll } from "@/lib/hooks/use-refresh-preserving-scroll";
 
 export function AnalyticsRefreshButton() {
-  const router = useRouter();
+  const refreshView = useRefreshPreservingScroll();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function refresh() {
+  async function runRefresh() {
     setLoading(true);
     setError(null);
 
@@ -25,7 +25,7 @@ export function AnalyticsRefreshButton() {
         return;
       }
 
-      router.refresh();
+      refreshView();
     } catch {
       setError("Analytics could not be refreshed. Check your connection and try again.");
     } finally {
@@ -41,7 +41,7 @@ export function AnalyticsRefreshButton() {
         loading={loading}
         loadingLabel="Refreshing"
         leftIcon={<RefreshCw aria-hidden="true" className="h-4 w-4" />}
-        onClick={() => void refresh()}
+        onClick={() => void runRefresh()}
       >
         Refresh
       </Button>

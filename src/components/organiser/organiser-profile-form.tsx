@@ -6,13 +6,14 @@
 // here. The server writes the single public organiser document.
 import { AlertCircle, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import { LogoUploader } from "@/components/organiser/logo-uploader";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { Input, Textarea } from "@/components/ui/input";
+import { useToast } from "@/components/ui/toast";
+import { useRefreshPreservingScroll } from "@/lib/hooks/use-refresh-preserving-scroll";
 import { organiserProfileEditSchema } from "@/lib/validation/organiser-profile";
 
 export interface OrganiserProfileFormProps {
@@ -38,7 +39,8 @@ function toRows(links: readonly { readonly label: string; readonly url: string }
 }
 
 export function OrganiserProfileForm({ initial, profileExists }: OrganiserProfileFormProps) {
-  const router = useRouter();
+  const refresh = useRefreshPreservingScroll();
+  const { toast } = useToast();
   const [organisationName, setOrganisationName] = useState(initial.organisationName);
   const [bio, setBio] = useState(initial.bio ?? "");
   const [links, setLinks] = useState<LinkRow[]>(toRows(initial.links));
@@ -122,7 +124,8 @@ export function OrganiserProfileForm({ initial, profileExists }: OrganiserProfil
 
       setSaved(true);
       setLinks(toRows(parsed.data.links ?? []));
-      router.refresh();
+      toast({ title: "Profile saved", tone: "success" });
+      refresh();
     } catch {
       setFormError("The connection failed. Check your network and try again.");
     } finally {

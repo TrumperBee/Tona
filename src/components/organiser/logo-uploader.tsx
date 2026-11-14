@@ -7,11 +7,11 @@
 // the server verifies the magic bytes and builds the Cloudinary URL.
 import { Building2, ImagePlus, Trash2 } from "lucide-react";
 import { useRef, useState, type ChangeEvent } from "react";
-import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog } from "@/components/ui/dialog";
+import { useRefreshPreservingScroll } from "@/lib/hooks/use-refresh-preserving-scroll";
 import { MAX_AVATAR_BYTES } from "@/lib/profile/image";
 
 export interface LogoUploaderProps {
@@ -81,7 +81,7 @@ async function compress(image: HTMLImageElement): Promise<Blob> {
 }
 
 export function LogoUploader({ name, initialLogoUrl, canUpload }: LogoUploaderProps) {
-  const router = useRouter();
+  const refresh = useRefreshPreservingScroll();
   const inputRef = useRef<HTMLInputElement>(null);
   const [logoUrl, setLogoUrl] = useState<string | null>(initialLogoUrl);
   const [sourceUrl, setSourceUrl] = useState<string | null>(null);
@@ -163,7 +163,7 @@ export function LogoUploader({ name, initialLogoUrl, canUpload }: LogoUploaderPr
 
       setLogoUrl(body.logoUrl);
       closeEditor();
-      router.refresh();
+      refresh();
     } catch (uploadError) {
       setError(
         uploadError instanceof Error ? uploadError.message : "We could not save that image.",
@@ -188,7 +188,7 @@ export function LogoUploader({ name, initialLogoUrl, canUpload }: LogoUploaderPr
 
       setLogoUrl(null);
       setRemoveOpen(false);
-      router.refresh();
+      refresh();
     } catch {
       setError("The connection failed. Check your network and try again.");
     } finally {

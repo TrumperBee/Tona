@@ -6,12 +6,12 @@
 // cross-tournament oversight page. The route re-checks ownership and the note
 // length; this component only collects the decision.
 import { Check, X } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/input";
+import { useRefreshPreservingScroll } from "@/lib/hooks/use-refresh-preserving-scroll";
 import type { ResultReportStatus } from "@/types/domain";
 
 export interface ResultReportActionsProps {
@@ -54,7 +54,7 @@ async function postDecision(
 }
 
 export function ResultReportActions({ tournamentId, reportId, status }: ResultReportActionsProps) {
-  const router = useRouter();
+  const refresh = useRefreshPreservingScroll();
   const [decision, setDecision] = useState<Decision | null>(null);
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -84,7 +84,7 @@ export function ResultReportActions({ tournamentId, reportId, status }: ResultRe
 
     setDecision(null);
     setNote("");
-    router.refresh();
+    refresh();
   }
 
   return (

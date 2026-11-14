@@ -5,7 +5,6 @@
 // Maintenance and registration toggles require an explicit confirmation. The
 // server re-validates everything, requires a reason when maintenance changes and
 // writes the before/after values to the audit log.
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -14,6 +13,8 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { FormField } from "@/components/ui/form-field";
 import { Input, Textarea } from "@/components/ui/input";
 import { Switch } from "@/components/ui/checkbox";
+import { useToast } from "@/components/ui/toast";
+import { useRefreshPreservingScroll } from "@/lib/hooks/use-refresh-preserving-scroll";
 
 export interface SettingsFormValues {
   readonly maintenanceMode: boolean;
@@ -33,7 +34,8 @@ interface ApiError {
 }
 
 export function SettingsForm({ initial }: SettingsFormProps) {
-  const router = useRouter();
+  const refresh = useRefreshPreservingScroll();
+  const { toast } = useToast();
   const [baseline, setBaseline] = useState(initial);
   const [values, setValues] = useState(initial);
   const [reason, setReason] = useState("");
@@ -122,7 +124,8 @@ export function SettingsForm({ initial }: SettingsFormProps) {
       setReason("");
       setConfirmOpen(false);
       setSuccess("Platform settings saved and audited.");
-      router.refresh();
+      toast({ title: "Settings saved", tone: "success" });
+      refresh();
     } catch {
       setError("The settings could not be saved. Check your connection and try again.");
       setConfirmOpen(false);

@@ -3,6 +3,7 @@
 import type { Metadata, Viewport } from "next";
 import { Barlow_Condensed, Inter } from "next/font/google";
 
+import { ToastProvider } from "@/components/ui/toast";
 import { SITE_NAME, SITE_SHORT_NAME, SITE_TAGLINE, siteConfig } from "@/lib/config/site";
 import { cn } from "@/lib/utils/cn";
 
@@ -103,7 +104,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={cn(bodyFont.variable, displayFont.variable)}>
-      <body className="min-h-dvh font-sans">{children}</body>
+      <body className="min-h-dvh font-sans">
+        <ToastProvider>{children}</ToastProvider>
+      </body>
     </html>
   );
 }

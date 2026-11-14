@@ -8,11 +8,11 @@
 // confirmation for an already-registered player.
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { buttonStyles } from "@/components/ui/button-styles";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useRefreshPreservingScroll } from "@/lib/hooks/use-refresh-preserving-scroll";
 import type { RegistrationState } from "@/lib/tournament/registration-state";
 
 export interface RegisterActionProps {
@@ -39,7 +39,7 @@ export function RegisterAction({
   registered,
   opensAtLabel,
 }: RegisterActionProps) {
-  const router = useRouter();
+  const refresh = useRefreshPreservingScroll();
   const [withdraw, setWithdraw] = useState<WithdrawState>({
     open: false,
     loading: false,
@@ -66,7 +66,7 @@ export function RegisterAction({
       }
 
       setWithdraw({ open: false, loading: false, error: null });
-      router.refresh();
+      refresh();
     } catch {
       setWithdraw((current) => ({
         ...current,

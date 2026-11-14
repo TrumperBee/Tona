@@ -6,7 +6,6 @@
 // Identity, email and status are never sent from this component.
 import { ShieldCheck } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -16,6 +15,7 @@ import { FormField } from "@/components/ui/form-field";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { GAMES } from "@/lib/config/games";
 import { COMMUNITY_TYPE_LABELS } from "@/lib/applications/labels";
+import { useRefreshPreservingScroll } from "@/lib/hooks/use-refresh-preserving-scroll";
 import { COMMUNITY_TYPES, EXPECTED_PLAYER_RANGES, type CommunityType } from "@/types/domain";
 
 const EXPERIENCE_MIN = 50;
@@ -44,7 +44,7 @@ const emptyForm: FormState = {
 };
 
 export function ApplicationForm() {
-  const router = useRouter();
+  const refresh = useRefreshPreservingScroll();
   const [form, setForm] = useState<FormState>(emptyForm);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -103,7 +103,7 @@ export function ApplicationForm() {
       }
 
       setSubmitted(true);
-      router.refresh();
+      refresh();
     } catch {
       setError("The application could not be submitted. Check your connection and try again.");
     } finally {

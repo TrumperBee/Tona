@@ -6,12 +6,12 @@
 // the bytes; the server verifies the magic bytes and builds the Cloudinary URL.
 import { Camera, ImagePlus, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
-import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Avatar } from "@/components/ui/data-display";
 import { Dialog } from "@/components/ui/dialog";
+import { useRefreshPreservingScroll } from "@/lib/hooks/use-refresh-preserving-scroll";
 import { MAX_AVATAR_BYTES } from "@/lib/profile/image";
 
 export interface AvatarUploaderProps {
@@ -80,7 +80,7 @@ async function compress(image: HTMLImageElement, zoom: number): Promise<Blob> {
 }
 
 export function AvatarUploader({ name, initialAvatarUrl }: AvatarUploaderProps) {
-  const router = useRouter();
+  const refresh = useRefreshPreservingScroll();
   const inputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(initialAvatarUrl);
@@ -175,7 +175,7 @@ export function AvatarUploader({ name, initialAvatarUrl }: AvatarUploaderProps) 
 
       setAvatarUrl(body.avatarUrl);
       closeEditor();
-      router.refresh();
+      refresh();
     } catch (uploadError) {
       setError(
         uploadError instanceof Error ? uploadError.message : "We could not save that image.",
@@ -200,7 +200,7 @@ export function AvatarUploader({ name, initialAvatarUrl }: AvatarUploaderProps) 
 
       setAvatarUrl(null);
       setRemoveOpen(false);
-      router.refresh();
+      refresh();
     } catch {
       setError("The connection failed. Check your network and try again.");
     } finally {

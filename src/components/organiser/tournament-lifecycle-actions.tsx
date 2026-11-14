@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/input";
+import { useRefreshPreservingScroll } from "@/lib/hooks/use-refresh-preserving-scroll";
 import type { TournamentStatus } from "@/types/domain";
 
 const CANCEL_MIN = 10;
@@ -72,7 +73,7 @@ export function PrimaryLifecycleActions({
   readonly tournamentId: string;
   readonly status: TournamentStatus;
 }) {
-  const router = useRouter();
+  const refresh = useRefreshPreservingScroll();
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<LifecycleResponse | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -128,7 +129,7 @@ export function PrimaryLifecycleActions({
     }
 
     setConfirmOpen(false);
-    router.refresh();
+    refresh();
     setBusy(false);
     return;
   }
@@ -177,6 +178,7 @@ export function TournamentDangerZone({
   readonly name: string;
 }) {
   const router = useRouter();
+  const refresh = useRefreshPreservingScroll();
 
   const canCancel = !(
     status === "draft" ||
@@ -223,7 +225,7 @@ export function TournamentDangerZone({
 
     setCancelOpen(false);
     setReason("");
-    router.refresh();
+    refresh();
   }
 
   async function remove(): Promise<void> {
@@ -245,7 +247,6 @@ export function TournamentDangerZone({
 
     // The workspace no longer exists; return to the organiser's list.
     router.push("/organiser/tournaments");
-    router.refresh();
   }
 
   return (

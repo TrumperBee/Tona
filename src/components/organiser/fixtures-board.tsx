@@ -22,15 +22,16 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input, Select, Textarea } from "@/components/ui/input";
+import { useToast } from "@/components/ui/toast";
 import { Avatar } from "@/components/ui/data-display";
 import { countryFlag, countryName } from "@/lib/config/countries";
+import { useRefreshPreservingScroll } from "@/lib/hooks/use-refresh-preserving-scroll";
 import { formatDate } from "@/lib/utils/dates";
 import type { TournamentStatus } from "@/types/domain";
 
@@ -256,7 +257,8 @@ function errorMessage(data: ApiBody): string {
 }
 
 export function FixturesBoard(props: FixturesBoardProps) {
-  const router = useRouter();
+  const refresh = useRefreshPreservingScroll();
+  const { toast } = useToast();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -376,8 +378,9 @@ export function FixturesBoard(props: FixturesBoardProps) {
     setNotice(
       "A new schedule was generated and validated. The draft is private until you publish it.",
     );
+    toast({ title: "Schedule generated", tone: "success" });
     setBusy(null);
-    router.refresh();
+    refresh();
   }
 
   async function publish(): Promise<void> {
@@ -414,8 +417,9 @@ export function FixturesBoard(props: FixturesBoardProps) {
 
     setPublishOpen(false);
     setNotice("The schedule is published. Every player can now see their eight matches.");
+    toast({ title: "Fixtures published", tone: "success" });
     setBusy(null);
-    router.refresh();
+    refresh();
   }
 
   async function reset(reason: string): Promise<void> {
@@ -441,8 +445,9 @@ export function FixturesBoard(props: FixturesBoardProps) {
     setNotice(
       "The published fixtures were removed and the competition returned to pots confirmed.",
     );
+    toast({ title: "Fixtures reset", tone: "success" });
     setBusy(null);
-    router.refresh();
+    refresh();
   }
 
   async function verifyIntegrity(): Promise<void> {
@@ -506,8 +511,9 @@ export function FixturesBoard(props: FixturesBoardProps) {
 
     setEditWindow(null);
     setNotice(`Matchday ${editWindow.number} window updated.`);
+    toast({ title: "Matchday window saved", tone: "success" });
     setBusy(null);
-    router.refresh();
+    refresh();
   }
 
   if (!setupReady) {

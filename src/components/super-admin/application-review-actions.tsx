@@ -6,13 +6,13 @@
 // Approval grants the organiser claim; a rejection requires a written note that
 // the applicant sees.
 import { CheckCircle2, XCircle } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { FormField } from "@/components/ui/form-field";
 import { Textarea } from "@/components/ui/input";
+import { useRefreshPreservingScroll } from "@/lib/hooks/use-refresh-preserving-scroll";
 
 type Decision = "approve" | "reject";
 
@@ -23,7 +23,7 @@ export function ApplicationReviewActions({
   readonly applicationId: string;
   readonly gamerTag: string;
 }) {
-  const router = useRouter();
+  const refresh = useRefreshPreservingScroll();
   const [decision, setDecision] = useState<Decision | null>(null);
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -87,7 +87,7 @@ export function ApplicationReviewActions({
             : "Application approved and organiser role granted."
           : "Application rejected. The applicant has been notified.",
       );
-      router.refresh();
+      refresh();
     } catch {
       setError("The review could not be saved. Check your connection and try again.");
     } finally {

@@ -1563,3 +1563,75 @@ an unpublished draft can be reset while a published one is immutable.
   from its legs in one transaction and locks a round once the next round is published.
 - `npm run simulate` runs the same end-to-end runner as the integration test against the
   emulators and prints the per-round summary, so the full path stays verifiable.
+
+---
+
+## ADR-066 - Shared text controls never remount, and no component is declared inside another
+
+**Date:** 2026-11-14
+**Status:** Accepted
+
+**Context.** The reported "every text box loses focus after one character" could not be
+reproduced in a real Chrome session against a production build (`next build` + `next
+start`) at 1280px or in 390px mobile emulation: login email/password, register full name
+and email, the search inputs and the settings forms all kept the same DOM node and
+`document.activeElement` for a 25-character string. The shared primitives (`Input`,
+`Textarea`, `Select`, `FormField`, `PasswordInput`, `CountryCombobox`) are controlled
+components with stable keys, and no provider, focus trap or global key handler remounts
+the tree.
+
+The reproducible defect is structural and was found in the organiser knockout board:
+`LegRow`, `TieCard` and `RoundCard` were declared inside `KnockoutBoard`'s render body.
+A function component declared during render is a brand-new component type on every
+parent render, so React unmounts the previous subtree and mounts a new one. The leg
+selector inside `RoundCard` therefore lost focus after the first change, and any input
+placed in those cards would have lost focus after the first character. The same pattern
+is the classic cause of this symptom across React codebases.
+
+**Decision.** Every component is declared at module scope and receives data and callbacks
+through explicit props. A component, helper that returns JSX, or wrapper is never declared
+inside another component's render body. This is a code-review rule, not just a fix for one
+file. The regression suite types a 25-character string character by character into
+`Input`, `Textarea`, `FormField`, the player search, the register form (full name, email
+and gamer tag) and the knockout leg selector, asserting after every keystroke that the DOM
+node is identical, still focused, and that the final value is complete. `jsdom`,
+`@testing-library/react` and `@testing-library/user-event` are dev-only dependencies; they
+run under Vitest's per-file `@vitest-environment jsdom` docblock, so the rest of the suite
+stays in Node and no production bundle grows.
+
+**Consequences.** Focus loss caused by remounting cannot come back unnoticed. Components
+that are genuinely reused must be extracted rather than nested. If a future report of
+focus loss appears on a page with no nested components, the tests already rule out the
+shared primitives, so the investigation starts at that page's own state and keys.
+
+---
+
+## ADR-067 - Saves update local state in place instead of refreshing the route
+
+**Date:** 2026-11-14
+**Status:** Accepted
+
+**Context.** After saving a result, the page jumped back to the top. The cause was a
+`router.refresh()` after every mutation: an App Router refresh re-renders the route from
+the server, and that can reset the window scroll position. Result entry (single and bulk),
+corrections, result clearing, pot moves and confirmation, draw and fixture actions,
+registration actions, announcement changes, settings forms and notification actions all
+followed the same "mutate, then refresh" pattern.
+
+**Decision.** A mutation route must answer with the data the client needs. The client
+updates its own state in place, keeps the scroll position, keeps focus on the control the
+user was using (or moves it to the next logical input), and shows an inline "Saved"
+confirmation plus a toast. The organiser results board owns its match list and patches the
+saved row; the notification list owns the read state and patches the item. Flows whose
+server-rendered data is broader than the mutation result (draws, fixtures, lifecycle,
+uploads, settings pages with derived sections, super-admin actions) refresh through
+`useRefreshPreservingScroll`, which records `window.scrollX/Y` and the focused element,
+calls `router.refresh()` without navigating, and restores both on the next few paints.
+Navigating to a different page (sign-out, deleting a tournament, returning from an edit
+page) is the only case that legitimately starts at the top.
+
+**Consequences.** No mutation flow navigates away or resets the scroll position. The
+client must be able to merge a mutation response, so routes return the affected record.
+`useRefreshPreservingScroll` is unit-tested for both scroll and focus restoration, and the
+manual phone script in `tests/e2e/phase-13b-input-and-scroll.md` proves three result saves
+in a row keep the page in place.

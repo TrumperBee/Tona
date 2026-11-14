@@ -6,7 +6,6 @@
 // entry is recorded by the server, which re-checks everything inside one
 // Firestore transaction. Nothing about the player is trusted from the browser.
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
 
@@ -14,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { buttonStyles } from "@/components/ui/button-styles";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Spinner } from "@/components/ui/feedback";
+import { useRefreshPreservingScroll } from "@/lib/hooks/use-refresh-preserving-scroll";
 
 export interface RegisterFormProps {
   readonly tournamentId: string;
@@ -21,7 +21,7 @@ export interface RegisterFormProps {
 }
 
 export function RegisterForm({ tournamentId, slug }: RegisterFormProps) {
-  const router = useRouter();
+  const refresh = useRefreshPreservingScroll();
   const [accepted, setAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
@@ -50,7 +50,7 @@ export function RegisterForm({ tournamentId, slug }: RegisterFormProps) {
 
       setDone(true);
       setLoading(false);
-      router.refresh();
+      refresh();
     } catch {
       setError("The entry could not be recorded. Try again.");
       setLoading(false);

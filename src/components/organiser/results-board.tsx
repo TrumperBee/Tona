@@ -16,7 +16,6 @@ import {
   Trash2,
   UserRound,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { PlayerCombobox, type ComboboxPlayer } from "@/components/organiser/player-combobox";
@@ -27,6 +26,7 @@ import { Avatar, EmptyState } from "@/components/ui/data-display";
 import { Dialog } from "@/components/ui/dialog";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { Tabs } from "@/components/ui/tabs";
+import { useToast } from "@/components/ui/toast";
 import { formatDate } from "@/lib/utils/dates";
 
 export interface ResultsBoardMatch {
@@ -152,9 +152,13 @@ function MatchMeta({ match }: { readonly match: ResultsBoardMatch }) {
 }
 
 export function ResultsBoard(props: ResultsBoardProps) {
-  const router = useRouter();
+  const { toast } = useToast();
+  // The board keeps its own copy of the matches so a save can update the exact
+  // row in place. A router refresh would rebuild the page and jump the scroll
+  // position back to the top (ADR-067).
+  const [matches, setMatches] = useState<readonly ResultsBoardMatch[]>(props.matches);
   const initialMatch = props.initialMatchId
-    ? (props.matches.find((match) => match.id === props.initialMatchId) ?? null)
+    ? (matches.find((match) => match.id === props.initialMatchId) ?? null)
     : null;
   const [selectedUid, setSelectedUid] = useState<string>(
     initialMatch
@@ -181,7 +185,7 @@ export function ResultsBoard(props: ResultsBoardProps) {
   const [notice, setNotice] = useState<Notice | null>(null);
 
   const selectedPlayer = props.players.find((player) => player.uid === selectedUid) ?? null;
-  const playerMatches = props.matches
+  const playerMatches = matches
     .filter(
       (match) =>
         selectedUid.length > 0 && (match.homeUid === selectedUid || match.awayUid === selectedUid),
@@ -194,8 +198,8 @@ export function ResultsBoard(props: ResultsBoardProps) {
       if (a.matchday !== b.matchday) return a.matchday - b.matchday;
       return a.id < b.id ? -1 : 1;
     });
-  const panelMatch = props.matches.find((match) => match.id === panelMatchId) ?? null;
-  const matchdayMatches = props.matches.filter((match) => match.matchday === gridMatchday);
+  const panelMatch = matches.find((match) => match.id === panelMatchId) ?? null;
+  const matchdayMatches = matches.filter((match) => match.matchday === gridMatchday);
   const pendingGridCount = matchdayMatches.filter((match) => {
     const entry = gridScores[match.id];
     return (
@@ -244,7 +248,24 @@ export function ResultsBoard(props: ResultsBoardProps) {
 
     setNotice({ tone: "success", message: "Result recorded." });
     setSingleScore(EMPTY_SCORE);
-    router.refresh();
+    setMatches((current) =>
+      current.map((match) =>
+        match.id === confirmEnter.id
+          ? {
+              ...match,
+              status: "completed" as const,
+              homeGoals: home,
+              awayGoals: away,
+              enteredAt: new Date().toISOString(),
+            }
+          : match,
+      ),
+    );
+    toast({
+      title: "Result saved",
+      description: `${confirmEnter.homeTag} ${home}–${away} ${confirmEnter.awayTag}`,
+      tone: "success",
+    });
   }
 
   async function submitCorrect(): Promise<void> {
@@ -279,7 +300,24 @@ export function ResultsBoard(props: ResultsBoardProps) {
     setCorrectReason("");
     setSingleScore(EMPTY_SCORE);
     setNotice({ tone: "success", message: "Result corrected and audited." });
-    router.refresh();
+    setMatches((current) =>
+      current.map((match) =>
+        match.id === correctMatch.id
+          ? {
+              ...match,
+              homeGoals: home,
+              awayGoals: away,
+              editCount: match.editCount + 1,
+              lastEditedAt: new Date().toISOString(),
+            }
+          : match,
+      ),
+    );
+    toast({
+      title: "Result corrected",
+      description: `${correctMatch.homeTag} ${home}–${away} ${correctMatch.awayTag}`,
+      tone: "success",
+    });
   }
 
   async function submitClear(): Promise<void> {
@@ -307,7 +345,23 @@ export function ResultsBoard(props: ResultsBoardProps) {
     setClearReason("");
     setSingleScore(EMPTY_SCORE);
     setNotice({ tone: "success", message: "Result cleared; the fixture is scheduled again." });
-    router.refresh();
+    setMatches((current) =>
+      current.map((match) =>
+        match.id === clearMatch.id
+          ? {
+              ...match,
+              status: "scheduled" as const,
+              homeGoals: null,
+              awayGoals: null,
+              enteredBy: null,
+              enteredByTag: null,
+              enteredAt: null,
+              lastEditedAt: new Date().toISOString(),
+            }
+          : match,
+      ),
+    );
+    toast({ title: "Result cleared", tone: "success" });
   }
 
   async function submitBulk(): Promise<void> {
@@ -351,12 +405,32 @@ export function ResultsBoard(props: ResultsBoardProps) {
       return;
     }
 
+    const saved = results;
     setGridScores({});
     setNotice({
       tone: "success",
       message: `${result.data.recorded ?? results.length} results recorded in one transaction.`,
     });
-    router.refresh();
+    setMatches((current) =>
+      current.map((match) => {
+        const savedResult = saved.find((entry) => entry.matchId === match.id);
+
+        return savedResult
+          ? {
+              ...match,
+              status: "completed" as const,
+              homeGoals: savedResult.homeGoals,
+              awayGoals: savedResult.awayGoals,
+              enteredAt: new Date().toISOString(),
+            }
+          : match;
+      }),
+    );
+    toast({
+      title: "Results saved",
+      description: `${result.data.recorded ?? results.length} results recorded.`,
+      tone: "success",
+    });
   }
 
   const playerTab = (

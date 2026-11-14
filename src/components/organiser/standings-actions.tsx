@@ -6,11 +6,11 @@
 // table with a fresh computation, and recalculate rebuilds it. Both call the
 // server guard; the button state only previews what the server allows.
 import { AlertTriangle, CheckCircle2, RefreshCw, ShieldCheck } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useRefreshPreservingScroll } from "@/lib/hooks/use-refresh-preserving-scroll";
 
 type Action = "recalculate" | "verify";
 
@@ -29,7 +29,7 @@ interface RecalculatePayload {
 }
 
 export function StandingsActions({ tournamentId }: { readonly tournamentId: string }) {
-  const router = useRouter();
+  const refresh = useRefreshPreservingScroll();
   const [busy, setBusy] = useState<Action | null>(null);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -65,7 +65,7 @@ export function StandingsActions({ tournamentId }: { readonly tournamentId: stri
           ok: true,
           text: `Rebuilt ${result.players} rows from ${result.completedMatches} completed league matches.`,
         });
-        router.refresh();
+        refresh();
         return;
       }
 

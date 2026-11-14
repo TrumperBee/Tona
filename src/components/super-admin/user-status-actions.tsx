@@ -1,13 +1,13 @@
 "use client";
 
 // GCC - account status actions with a required reason and confirmation.
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { FormField } from "@/components/ui/form-field";
 import { Textarea } from "@/components/ui/input";
+import { useRefreshPreservingScroll } from "@/lib/hooks/use-refresh-preserving-scroll";
 import type { AccountStatus } from "@/types/domain";
 
 const actionCopy: Record<
@@ -41,7 +41,7 @@ export interface UserStatusActionsProps {
 }
 
 export function UserStatusActions({ uid, gamerTag, status }: UserStatusActionsProps) {
-  const router = useRouter();
+  const refresh = useRefreshPreservingScroll();
   const [action, setAction] = useState<AccountStatus | null>(null);
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -85,7 +85,7 @@ export function UserStatusActions({ uid, gamerTag, status }: UserStatusActionsPr
 
       setAction(null);
       setReason("");
-      router.refresh();
+      refresh();
     } catch {
       setError("The status change could not be saved. Check your connection and try again.");
     } finally {

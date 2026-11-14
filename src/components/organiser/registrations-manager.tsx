@@ -7,7 +7,6 @@
 // server, only the wa.me link is returned), removing a player with a required
 // reason, and adding a player through the public gamer-tag search.
 import { MessageCircle, Search, UserPlus, UserRoundX } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { Avatar } from "@/components/ui/data-display";
@@ -15,7 +14,9 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/feedback";
 import { Textarea } from "@/components/ui/input";
+import { useToast } from "@/components/ui/toast";
 import { countryFlag, countryName } from "@/lib/config/countries";
+import { useRefreshPreservingScroll } from "@/lib/hooks/use-refresh-preserving-scroll";
 
 const MIN_REASON = 5;
 const MAX_REASON = 300;
@@ -39,7 +40,8 @@ export function RegistrationRowActions({
   readonly gamerTag: string;
   readonly canRemove: boolean;
 }) {
-  const router = useRouter();
+  const refresh = useRefreshPreservingScroll();
+  const { toast } = useToast();
   const [contacting, setContacting] = useState(false);
   const [contactError, setContactError] = useState<string | null>(null);
   const [removeOpen, setRemoveOpen] = useState(false);
@@ -112,7 +114,8 @@ export function RegistrationRowActions({
 
       setRemoveOpen(false);
       setReason("");
-      router.refresh();
+      toast({ title: "Entry removed", description: `${gamerTag} was removed.`, tone: "success" });
+      refresh();
     } catch {
       setRemoveError("The connection failed. Check your network and try again.");
     } finally {
@@ -218,7 +221,8 @@ export function AddPlayerPanel({
   readonly disabled: boolean;
   readonly disabledReason: string | null;
 }) {
-  const router = useRouter();
+  const refresh = useRefreshPreservingScroll();
+  const { toast } = useToast();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<readonly PlayerResult[] | null>(null);
   const [searching, setSearching] = useState(false);
@@ -294,7 +298,8 @@ export function AddPlayerPanel({
 
       setQuery("");
       setResults(null);
-      router.refresh();
+      toast({ title: "Player added", tone: "success" });
+      refresh();
     } catch {
       setError("The connection failed. Check your network and try again.");
     } finally {

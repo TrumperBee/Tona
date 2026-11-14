@@ -18,7 +18,6 @@ import {
   Unlock,
   UserRoundCog,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { Avatar } from "@/components/ui/data-display";
@@ -26,7 +25,9 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/feedback";
+import { useToast } from "@/components/ui/toast";
 import { countryFlag, countryName } from "@/lib/config/countries";
+import { useRefreshPreservingScroll } from "@/lib/hooks/use-refresh-preserving-scroll";
 import type { DrawMethod } from "@/types/domain";
 
 const POT_KEYS = ["1", "2", "3", "4"] as const;
@@ -211,7 +212,8 @@ export function PotSummary({
 }
 
 export function PotsBoard(props: PotsBoardProps) {
-  const router = useRouter();
+  const refresh = useRefreshPreservingScroll();
+  const { toast } = useToast();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -250,7 +252,8 @@ export function PotsBoard(props: PotsBoardProps) {
       return false;
     }
 
-    router.refresh();
+    toast({ title: "Draw saved", description: "The pot draw was updated.", tone: "success" });
+    refresh();
     setBusy(null);
     return true;
   }

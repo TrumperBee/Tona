@@ -40,6 +40,9 @@
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^6.0.0",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.10",
     "@types/node": "^24.19.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -47,6 +50,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.5",
     "firebase-tools": "^15.35.0",
+    "jsdom": "^31.0.1",
     "postcss": "^8.5.32",
     "prettier": "^3.9.10",
     "prettier-plugin-tailwindcss": "^0.8.1",

@@ -4,9 +4,8 @@
 //
 // The schema is strict: gamer tag, email, role, status and avatar URLs are not
 // accepted here. The server updates the private and public documents together.
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
 
 import { CountryCombobox } from "@/components/auth/country-combobox";
@@ -14,6 +13,7 @@ import { AvatarUploader } from "@/components/profile/avatar-uploader";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { Input, Select } from "@/components/ui/input";
+import { useToast } from "@/components/ui/toast";
 import {
   GAMES,
   getGamePlatforms,
@@ -38,7 +38,7 @@ export interface ProfileFormProps {
 }
 
 export function ProfileForm({ gamerTag, avatarUrl, initial }: ProfileFormProps) {
-  const router = useRouter();
+  const { toast } = useToast();
   const [values, setValues] = useState({
     fullName: initial.fullName,
     community: initial.community ?? "",
@@ -50,6 +50,7 @@ export function ProfileForm({ gamerTag, avatarUrl, initial }: ProfileFormProps) 
   });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const platformOptions = useMemo(
@@ -75,6 +76,7 @@ export function ProfileForm({ gamerTag, avatarUrl, initial }: ProfileFormProps) 
     event.preventDefault();
     setFormError(null);
     setFieldErrors({});
+    setSaved(false);
 
     const payload = {
       fullName: values.fullName,
@@ -121,8 +123,14 @@ export function ProfileForm({ gamerTag, avatarUrl, initial }: ProfileFormProps) 
         return;
       }
 
-      router.push("/dashboard/profile");
-      router.refresh();
+      // Stay on the form. Navigating away would throw the reader back to the
+      // top of another page; the saved state is confirmed in place instead.
+      setSaved(true);
+      toast({
+        title: "Profile saved",
+        description: "Your private and public profile were updated together.",
+        tone: "success",
+      });
     } catch {
       setFormError("The connection failed. Check your network and try again.");
     } finally {
@@ -141,6 +149,15 @@ export function ProfileForm({ gamerTag, avatarUrl, initial }: ProfileFormProps) 
           <p>{formError}</p>
         </div>
       ) : null}
+
+      <p role="status" aria-live="polite" className="min-h-0">
+        {saved ? (
+          <span className="inline-flex items-center gap-2 rounded-md border border-success/30 bg-success/10 px-3 py-2 text-sm text-success-soft">
+            <CheckCircle2 aria-hidden="true" className="h-4 w-4 shrink-0" />
+            Saved
+          </span>
+        ) : null}
+      </p>
 
       <div className="rounded-lg border border-white/10 bg-navy-900/50 p-4">
         <AvatarUploader name={gamerTag} initialAvatarUrl={avatarUrl} />

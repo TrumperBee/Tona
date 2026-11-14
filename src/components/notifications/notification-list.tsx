@@ -5,10 +5,10 @@
 // The server page owns pagination and queries. This component only marks the
 // owner's notifications as read through the server route and refreshes.
 import { CheckCheck } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
 import type { NotificationType } from "@/types/domain";
 import { formatDateTime } from "@/lib/utils/dates";
 import { cn } from "@/lib/utils/cn";
@@ -24,16 +24,17 @@ export interface NotificationInboxItem {
 }
 
 export function NotificationList({
-  items,
-  unread,
+  items: initialItems,
 }: {
   readonly items: readonly NotificationInboxItem[];
   readonly unread: number;
 }) {
-  const router = useRouter();
+  const { toast } = useToast();
+  const [items, setItems] = useState<readonly NotificationInboxItem[]>(initialItems);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const unread = items.filter((item) => !item.read).length;
 
   async function markRead(id: string) {
     setBusyId(id);
@@ -52,7 +53,10 @@ export function NotificationList({
         return;
       }
 
-      router.refresh();
+      setItems((current) =>
+        current.map((item) => (item.id === id ? { ...item, read: true } : item)),
+      );
+      toast({ title: "Notification marked as read", tone: "success" });
     } catch {
       setError("The notification could not be marked as read. Check your connection.");
     } finally {
@@ -77,7 +81,8 @@ export function NotificationList({
         return;
       }
 
-      router.refresh();
+      setItems((current) => current.map((item) => ({ ...item, read: true })));
+      toast({ title: "All notifications marked as read", tone: "success" });
     } catch {
       setError("Notifications could not be marked as read. Check your connection.");
     } finally {

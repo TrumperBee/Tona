@@ -8,7 +8,6 @@
 // the honest reason. Only changed fields are sent — an unchanged registration
 // deadline must not trip the extend-only rule.
 import { Save } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { CountryPicker } from "@/components/tournament/country-picker";
@@ -18,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/ui/form-field";
 import { Input, Select, Textarea } from "@/components/ui/input";
+import { useToast } from "@/components/ui/toast";
 import { countryName } from "@/lib/config/countries";
 import { MATCH_DURATION_MINUTES_OPTIONS, STARTER_RULES_TEMPLATE } from "@/lib/config/formats";
 import { GAMES, getGame, getGamePlatforms, type GameId, type PlatformId } from "@/lib/config/games";
@@ -28,6 +28,7 @@ import {
   TIEBREAKER_PROFILE_LABELS,
   type TiebreakerProfile,
 } from "@/lib/engine/standings/types";
+import { useRefreshPreservingScroll } from "@/lib/hooks/use-refresh-preserving-scroll";
 import { isNaiveDateTime, zonedToUtcIso } from "@/lib/utils/zoned-dates";
 import { validateStartsAtHorizon } from "@/lib/validation/tournament";
 import type { TournamentStatus } from "@/types/domain";
@@ -78,7 +79,8 @@ export function TournamentSettingsForm({
   initial,
   editable,
 }: TournamentSettingsFormProps) {
-  const router = useRouter();
+  const refresh = useRefreshPreservingScroll();
+  const { toast } = useToast();
   const isDraft = status === "draft";
   const can = (field: string): boolean => editable.includes(field);
 
@@ -276,7 +278,8 @@ export function TournamentSettingsForm({
       }
 
       setSaved(true);
-      router.refresh();
+      toast({ title: "Settings saved", tone: "success" });
+      refresh();
     } catch {
       setFormError("The connection failed. Check your network and try again.");
     } finally {
