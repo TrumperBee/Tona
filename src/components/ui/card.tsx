@@ -21,7 +21,7 @@ export function Card({ className, variant = "default", ...props }: CardProps) {
 }
 
 export function CardHeader({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("border-b border-white/10 p-5", className)} {...props} />;
+  return <div className={cn("border-b border-white/10 p-4 sm:p-5", className)} {...props} />;
 }
 
 export function CardTitle({ className, ...props }: HTMLAttributes<HTMLHeadingElement>) {
@@ -41,13 +41,16 @@ export function CardDescription({ className, ...props }: HTMLAttributes<HTMLPara
 }
 
 export function CardContent({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("p-5", className)} {...props} />;
+  return <div className={cn("p-4 sm:p-5", className)} {...props} />;
 }
 
 export function CardFooter({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("flex flex-wrap items-center gap-3 border-t border-white/10 p-5", className)}
+      className={cn(
+        "flex flex-wrap items-center gap-3 border-t border-white/10 p-4 sm:p-5",
+        className,
+      )}
       {...props}
     />
   );

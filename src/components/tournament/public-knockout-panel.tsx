@@ -63,7 +63,7 @@ function TieCard({ tie }: { readonly tie: PublicKnockoutTie }) {
     <Card className="overflow-hidden">
       <CardHeader className="flex items-center justify-between gap-2 p-3.5">
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
+          <span className="text-xs font-semibold uppercase tracking-eyebrow text-grey-500">
             Tie {tie.bracketSlot}
           </span>
           {tie.group ? <Badge tone="neutral">Play-off {tie.group}</Badge> : null}
@@ -78,7 +78,7 @@ function TieCard({ tie }: { readonly tie: PublicKnockoutTie }) {
             }`}
           >
             <span className="flex min-w-0 items-center gap-2">
-              <span className="w-5 shrink-0 text-right text-[10px] font-semibold tabular-nums text-grey-500">
+              <span className="w-5 shrink-0 text-right text-xs font-semibold tabular-nums text-grey-500">
                 {tie.higherSeedPosition}
               </span>
               <span className="truncate text-sm font-medium text-grey-100">
@@ -95,7 +95,7 @@ function TieCard({ tie }: { readonly tie: PublicKnockoutTie }) {
             }`}
           >
             <span className="flex min-w-0 items-center gap-2">
-              <span className="w-5 shrink-0 text-right text-[10px] font-semibold tabular-nums text-grey-500">
+              <span className="w-5 shrink-0 text-right text-xs font-semibold tabular-nums text-grey-500">
                 {tie.lowerSeedPosition}
               </span>
               <span className="truncate text-sm font-medium text-grey-100">{tie.lowerSeedTag}</span>
@@ -107,7 +107,7 @@ function TieCard({ tie }: { readonly tie: PublicKnockoutTie }) {
         </div>
 
         {tie.matches.length > 0 ? (
-          <ul className="space-y-1 border-t border-white/10 pt-2 text-[11px] leading-5 text-grey-500">
+          <ul className="space-y-1 border-t border-white/10 pt-2 text-xs leading-5 text-grey-500">
             {tie.matches.map((match) => (
               <li key={match.id} className="flex items-center justify-between gap-2">
                 <span className="truncate">
@@ -124,7 +124,7 @@ function TieCard({ tie }: { readonly tie: PublicKnockoutTie }) {
         ) : null}
 
         {tie.decidedBy ? (
-          <p className="border-t border-white/10 pt-2 text-[11px] text-grey-400">
+          <p className="border-t border-white/10 pt-2 text-xs text-grey-400">
             {DECIDED_BY_LABELS[tie.decidedBy] ?? tie.decidedBy}
             {tie.penalties ? ` · penalties ${tie.penalties.higher}–${tie.penalties.lower}` : ""}
             {tie.deciderNote ? ` · ${tie.deciderNote}` : ""}
@@ -132,7 +132,7 @@ function TieCard({ tie }: { readonly tie: PublicKnockoutTie }) {
         ) : null}
 
         {needsDecider ? (
-          <p className="rounded-md border border-warning/25 bg-warning/[0.06] px-2 py-1.5 text-[11px] text-warning-soft">
+          <p className="rounded-md border border-warning/25 bg-warning/[0.06] px-2 py-1.5 text-xs text-warning-soft">
             Level after {tie.legsPlayed} {tie.legsPlayed === 1 ? "leg" : "legs"}. The organiser
             records the winner by extra time or penalties.
           </p>
@@ -149,7 +149,7 @@ function RoundColumn({ round }: { readonly round: PublicKnockoutRound }) {
         <h3 className="font-display text-sm font-semibold uppercase tracking-display text-white">
           {round.label}
         </h3>
-        <span className="text-[10px] uppercase tracking-eyebrow text-grey-500">
+        <span className="text-xs uppercase tracking-eyebrow text-grey-500">
           {round.ties.length} {round.ties.length === 1 ? "tie" : "ties"}
         </span>
       </div>
@@ -200,7 +200,7 @@ export function PublicKnockoutPanel({ knockout }: PublicKnockoutPanelProps) {
                 ) : null}
               </div>
               <div className="rounded-lg border border-white/15 bg-navy-950/40 px-4 py-3 text-center">
-                <p className="text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
+                <p className="text-xs font-semibold uppercase tracking-eyebrow text-grey-500">
                   Bracket
                 </p>
                 <p className="mt-1 text-sm font-medium text-grey-200">
@@ -225,7 +225,7 @@ export function PublicKnockoutPanel({ knockout }: PublicKnockoutPanelProps) {
               away-goals rule; a level tie is settled by extra time or penalties.
             </p>
           </div>
-          <div className="flex items-center gap-2 text-[11px] text-grey-500">
+          <div className="flex items-center gap-2 text-xs text-grey-500">
             <ShieldCheck aria-hidden="true" className="h-3.5 w-3.5" />
             Written by the server, one recorded result at a time
           </div>
@@ -239,7 +239,7 @@ export function PublicKnockoutPanel({ knockout }: PublicKnockoutPanelProps) {
                   <CardTitle className="text-xs tracking-eyebrow text-grey-300">
                     {BAND_LABELS[entry.band]}
                   </CardTitle>
-                  <p className="mt-1 text-[10px] uppercase tracking-eyebrow text-grey-500">
+                  <p className="mt-1 text-xs uppercase tracking-eyebrow text-grey-500">
                     Positions {BAND_RANGES[entry.band]}
                   </p>
                 </CardHeader>

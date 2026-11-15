@@ -79,7 +79,7 @@ export function BrandLockup({
         {descriptor ? (
           <span
             className={cn(
-              "mt-1 hidden text-[10px] font-semibold uppercase tracking-eyebrow sm:block",
+              "mt-1 hidden text-xs font-semibold uppercase tracking-eyebrow sm:block",
               accent,
             )}
           >
@@ -87,7 +87,7 @@ export function BrandLockup({
           </span>
         ) : null}
         {tagline && !descriptor ? (
-          <span className={cn("mt-1 text-[10px] uppercase tracking-eyebrow", muted)}>
+          <span className={cn("mt-1 text-xs uppercase tracking-eyebrow", muted)}>
             One Platform. Endless Competition.
           </span>
         ) : null}

@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { signOutCompletely } from "@/lib/auth/client";
 
 interface SignOutButtonProps {
   readonly variant?: "primary" | "secondary" | "ghost";
@@ -27,6 +26,9 @@ export function SignOutButton({
     setLoading(true);
 
     try {
+      // Loaded on demand so the Firebase client SDK stays out of the pages that
+      // only show the button.
+      const { signOutCompletely } = await import("@/lib/auth/client");
       await signOutCompletely();
       router.refresh();
       router.push("/");

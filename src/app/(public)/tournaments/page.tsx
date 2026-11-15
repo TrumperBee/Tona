@@ -211,6 +211,7 @@ export default async function TournamentsPage({ searchParams }: TournamentsPageP
             </div>
           ) : (
             <>
+              <h2 className="sr-only">Published tournaments</h2>
               <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 {page.rows.map((tournament) => (
                   <TournamentCard key={tournament.id} tournament={tournament} />

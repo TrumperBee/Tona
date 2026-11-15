@@ -91,7 +91,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
         </h2>
         <dl className="mt-3 grid gap-3 sm:grid-cols-2">
           <div className="rounded-lg border border-white/10 bg-navy-950/50 p-3.5">
-            <dt className="text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
+            <dt className="text-xs font-semibold uppercase tracking-eyebrow text-grey-500">
               Format
             </dt>
             <dd className="mt-1 text-sm font-medium text-grey-100">
@@ -99,7 +99,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
             </dd>
           </div>
           <div className="rounded-lg border border-white/10 bg-navy-950/50 p-3.5">
-            <dt className="text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
+            <dt className="text-xs font-semibold uppercase tracking-eyebrow text-grey-500">
               Field size
             </dt>
             <dd className="mt-1 text-sm font-medium text-grey-100">
@@ -107,7 +107,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
             </dd>
           </div>
           <div className="rounded-lg border border-white/10 bg-navy-950/50 p-3.5">
-            <dt className="text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
+            <dt className="text-xs font-semibold uppercase tracking-eyebrow text-grey-500">
               Public address
             </dt>
             <dd className="mt-1 break-all text-sm font-medium text-grey-100">
@@ -115,7 +115,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
             </dd>
           </div>
           <div className="rounded-lg border border-white/10 bg-navy-950/50 p-3.5">
-            <dt className="text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
+            <dt className="text-xs font-semibold uppercase tracking-eyebrow text-grey-500">
               Audit trail
             </dt>
             <dd className="mt-1 text-sm font-medium text-grey-100">

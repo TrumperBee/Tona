@@ -66,13 +66,13 @@ export default async function HomePage() {
           className="absolute inset-0 bg-pitch-grid bg-grid opacity-60 [mask-image:linear-gradient(to_bottom,black,transparent_85%)]"
         />
 
-        <div className="container relative grid gap-12 py-16 lg:grid-cols-[1.08fr_0.92fr] lg:items-center lg:py-24">
+        <div className="container relative grid gap-10 py-12 sm:py-16 lg:grid-cols-[1.08fr_0.92fr] lg:items-center lg:gap-12 lg:py-24">
           <div>
             <Badge tone="info" className="gap-2">
               <ShieldCheck aria-hidden="true" className="h-3.5 w-3.5" />
               Independent. Built for football gaming communities.
             </Badge>
-            <h1 className="text-shadow-hero mt-6 font-display text-5xl font-semibold uppercase leading-[0.92] tracking-display text-white sm:text-6xl lg:text-7xl">
+            <h1 className="text-shadow-hero mt-5 break-words font-display text-4xl font-semibold uppercase leading-[0.98] tracking-display text-white sm:mt-6 sm:text-5xl md:text-6xl lg:text-7xl">
               One Platform.
               <br />
               <span className="text-electric-300">Endless Competition.</span>
@@ -103,7 +103,7 @@ export default async function HomePage() {
                 { label: "League matches", value: format.totalMatches },
               ].map((fact) => (
                 <div key={fact.label} className="border-l border-white/10 pl-3">
-                  <dt className="text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
+                  <dt className="text-xs font-semibold uppercase tracking-eyebrow text-grey-500">
                     {fact.label}
                   </dt>
                   <dd className="mt-1 font-display text-2xl font-semibold text-white">
@@ -164,7 +164,7 @@ export default async function HomePage() {
                   return (
                     <span
                       key={band.id}
-                      className={`absolute ${positions[index]} flex items-center gap-1.5 rounded-full border border-white/10 bg-navy-950/80 px-2 py-1 text-[10px] font-semibold text-grey-300`}
+                      className={`absolute ${positions[index]} flex items-center gap-1.5 rounded-full border border-white/10 bg-navy-950/80 px-2 py-1 text-xs font-semibold text-grey-300`}
                     >
                       <span
                         aria-hidden="true"
@@ -192,7 +192,7 @@ export default async function HomePage() {
                 ].map((item) => (
                   <div key={item.label} className="bg-navy-950/90 p-3 text-center">
                     <p className="font-display text-xl font-semibold text-white">{item.value}</p>
-                    <p className="mt-0.5 text-[9px] uppercase tracking-eyebrow text-grey-500">
+                    <p className="mt-0.5 text-xs uppercase tracking-eyebrow text-grey-500">
                       {item.label}
                     </p>
                   </div>
@@ -204,7 +204,7 @@ export default async function HomePage() {
       </section>
 
       <section id="how-it-works" className="scroll-mt-20 border-b border-white/10">
-        <div className="container py-16 sm:py-20">
+        <div className="container py-12 sm:py-16 lg:py-20">
           <SectionHeading
             eyebrow="How it works"
             title="From sign-up to the knockout stage"
@@ -239,7 +239,7 @@ export default async function HomePage() {
       </section>
 
       <section className="border-b border-white/10">
-        <div className="container py-16 sm:py-20">
+        <div className="container py-12 sm:py-16 lg:py-20">
           <SectionHeading
             eyebrow="The format"
             title="The 36-team league phase, explained"
@@ -257,7 +257,7 @@ export default async function HomePage() {
       </section>
 
       <section className="border-b border-white/10">
-        <div className="container py-16 sm:py-20">
+        <div className="container py-12 sm:py-16 lg:py-20">
           <SectionHeading
             eyebrow="Competitions"
             title="Tournaments"
@@ -312,7 +312,7 @@ export default async function HomePage() {
                     key={item.label}
                     className="rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3"
                   >
-                    <dt className="text-[10px] font-semibold uppercase tracking-eyebrow text-electric-300">
+                    <dt className="text-xs font-semibold uppercase tracking-eyebrow text-electric-300">
                       {item.label}
                     </dt>
                     <dd className="mt-1 text-xs text-grey-400">{item.value}</dd>
@@ -325,7 +325,7 @@ export default async function HomePage() {
       </section>
 
       <section>
-        <div className="container py-16 sm:py-20">
+        <div className="container py-12 sm:py-16 lg:py-20">
           <EHubMarketPromo />
         </div>
       </section>

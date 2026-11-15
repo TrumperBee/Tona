@@ -40,7 +40,7 @@ export function WorkspaceTabs({ tournamentId, tabs }: WorkspaceTabsProps) {
           const Icon = item?.icon;
 
           const pill = cn(
-            "inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors",
+            "inline-flex min-h-11 items-center gap-2 rounded-full border px-3.5 text-xs font-semibold transition-colors",
             active
               ? "border-electric-400/60 bg-electric-500/15 text-electric-200"
               : tab.available
@@ -84,7 +84,7 @@ export function WorkspaceTabs({ tournamentId, tabs }: WorkspaceTabsProps) {
             const item = items.find((entry) => entry.segment === tab.segment);
 
             return (
-              <li key={tab.segment} className="flex items-baseline gap-1.5 text-[11px] leading-4">
+              <li key={tab.segment} className="flex items-baseline gap-1.5 text-xs leading-4">
                 <Lock aria-hidden="true" className="mt-0.5 h-3 w-3 shrink-0 text-grey-600" />
                 <span>
                   <span className="font-semibold text-grey-400">{item?.label ?? tab.segment}</span>

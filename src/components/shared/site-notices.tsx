@@ -5,8 +5,13 @@
 // for dismissal. Every read is bounded and failures degrade to "no notice"
 // rather than breaking a page.
 import { AlertTriangle } from "lucide-react";
+import { cookies } from "next/headers";
 
 import { AnnouncementBanner } from "@/components/shared/announcement-banner";
+import {
+  ANNOUNCEMENT_DISMISSAL_COOKIE,
+  parseDismissedAnnouncements,
+} from "@/lib/announcements/dismissal";
 import {
   DEFAULT_MAINTENANCE_MESSAGE,
   getPublicPlatformSettings,
@@ -40,9 +45,20 @@ export interface SiteNoticesProps {
 }
 
 export async function SiteNotices({ showAnnouncements = true }: SiteNoticesProps) {
-  const { settings, announcements } = await loadNotices(showAnnouncements);
+  const [{ settings, announcements }, dismissed] = await Promise.all([
+    loadNotices(showAnnouncements),
+    cookies()
+      .then((store) => parseDismissedAnnouncements(store.get(ANNOUNCEMENT_DISMISSAL_COOKIE)?.value))
+      // Outside a request scope (for example during static analysis) nothing is dismissed.
+      .catch(() => new Set<string>()),
+  ]);
 
-  if (!settings && announcements.length === 0) {
+  // Dismissed banners are removed before the markup is generated, so the banner
+  // that remains is already in the first paint. Filtering after hydration would
+  // shift the page content.
+  const visibleAnnouncements = announcements.filter((item) => !dismissed.has(item.id));
+
+  if (!settings && visibleAnnouncements.length === 0) {
     return null;
   }
 
@@ -65,9 +81,9 @@ export async function SiteNotices({ showAnnouncements = true }: SiteNoticesProps
         </div>
       ) : null}
 
-      {showAnnouncements && announcements.length > 0 ? (
+      {showAnnouncements && visibleAnnouncements.length > 0 ? (
         <AnnouncementBanner
-          announcements={announcements.map((item) => ({
+          announcements={visibleAnnouncements.map((item) => ({
             id: item.id,
             title: item.title,
             body: item.body,

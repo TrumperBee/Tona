@@ -33,7 +33,7 @@ export function PublicStandingsPanel({
               League table
             </h2>
           </div>
-          <p className="text-[11px] uppercase tracking-eyebrow text-grey-500">
+          <p className="text-xs uppercase tracking-eyebrow text-grey-500">
             Tie-break: {TIEBREAKER_PROFILE_LABELS[profile]}
           </p>
         </div>

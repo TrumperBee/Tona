@@ -28,7 +28,7 @@ export function WorkspaceStepper({ steps }: { readonly steps: readonly Workspace
           >
             <span
               className={cn(
-                "grid h-7 w-7 shrink-0 place-items-center rounded-full border text-[10px] font-semibold",
+                "grid h-7 w-7 shrink-0 place-items-center rounded-full border text-xs font-semibold",
                 isDone && "border-success/50 bg-success/15 text-success-soft",
                 isCurrent && "border-gold-400 bg-gold-400 text-navy-950",
                 isLocked && "border-white/15 bg-navy-900 text-grey-500",
@@ -53,14 +53,14 @@ export function WorkspaceStepper({ steps }: { readonly steps: readonly Workspace
                 {step.label}
               </span>
               {isLocked ? (
-                <span className="block text-[10px] leading-4 text-grey-500">{step.lockReason}</span>
+                <span className="block text-xs leading-4 text-grey-500">{step.lockReason}</span>
               ) : null}
             </span>
 
             <span className="hidden sm:flex sm:flex-col sm:items-center sm:gap-1.5">
               <span
                 className={cn(
-                  "text-center text-[10px] font-semibold uppercase leading-3 tracking-eyebrow",
+                  "text-center text-xs font-semibold uppercase leading-3 tracking-eyebrow",
                   isCurrent ? "text-gold-200" : isDone ? "text-success-soft" : "text-grey-400",
                 )}
               >

@@ -102,7 +102,7 @@ export function Countdown({
               >
                 {remaining ? String(segment.value).padStart(2, "0") : "--"}
               </span>
-              <span className="text-[9px] font-semibold uppercase tracking-eyebrow text-grey-500">
+              <span className="text-xs font-semibold uppercase tracking-eyebrow text-grey-500">
                 {segment.label}
               </span>
             </span>

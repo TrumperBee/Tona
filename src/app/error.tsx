@@ -44,7 +44,7 @@ export default function Error({
         </p>
 
         {error.digest ? (
-          <p className="mt-3 font-mono text-[11px] text-grey-500">Reference: {error.digest}</p>
+          <p className="mt-3 font-mono text-xs text-grey-500">Reference: {error.digest}</p>
         ) : null}
 
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">

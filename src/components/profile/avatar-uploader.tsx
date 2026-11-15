@@ -227,6 +227,7 @@ export function AvatarUploader({ name, initialAvatarUrl }: AvatarUploaderProps) 
           type="file"
           accept="image/jpeg,image/png,image/webp"
           onChange={pick}
+          aria-label="Choose a profile picture"
           className="sr-only"
         />
       </div>

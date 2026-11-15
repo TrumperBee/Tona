@@ -166,7 +166,7 @@ export default function AboutPage() {
                     key={fact.label}
                     className="rounded-lg border border-white/10 bg-navy-950/60 p-3"
                   >
-                    <dt className="text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
+                    <dt className="text-xs font-semibold uppercase tracking-eyebrow text-grey-500">
                       {fact.label}
                     </dt>
                     <dd className="mt-1 font-display text-2xl font-semibold text-white">

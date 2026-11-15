@@ -85,7 +85,7 @@ function FormChips({ form }: { readonly form: readonly StandingsForm[] }) {
         <span
           key={`${result}-${index}`}
           className={cn(
-            "flex h-5 w-5 items-center justify-center rounded text-[10px] font-bold",
+            "flex h-5 w-5 items-center justify-center rounded text-xs font-bold",
             FORM_CHIP[result],
           )}
         >
@@ -125,7 +125,7 @@ export function StandingsTable({ rows, profile, provisional, updatedAt }: Standi
         </p>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] text-grey-400">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-grey-400">
         {BAND_ORDER.map((band) => (
           <span key={band} className="flex items-center gap-1.5">
             <span className={cn("h-2 w-2 rounded-sm", BAND_DOT[band])} aria-hidden="true" />
@@ -145,7 +145,7 @@ export function StandingsTable({ rows, profile, provisional, updatedAt }: Standi
             League table ordered by the published tie-break rules
           </caption>
           <thead>
-            <tr className="border-b border-white/10 bg-navy-950/70 text-left text-[10px] uppercase tracking-eyebrow text-grey-500">
+            <tr className="border-b border-white/10 bg-navy-950/70 text-left text-xs uppercase tracking-eyebrow text-grey-500">
               <th scope="col" className="px-3 py-2.5 text-center">
                 Pos
               </th>
@@ -246,10 +246,10 @@ export function StandingsTable({ rows, profile, provisional, updatedAt }: Standi
               </Link>
               <span className="font-display text-lg font-semibold tabular-nums text-white">
                 {row.points}
-                <span className="ml-1 text-[10px] font-medium uppercase text-grey-500">pts</span>
+                <span className="ml-1 text-xs font-medium uppercase text-grey-500">pts</span>
               </span>
             </div>
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 pl-9 text-[11px] text-grey-400">
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 pl-9 text-xs text-grey-400">
               <span>MP {row.played}</span>
               <span>W {row.won}</span>
               <span>D {row.drawn}</span>
@@ -259,7 +259,7 @@ export function StandingsTable({ rows, profile, provisional, updatedAt }: Standi
               </span>
             </div>
             <div className="mt-2 flex items-center justify-between gap-2 pl-9">
-              <span className="text-[11px] text-grey-500">{STANDING_BAND_LABELS[row.band]}</span>
+              <span className="text-xs text-grey-500">{STANDING_BAND_LABELS[row.band]}</span>
               <FormChips form={row.form} />
             </div>
           </li>

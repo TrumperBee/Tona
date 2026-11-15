@@ -210,7 +210,7 @@ function LegRow({ tie, match, onEdit }: LegRowProps) {
   return (
     <li className="space-y-2 rounded-lg border border-white/10 bg-navy-950/50 p-3">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
+        <span className="text-xs font-semibold uppercase tracking-eyebrow text-grey-500">
           Leg {match.leg} of {tie.legs}
         </span>
         <Badge tone={match.status === "completed" ? "success" : "neutral"}>
@@ -514,7 +514,7 @@ function RoundCard({
                   key={tie.tieId}
                   className="rounded-lg border border-dashed border-white/15 bg-navy-950/40 p-3 text-sm"
                 >
-                  <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-eyebrow text-grey-500">
+                  <div className="flex items-center justify-between gap-2 text-xs uppercase tracking-eyebrow text-grey-500">
                     <span>Tie {tie.bracketSlot}</span>
                     {tie.group ? <span>Group {tie.group}</span> : null}
                   </div>
@@ -773,7 +773,7 @@ export function KnockoutBoard(props: KnockoutBoardProps) {
             </p>
           </div>
           <div className="text-right">
-            <p className="text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
+            <p className="text-xs font-semibold uppercase tracking-eyebrow text-grey-500">
               League results
             </p>
             <p className="font-display text-2xl font-semibold tabular-nums text-white">

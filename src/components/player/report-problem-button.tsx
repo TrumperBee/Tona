@@ -97,7 +97,7 @@ export function ReportProblemButton({
         {sent ? (
           <p
             role="status"
-            className="inline-flex items-center gap-1 text-[11px] font-semibold text-success-soft"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-success-soft"
           >
             <CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5" />
             Reported. The organiser will review it.

@@ -18,9 +18,13 @@ const variantStyles: Record<ButtonVariant, string> = {
   gold: "bg-gold-400 text-navy-950 hover:bg-gold-300 active:bg-gold-500",
 };
 
+// A pointer: coarse media query keeps desktop density while guaranteeing the
+// 44px minimum touch target on phones and tablets (design-system rule).
+const touchTarget = "[@media(pointer:coarse)]:min-h-11";
+
 const sizeStyles: Record<ButtonSize, string> = {
-  sm: "min-h-9 px-3 py-1.5 text-xs",
-  md: "min-h-10 px-4 py-2 text-sm",
+  sm: `min-h-9 px-3 py-1.5 text-xs ${touchTarget}`,
+  md: `min-h-10 px-4 py-2 text-sm ${touchTarget}`,
   lg: "min-h-12 px-6 py-3 text-base",
 };
 

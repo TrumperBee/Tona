@@ -103,7 +103,7 @@ export function BarChart({
                       x={x + barWidth / 2}
                       y={HEIGHT - PADDING.bottom + 16}
                       textAnchor="middle"
-                      className="fill-[rgb(148,163,184)] text-[9px]"
+                      className="fill-[rgb(148,163,184)] text-xs"
                     >
                       {item.label}
                     </text>
@@ -113,7 +113,7 @@ export function BarChart({
                       x={x + barWidth / 2}
                       y={y - 5}
                       textAnchor="middle"
-                      className="fill-[rgb(203,213,225)] text-[10px] font-semibold"
+                      className="fill-[rgb(203,213,225)] text-xs font-semibold"
                     >
                       {rounded(item.value)}
                     </text>

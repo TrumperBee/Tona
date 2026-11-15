@@ -17,9 +17,10 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }>) {
   const user = await requirePageSignedIn("/dashboard");
-  const [profile, notificationBell] = await Promise.all([
+  const [profile, notificationBell, notices] = await Promise.all([
     getOwnProfile(user.userId),
     getNotificationBell(user.userId),
+    SiteNotices({}),
   ]);
   const viewer: Viewer = {
     email: user.email,
@@ -31,7 +32,7 @@ export default async function DashboardLayout({
   };
 
   return (
-    <DashboardShell viewer={viewer} notificationBell={notificationBell} notices={<SiteNotices />}>
+    <DashboardShell viewer={viewer} notificationBell={notificationBell} notices={notices}>
       {children}
     </DashboardShell>
   );

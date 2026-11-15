@@ -180,9 +180,7 @@ function Demo({
 }) {
   return (
     <div className={className}>
-      <p className="mb-3 text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
-        {label}
-      </p>
+      <p className="mb-3 text-xs font-semibold uppercase tracking-eyebrow text-grey-500">{label}</p>
       {children}
     </div>
   );
@@ -282,10 +280,8 @@ function ShowcaseInner() {
                   <span
                     className={`block h-12 rounded-md border border-white/10 ${swatch.className}`}
                   />
-                  <span className="mt-2 block font-mono text-[11px] text-grey-200">
-                    {swatch.name}
-                  </span>
-                  <span className="block text-[10px] leading-4 text-grey-500">{swatch.note}</span>
+                  <span className="mt-2 block font-mono text-xs text-grey-200">{swatch.name}</span>
+                  <span className="block text-xs leading-4 text-grey-500">{swatch.note}</span>
                 </li>
               ))}
             </ul>

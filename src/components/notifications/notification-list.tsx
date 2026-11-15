@@ -136,7 +136,7 @@ export function NotificationList({
                   {item.title}
                 </p>
                 {!item.read ? (
-                  <span className="rounded-full bg-electric-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-eyebrow text-electric-300">
+                  <span className="rounded-full bg-electric-500/15 px-2 py-0.5 text-xs font-bold uppercase tracking-eyebrow text-electric-300">
                     Unread
                   </span>
                 ) : null}

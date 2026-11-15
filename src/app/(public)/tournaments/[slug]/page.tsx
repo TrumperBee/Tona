@@ -317,7 +317,7 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
                             className="mt-0.5 h-4 w-4 shrink-0 text-grey-500"
                           />
                           <div className="min-w-0">
-                            <p className="text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
+                            <p className="text-xs font-semibold uppercase tracking-eyebrow text-grey-500">
                               {fact.label}
                             </p>
                             <p className="mt-0.5 text-sm font-medium text-grey-100">{fact.value}</p>

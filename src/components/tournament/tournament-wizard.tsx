@@ -790,7 +790,7 @@ export function TournamentWizard() {
                   key={row.label}
                   className="rounded-lg border border-white/10 bg-navy-950/50 p-3.5"
                 >
-                  <dt className="text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
+                  <dt className="text-xs font-semibold uppercase tracking-eyebrow text-grey-500">
                     {row.label}
                   </dt>
                   <dd className="mt-1 text-sm font-medium text-grey-100">{row.value}</dd>

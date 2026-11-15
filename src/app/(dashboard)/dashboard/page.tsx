@@ -154,7 +154,7 @@ export default async function DashboardPage() {
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
                           <CardTitle className="text-lg">{membership.name}</CardTitle>
-                          <p className="mt-1 text-xs text-grey-500">
+                          <p className="mt-1 text-xs text-grey-400">
                             {getGame(membership.gameId).name}
                           </p>
                         </div>
@@ -198,14 +198,14 @@ export default async function DashboardPage() {
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <CardTitle className="text-lg">{standing.name}</CardTitle>
-                        <p className="mt-1 text-xs text-grey-500">
+                        <p className="mt-1 text-xs text-grey-400">
                           {STANDING_BAND_LABELS[standing.band]}
                         </p>
                       </div>
                       <div className="text-right">
                         <p className="font-display text-2xl font-semibold tabular-nums text-white">
                           {standing.position}
-                          <span className="ml-1 text-xs font-medium uppercase text-grey-500">
+                          <span className="ml-1 text-xs font-medium uppercase text-grey-400">
                             pos
                           </span>
                         </p>
@@ -218,7 +218,7 @@ export default async function DashboardPage() {
                       MP {standing.played} · W {standing.won} · D {standing.drawn} · L{" "}
                       {standing.lost}
                     </p>
-                    <p className="text-xs tabular-nums text-grey-500">
+                    <p className="text-xs tabular-nums text-grey-400">
                       GF {standing.goalsFor} · GA {standing.goalsAgainst} · GD{" "}
                       {standing.goalDifference > 0
                         ? `+${standing.goalDifference}`
@@ -282,7 +282,7 @@ export default async function DashboardPage() {
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
                           <CardTitle className="text-lg">{entry.name}</CardTitle>
-                          <p className="mt-1 text-xs text-grey-500">
+                          <p className="mt-1 text-xs text-grey-400">
                             {entry.roundLabel ?? "Knockout"}
                           </p>
                         </div>
@@ -305,7 +305,7 @@ export default async function DashboardPage() {
                       {entry.goalsFor !== null &&
                       entry.goalsAgainst !== null &&
                       entry.played > 0 ? (
-                        <p className="text-xs tabular-nums text-grey-500">
+                        <p className="text-xs tabular-nums text-grey-400">
                           Aggregate {entry.goalsFor}–{entry.goalsAgainst} after {entry.played}{" "}
                           {entry.played === 1 ? "leg" : "legs"}
                         </p>

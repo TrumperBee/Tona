@@ -64,14 +64,14 @@ function FixtureCard({
           <p className="min-w-0 flex-1 truncate text-sm font-semibold text-grey-100">
             {row.homeTag}
           </p>
-          <span className="shrink-0 rounded bg-white/[0.06] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-grey-200">
+          <span className="shrink-0 rounded bg-white/[0.06] px-2 py-0.5 text-xs font-semibold tabular-nums text-grey-200">
             {scoreLabel(row)}
           </span>
           <p className="min-w-0 flex-1 truncate text-right text-sm font-semibold text-grey-100">
             {row.awayTag}
           </p>
         </div>
-        <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-[11px] text-grey-500">
+        <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-xs text-grey-500">
           <span className="flex items-center gap-1.5">
             <CalendarDays aria-hidden="true" className="h-3 w-3" />
             {row.scheduledAt
@@ -175,7 +175,7 @@ export function PublicFixturesPanel({
             ))}
           </ul>
           {mine.length > 0 ? (
-            <p className="text-[11px] text-grey-500">
+            <p className="text-xs text-grey-500">
               Next opponent: {opponentName(mine[0] as PublicFixtureRow, viewerUid)} on matchday{" "}
               {(mine[0] as PublicFixtureRow).matchday}.
             </p>

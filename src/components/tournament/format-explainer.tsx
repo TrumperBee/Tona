@@ -69,7 +69,7 @@ export function FormatExplainer() {
               })}
             </div>
 
-            <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-[11px] text-grey-400">
+            <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs text-grey-400">
               {pots.map((pot) => (
                 <span key={pot} className="inline-flex items-center gap-1.5">
                   <span
@@ -83,13 +83,13 @@ export function FormatExplainer() {
 
             <dl className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div className="rounded-lg border border-white/10 bg-navy-950/60 p-3">
-                <dt className="text-[10px] uppercase tracking-eyebrow text-grey-400">Matches</dt>
+                <dt className="text-xs uppercase tracking-eyebrow text-grey-400">Matches</dt>
                 <dd className="mt-1 font-display text-2xl font-semibold text-white">
                   {format.matchesPerParticipant}
                 </dd>
               </div>
               <div className="rounded-lg border border-white/10 bg-navy-950/60 p-3">
-                <dt className="flex items-center gap-1 text-[10px] uppercase tracking-eyebrow text-grey-400">
+                <dt className="flex items-center gap-1 text-xs uppercase tracking-eyebrow text-grey-400">
                   <Home aria-hidden="true" className="h-3 w-3" /> Home
                 </dt>
                 <dd className="mt-1 font-display text-2xl font-semibold text-white">
@@ -97,7 +97,7 @@ export function FormatExplainer() {
                 </dd>
               </div>
               <div className="rounded-lg border border-white/10 bg-navy-950/60 p-3">
-                <dt className="flex items-center gap-1 text-[10px] uppercase tracking-eyebrow text-grey-400">
+                <dt className="flex items-center gap-1 text-xs uppercase tracking-eyebrow text-grey-400">
                   <Plane aria-hidden="true" className="h-3 w-3" /> Away
                 </dt>
                 <dd className="mt-1 font-display text-2xl font-semibold text-white">
@@ -105,7 +105,7 @@ export function FormatExplainer() {
                 </dd>
               </div>
               <div className="rounded-lg border border-white/10 bg-navy-950/60 p-3">
-                <dt className="text-[10px] uppercase tracking-eyebrow text-grey-400">Matchdays</dt>
+                <dt className="text-xs uppercase tracking-eyebrow text-grey-400">Matchdays</dt>
                 <dd className="mt-1 font-display text-2xl font-semibold text-white">
                   {format.matchdays}
                 </dd>

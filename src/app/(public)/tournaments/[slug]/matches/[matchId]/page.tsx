@@ -121,7 +121,7 @@ export default async function MatchPage({ params }: MatchPageProps) {
                       vs
                     </p>
                   )}
-                  <p className="mt-2 text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
+                  <p className="mt-2 text-xs font-semibold uppercase tracking-eyebrow text-grey-500">
                     Matchday {match.matchday}
                   </p>
                   <Badge tone={completed ? "success" : "neutral"} className="mt-2">

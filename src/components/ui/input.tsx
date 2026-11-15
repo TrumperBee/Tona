@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils/cn";
 
 const controlStyles =
   "block w-full rounded-md border bg-navy-900/70 px-3 py-2.5 text-sm text-white shadow-sm transition-colors " +
+  "[@media(pointer:coarse)]:min-h-11 " +
   "placeholder:text-grey-500 focus:outline-none focus:ring-2 focus:ring-electric-400/30 " +
   "disabled:cursor-not-allowed disabled:opacity-60";
 

@@ -130,7 +130,7 @@ function MatchMeta({ match }: { readonly match: ResultsBoardMatch }) {
   }
 
   return (
-    <div className="space-y-1 text-[11px] leading-5 text-grey-500">
+    <div className="space-y-1 text-xs leading-5 text-grey-500">
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone="success">Completed</Badge>
         {match.editCount > 0 ? <Badge tone="warning">Edited {match.editCount}×</Badge> : null}
@@ -468,7 +468,7 @@ export function ResultsBoard(props: ResultsBoardProps) {
                           panelMatchId === match.id ? "bg-electric-500/[0.07]" : ""
                         }`}
                       >
-                        <span className="w-12 shrink-0 text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
+                        <span className="w-12 shrink-0 text-xs font-semibold uppercase tracking-eyebrow text-grey-500">
                           MD {match.matchday}
                         </span>
                         <span className="min-w-0 flex-1">
@@ -505,7 +505,7 @@ export function ResultsBoard(props: ResultsBoardProps) {
               ) : (
                 <div className="space-y-4">
                   <div className="rounded-lg border border-white/10 bg-navy-950/50 p-4">
-                    <p className="text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
+                    <p className="text-xs font-semibold uppercase tracking-eyebrow text-grey-500">
                       Matchday {panelMatch.matchday} ·{" "}
                       {panelMatch.scheduledAt
                         ? formatDate(panelMatch.scheduledAt, { timeZone: props.timezone })

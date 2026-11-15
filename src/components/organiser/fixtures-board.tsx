@@ -713,7 +713,7 @@ export function FixturesBoard(props: FixturesBoardProps) {
                   <code className="mt-1 block break-all text-xs text-grey-300">
                     {props.draft.scheduleHash}
                   </code>
-                  <p className="mt-1 text-[11px] leading-5 text-grey-500">
+                  <p className="mt-1 text-xs leading-5 text-grey-500">
                     Canonical SHA-256 over the 144 fixtures. Publication stores it so the published
                     matches can be re-verified at any time.
                   </p>
@@ -740,7 +740,7 @@ export function FixturesBoard(props: FixturesBoardProps) {
                     ))}
                   </ul>
                 </div>
-                <p className="text-[11px] leading-5 text-grey-500">
+                <p className="text-xs leading-5 text-grey-500">
                   This draft is private. It appears on the public tournament page only after you
                   publish it.
                 </p>
@@ -794,7 +794,7 @@ export function FixturesBoard(props: FixturesBoardProps) {
                   <Avatar name={player.gamerTag} src={player.avatarUrl} size="sm" />
                   <div>
                     <p className="text-sm font-semibold text-grey-100">@{player.gamerTag}</p>
-                    <p className="text-[11px] text-grey-500">
+                    <p className="text-xs text-grey-500">
                       Pot {player.pot}
                       {player.country ? (
                         <>
@@ -816,7 +816,7 @@ export function FixturesBoard(props: FixturesBoardProps) {
                           : "border-white/10 bg-navy-900/60"
                       }`}
                     >
-                      <p className="text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
+                      <p className="text-xs font-semibold uppercase tracking-eyebrow text-grey-500">
                         MD {cell.day}
                       </p>
                       <p
@@ -826,9 +826,9 @@ export function FixturesBoard(props: FixturesBoardProps) {
                       >
                         {cell.fixture ? (cell.home ? "H" : "A") : "—"}
                       </p>
-                      <p className="truncate text-[10px] text-grey-400">{cell.opponent}</p>
+                      <p className="truncate text-xs text-grey-400">{cell.opponent}</p>
                       {cell.fixture?.status === "completed" ? (
-                        <p className="text-[10px] font-semibold text-grey-200">
+                        <p className="text-xs font-semibold text-grey-200">
                           {cell.fixture.homeGoals}–{cell.fixture.awayGoals}
                         </p>
                       ) : null}
@@ -920,7 +920,7 @@ export function FixturesBoard(props: FixturesBoardProps) {
                 </li>
               ))}
             </ul>
-            <p className="mt-3 text-[11px] leading-5 text-grey-500">
+            <p className="mt-3 text-xs leading-5 text-grey-500">
               Windows are informational. Editing them never changes a fixture or a result.
             </p>
           </CardContent>
@@ -1038,16 +1038,16 @@ export function FixturesBoard(props: FixturesBoardProps) {
               </p>
             )}
             <div className="rounded-lg border border-white/10 bg-navy-950/50 p-3">
-              <p className="text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
+              <p className="text-xs font-semibold uppercase tracking-eyebrow text-grey-500">
                 Recomputed hash
               </p>
-              <code className="mt-1 block break-all text-[11px] text-grey-300">
+              <code className="mt-1 block break-all text-xs text-grey-300">
                 {verify.hash ?? "—"}
               </code>
-              <p className="mt-2 text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
+              <p className="mt-2 text-xs font-semibold uppercase tracking-eyebrow text-grey-500">
                 Published hash
               </p>
-              <code className="mt-1 block break-all text-[11px] text-grey-300">
+              <code className="mt-1 block break-all text-xs text-grey-300">
                 {verify.storedHash ?? "—"}
               </code>
             </div>
@@ -1069,9 +1069,7 @@ function Fact({
 }) {
   return (
     <div className="rounded-lg border border-white/10 bg-navy-950/50 p-2.5">
-      <dt className="text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
-        {label}
-      </dt>
+      <dt className="text-xs font-semibold uppercase tracking-eyebrow text-grey-500">{label}</dt>
       <dd className={`mt-1 break-all text-xs font-medium text-grey-100 ${mono ? "font-mono" : ""}`}>
         {value}
       </dd>
@@ -1106,7 +1104,7 @@ function MatchRow({
           <span aria-hidden="true">{home?.country ? countryFlag(home.country) : ""}</span>{" "}
           {row.homeTag}
         </p>
-        <span className="shrink-0 rounded bg-white/[0.06] px-2 py-0.5 text-[10px] font-semibold tabular-nums text-grey-200">
+        <span className="shrink-0 rounded bg-white/[0.06] px-2 py-0.5 text-xs font-semibold tabular-nums text-grey-200">
           {row.status === "completed" && row.homeGoals !== null && row.awayGoals !== null
             ? `${row.homeGoals}–${row.awayGoals}`
             : "vs"}
@@ -1116,7 +1114,7 @@ function MatchRow({
           <span aria-hidden="true">{away?.country ? countryFlag(away.country) : ""}</span>
         </p>
       </div>
-      <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-grey-500">
+      <div className="mt-1 flex items-center justify-between gap-2 text-xs text-grey-500">
         <span>{row.id}</span>
         <span className="flex items-center gap-1">
           <CalendarDays aria-hidden="true" className="h-3 w-3" />
@@ -1193,7 +1191,7 @@ function PublishDialog({
               className="grid gap-2 rounded-lg border border-white/10 bg-navy-950/50 p-2.5 sm:grid-cols-[auto_1fr_1fr] sm:items-center"
             >
               <span className="text-xs font-semibold text-grey-300">MD {window.number}</span>
-              <label className="text-[10px] text-grey-500">
+              <label className="text-xs text-grey-500">
                 Starts (UTC)
                 <Input
                   type="datetime-local"
@@ -1202,7 +1200,7 @@ function PublishDialog({
                   className="mt-1 h-8 text-xs"
                 />
               </label>
-              <label className="text-[10px] text-grey-500">
+              <label className="text-xs text-grey-500">
                 Ends (UTC)
                 <Input
                   type="datetime-local"
@@ -1214,7 +1212,7 @@ function PublishDialog({
             </li>
           ))}
         </ul>
-        <p className="flex items-start gap-2 text-[11px] leading-5 text-grey-500">
+        <p className="flex items-start gap-2 text-xs leading-5 text-grey-500">
           <Eye aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           Publishing is one transaction. Thirty-six players are notified in small batches, and every
           window stays editable afterwards.

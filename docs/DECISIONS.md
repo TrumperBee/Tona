@@ -1635,3 +1635,85 @@ client must be able to merge a mutation response, so routes return the affected 
 `useRefreshPreservingScroll` is unit-tested for both scroll and focus restoration, and the
 manual phone script in `tests/e2e/phase-13b-input-and-scroll.md` proves three result saves
 in a row keep the page in place.
+
+---
+
+## ADR-068 - One navigation system for every role and every screen size
+
+**Date:** 2026-11-15
+**Status:** Accepted
+
+**Context.** Phase 13B-2 replaced four unrelated navigation surfaces (a public header
+drawer, a dashboard mobile drawer, a workspace sidebar, and a second hamburger inside the
+workspace) with one model. On a phone, the same competitor could meet a public hamburger,
+a dashboard drawer, an organiser sidebar that collapsed into a drawer, and a super-admin
+menu that looked nothing like either. Links were duplicated per shell, role filtering was
+implemented three times, and organiser pages had no way to move between workspace sections
+without opening a full-page menu.
+
+**Decision.** `src/lib/config/navigation.ts` is the only navigation model. It exposes
+`accountNavigation`, `exploreNavigation`, `mobileTabNavigation`, the organiser and
+super-admin workspace items, and `viewerNavigation({ role, isSuperAdmin })`, which returns
+the groups a specific viewer may see. Every surface renders from that result; no component
+keeps its own link list.
+
+- **Signed-in phone:** one slim top bar (logo, unread bell with the real count, avatar
+  button) plus persistent bottom tabs: Home (`/dashboard`), Tournaments (`/tournaments`),
+  My matches (`/dashboard/fixtures`), Profile (`/dashboard/profile`). The avatar opens the
+  single menu sheet.
+- **Signed-out phone:** a slim bar with the logo, "Sign in" and the same sheet in its
+  visitor variant (Explore links, Sign in, Join GCC). There is no second menu.
+- **The sheet** is the only menu: Account (My profile, My tournaments, My matches,
+  Notifications, Edit profile), Explore (Tournaments, Rankings, Hall of Fame, Archives,
+  About, Contact), Manage (Organiser workspace when the role allows it, Super admin
+  console for the configured account) and Sign out. It shows the avatar, gamer tag and
+  role at the top, traps focus, closes on Escape and restores focus to its trigger.
+- **Organiser and Super Admin phones** use the same top and bottom bars. Their section
+  navigation is a horizontally scrollable `TabStrip` under the top bar, with the active
+  section scrolled into view. There is no second hamburger and no full-page section menu.
+- **Desktop** keeps the public header plus a user dropdown (My profile, My matches,
+  Notifications, Organiser, Super admin, Sign out), and the organiser/super-admin
+  sidebars at `lg` and above. The profile link is present in both.
+
+Server guards remain the protection. Hiding a link is a convenience; every route still
+calls `requirePageRole` / `requirePageSuperAdmin` before rendering.
+
+**Accessibility and layout rules.** Bottom tabs and the top bar respect
+`env(safe-area-inset-*)`; the tab bar hides itself when the visual viewport shrinks by more
+than 120px, which is what an open on-screen keyboard does (`visualViewport`, no polling).
+The sheet is a `Dialog`-based bottom sheet with a labelled dialog role. Every touch target
+is at least 44px on coarse pointers (`[@media(pointer:coarse)]`), while desktop keeps its
+36-40px density. No text renders below 12px. Pages must not scroll horizontally at 360px
+or 390px; wide tables scroll inside their own container or become cards below `md`.
+
+**Primitives added** (`src/components/ui`): `PageContainer`, `SectionCard`,
+`BottomSheet`, `SegmentedControl`/`TabStrip` (scroll, snap, active auto-scroll),
+`HorizontalScroller`, `CompactListRow`, `StatPill`, `StickyHeader`. The profile page was
+rebuilt from them as a game profile: hero banner, ringed avatar with camera badge,
+`@gamerTag`, community line, badges, an eight-tile season record, My tournaments as
+compact rows, and match history.
+
+**Performance work that came with the shell consolidation.**
+
+- `SiteNotices` is resolved before the shell is sent (the four route-group layouts await
+  it), so the maintenance banner is in the first paint instead of being streamed in above
+  `<main>`.
+- Announcement dismissal moved from `localStorage` to a first-party cookie
+  (`gcc_dismissed_announcements`). The previous banner rendered `null` until hydration and
+  then inserted about 139px above the page content, which produced a real CLS of 0.157 on
+  every first visit. With a cookie the server omits dismissed banners, and the banner that
+  remains is part of the first paint. Lighthouse CLS is now 0.
+- The menu sheet is a `next/dynamic` island mounted on first open, so visitors who never
+  open it never download it.
+- Sign out imports the Firebase client SDK inside the click handler. The static import in
+  `DesktopUserMenu`/`SignOutButton` was pulling about 370KB of decoded Firebase JavaScript
+  into every public page; `unused-javascript` on the home page fell from 212KiB to 49KiB.
+- The sticky mobile bars no longer use `backdrop-blur`; a blurred sticky bar is
+  recomposited on every scroll frame and is expensive on low-end phones.
+
+**Consequences.** A new section is added once, in the config, and appears everywhere with
+the right role filter. A new shell chrome is a bug. Lighthouse on the build machine
+measures accessibility 100 on the public home page once the contrast and label fixes are
+applied; performance is CPU-bound framework hydration (desktop preset 87, mobile 65-72
+under 4x throttling on a busy 4-core workstation) and must be re-measured on an idle device
+before being treated as a regression.

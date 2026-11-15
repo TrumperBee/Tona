@@ -594,7 +594,7 @@ function PlayerRow({
             @{player.gamerTag}
           </span>
           {player.country ? (
-            <span className="block truncate text-[10px] text-grey-400">
+            <span className="block truncate text-xs text-grey-400">
               <span aria-hidden="true">{countryFlag(player.country)}</span>{" "}
               {countryName(player.country) ?? player.country}
             </span>

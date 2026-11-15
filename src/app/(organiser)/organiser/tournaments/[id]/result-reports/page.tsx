@@ -129,7 +129,7 @@ export default async function ResultReportsPage({ params, searchParams }: Result
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="rounded-lg border border-white/10 bg-navy-950/50 p-3">
-                      <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
+                      <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-eyebrow text-grey-500">
                         <Swords aria-hidden="true" className="h-3.5 w-3.5" />
                         Matchday {report.match?.matchday ?? "—"}
                       </p>
@@ -151,7 +151,7 @@ export default async function ResultReportsPage({ params, searchParams }: Result
                     </div>
 
                     <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
+                      <p className="text-xs font-semibold uppercase tracking-eyebrow text-grey-500">
                         Player&apos;s reason
                       </p>
                       <p className="mt-1 whitespace-pre-line text-sm leading-6 text-grey-300">
@@ -161,14 +161,14 @@ export default async function ResultReportsPage({ params, searchParams }: Result
 
                     {report.adminNote ? (
                       <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3">
-                        <p className="text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
+                        <p className="text-xs font-semibold uppercase tracking-eyebrow text-grey-500">
                           Admin note
                         </p>
                         <p className="mt-1 whitespace-pre-line text-sm leading-6 text-grey-300">
                           {report.adminNote}
                         </p>
                         {report.resolvedAt ? (
-                          <p className="mt-1 text-[11px] text-grey-500">
+                          <p className="mt-1 text-xs text-grey-500">
                             {formatDateTime(report.resolvedAt)}
                           </p>
                         ) : null}

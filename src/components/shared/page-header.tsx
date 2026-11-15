@@ -30,11 +30,13 @@ export function PageHeader({
           {eyebrow}
         </p>
       ) : null}
-      <h1 className="mt-3 font-display text-4xl font-semibold uppercase leading-[0.98] tracking-display text-white sm:text-5xl">
+      <h1 className="mt-2 break-words font-display text-3xl font-semibold uppercase leading-[1.02] tracking-display text-white sm:mt-3 sm:text-4xl lg:text-5xl">
         {title}
       </h1>
       {description ? (
-        <div className="mt-4 max-w-2xl text-base leading-7 text-grey-300">{description}</div>
+        <div className="mt-3 text-sm leading-6 text-grey-300 sm:mt-4 sm:text-base sm:leading-7">
+          {description}
+        </div>
       ) : null}
       {actions ? <div className="mt-6 flex flex-wrap items-center gap-3">{actions}</div> : null}
     </header>
@@ -72,11 +74,13 @@ export function SectionHeading({
             {eyebrow}
           </p>
         ) : null}
-        <h2 className="mt-2 font-display text-3xl font-semibold uppercase tracking-display text-white sm:text-4xl">
+        <h2 className="mt-2 break-words font-display text-2xl font-semibold uppercase tracking-display text-white sm:text-3xl lg:text-4xl">
           {title}
         </h2>
         {description ? (
-          <div className="mt-3 text-sm leading-7 text-grey-400 sm:text-base">{description}</div>
+          <div className="mt-3 text-sm leading-6 text-grey-400 sm:text-base sm:leading-7">
+            {description}
+          </div>
         ) : null}
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}

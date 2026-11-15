@@ -1,8 +1,9 @@
 # GCC — Design System
 
-> Status: Phase 3. Brand assets, tokens, accessible primitives and the public,
-> participant, organiser and Super Admin shells are implemented. Component APIs may be
-> extended per feature, but the primitives below should not be forked or restyled ad hoc.
+> Status: Phase 13B-2. Brand assets, tokens, accessible primitives and the public,
+> participant, organiser and Super Admin shells are implemented, with one navigation
+> system shared by every role (ADR-068). Component APIs may be extended per feature, but
+> the primitives below should not be forked or restyled ad hoc.
 > This is a sports-competition product, not a generic analytics dashboard.
 
 The live reference is the development-only route `/design-system`. It renders every
@@ -144,7 +145,12 @@ light) variants.
 - Eyebrows/labels: 11–12px, uppercase, `tracking-eyebrow` (0.14em), muted grey.
 
 Type scale: 12 / 14 / 16 / 18 / 24 / 32 / 40 / 56 / 72px. Headings use the display face;
-body copy never drops below 14px except metadata.
+body copy never drops below 14px except metadata. Nothing renders below 12px, including
+eyebrows, badges and table captions; the previous 9-11px utilities were removed.
+
+Headings shrink on phones: `PageHeader` is 30/36/48px across the breakpoints and
+`SectionHeading` is 24/30/36px, both with `break-words` so a long tournament name cannot
+force horizontal scrolling.
 
 ---
 
@@ -164,12 +170,14 @@ body copy never drops below 14px except metadata.
 
 ### Responsive patterns
 
-- Public navigation collapses into a header drawer below `lg`.
-- Participant workspaces use a desktop sidebar at `lg` and a bottom bar plus drawer below
-  it.
-- Organiser and Super Admin use the same workspace shell with role-specific navigation.
+- One navigation system (ADR-068). Phones get a slim top bar, one bottom sheet and four
+  bottom tabs; desktop keeps the header nav, the user dropdown and the workspace sidebars.
+- Organiser and Super Admin use the same chrome as participants. Their extra sections are a
+  horizontally scrollable `TabStrip` under the top bar, never a second hamburger.
 - Tables become stacked cards below `md`; each card repeats its column header as a label.
 - Page headers stack actions under the title on small screens.
+- Wide content (fixture boards, standings, registration tables) scrolls inside its own
+  container. The page itself never scrolls horizontally at 360px or 390px.
 - Legal pages show the table of contents above the document on small screens and as a
   sticky sidebar at `lg`.
 
@@ -548,6 +556,34 @@ Builds on `Dialog`: focus starts on Cancel for destructive actions, Escape cance
 the confirm button exposes a busy state while `loading`. The description must state the
 exact consequence; never use a vague "Are you sure?".
 
+### 7.22 Navigation and mobile layout primitives
+
+These exist so pages and shells are composed from the same parts instead of restyling
+markup per route. All are exported from `src/components/ui/index.ts`.
+
+| Primitive            | Purpose                                                                                                                                                                                               |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PageContainer`      | Page-level width and padding. `width: narrow \| default \| wide \| full`; responsive gutters (16/24/32px). Use it instead of ad-hoc `container` wrappers inside shells.                               |
+| `SectionCard`        | Titled surface with an optional action and a body padding override. `title`, `description`, `action`, `bodyClassName`. Replaces hand-rolled `Card` + `CardHeader` + `CardContent` for section blocks. |
+| `BottomSheet`        | `Drawer side="bottom"` with a grab handle, safe-area padding, scroll lock and the `Dialog` focus trap. Used by `AppMenuSheet`.                                                                        |
+| `SegmentedControl`   | Small inline choice control for two to five options; roving `aria-current` semantics.                                                                                                                 |
+| `TabStrip`           | Horizontally scrollable section navigation (`scroll-snap`, `no-scrollbar`, active item auto-scrolled into view). Organiser and Super Admin use it under the mobile top bar.                           |
+| `HorizontalScroller` | Wrapper that fades its edges and keeps its children in a single swipeable row without forcing page overflow.                                                                                          |
+| `CompactListRow`     | Link row with leading slot, title, subtitle and trailing slot; 44px minimum height on coarse pointers. Used by profile tournaments, matches and notification lists.                                   |
+| `StatPill`           | Compact label/value pair for dense stat blocks where a full `StatCard` is too heavy.                                                                                                                  |
+| `StickyHeader`       | Sticky section header that offsets under the fixed app bars and respects safe areas.                                                                                                                  |
+
+Rules:
+
+- A phone screen has exactly one top bar and one menu sheet. Never add a second hamburger.
+- Bottom tabs are always the same four destinations; a section's own links go in the
+  `TabStrip` or the sheet, never in the tab bar.
+- The sheet is the single menu; it is mounted on first open (`next/dynamic`) so the first
+  paint stays light.
+- Every interactive element is 44px or taller on coarse pointers. Use the
+  `[@media(pointer:coarse)]:min-h-11` recipe already in `buttonStyles`, `IconButton`,
+  `Input` and `workspace-tabs` rather than a blanket `min-h`.
+
 ---
 
 ## 8. Shared patterns
@@ -612,7 +648,16 @@ linkable.
 - `src/components/tournament/format-explainer.tsx` builds the 36-team explainer from
   `src/lib/config/formats.ts`. Never hard-code format numbers in a page.
 
-### 8.6 eHubMarket promo
+### 8.7 Site notices and announcement dismissal
+
+`src/components/shared/site-notices.tsx` is awaited by each route-group layout before the
+shell is sent, so a maintenance banner is in the first paint. Announcement dismissal is a
+first-party cookie (`gcc_dismissed_announcements`, one year, `SameSite=Lax`), read on the
+server so a dismissed banner is never rendered and never disappears after hydration. Do not
+reintroduce `localStorage`-only gating here: it produced a 139px layout shift on every first
+visit (ADR-068). The banner is a client island only for its dismiss button.
+
+### 8.8 eHubMarket promo
 
 `src/components/marketplace/ehubmarket-promo.tsx`:
 
@@ -627,36 +672,46 @@ linkable.
 ## 9. Shells
 
 Navigation data lives in `src/lib/config/navigation.ts`; shells never hard-code routes.
+One model feeds every surface: `viewerNavigation({ role, isSuperAdmin })` returns the
+Account, Explore and Manage groups for that viewer, and `mobileTabNavigation` is the four
+bottom tabs. Adding a section means editing that file only (ADR-068).
 
 ### 9.1 Public shell
 
-`src/app/(public)/layout.tsx` reads the session with `getCurrentUser()` and passes a
-serialisable viewer to the client header. `site-header.tsx` provides:
+`src/app/(public)/layout.tsx` reads the session with `getCurrentUser()`, resolves
+`SiteNotices` before the shell is sent, and passes a serialisable viewer plus the real
+notification count to the header. `site-header.tsx` provides:
 
-- Skip link to `#main`.
-- Sticky header with `BrandLockup`.
-- Desktop nav: Tournaments, Rankings, Hall of Fame, Archives, About.
-- Auth area reflecting real session state: signed out shows Sign in / Create account;
-  signed in shows the dashboard link, role shell link and sign-out.
-- Mobile drawer using the `Drawer` primitive with the same links and auth actions.
-- Notification bell is **not** in the public header.
+- Skip link to `#main-content`.
+- **Phone, signed in:** `AppMobileChrome` - slim top bar (logo, unread bell, avatar
+  button), the one `AppMenuSheet`, and the four bottom tabs.
+- **Phone, signed out:** `PublicMobileBar` - logo, "Sign in" and the same sheet in its
+  visitor variant. No bottom tabs, no second menu.
+- **Desktop:** sticky header with `BrandLockup`, the public nav (Tournaments, Rankings,
+  Hall of Fame, Archives, About), the real notification bell and the user dropdown
+  (`DesktopUserMenu`). Signed out shows Sign in / Join GCC.
 
 `site-footer.tsx` provides competition, community and legal link groups, the eHubMarket
 link, the tagline and the independence notice.
 
 ### 9.2 Participant dashboard shell
 
-`src/app/(dashboard)/layout.tsx` calls the Phase 2 server guard through
-`src/lib/auth/page-access.ts` before rendering. `dashboard-shell.tsx` provides a desktop
-sidebar, a mobile bottom bar and a drawer, a notification bell wired to
-`/dashboard/notifications` (a real empty inbox), and account actions.
+`src/app/(dashboard)/layout.tsx` calls the server guard through
+`src/lib/auth/page-access.ts` before rendering. `dashboard-shell.tsx` keeps the desktop
+sidebar at `lg` and uses the shared mobile chrome below it: the same top bar, sheet and
+bottom tabs as the public site, with a real unread bell wired to
+`/dashboard/notifications`.
 
 ### 9.3 Organiser workspace
 
-`src/app/(organiser)/layout.tsx` uses `requireRole("organiser")` semantics through the
-page-access helper. `workspace-shell.tsx` renders:
+`src/app/(organiser)/layout.tsx` uses the `organiser` page guard. `workspace-shell.tsx`
+renders:
 
-- Organiser navigation: Overview, Tournaments, New tournament.
+- Desktop: a gold/electric-tinted sidebar (Overview, Tournaments, New tournament,
+  Organiser profile) and a sticky top bar with the bell and user dropdown.
+- Phone: the shared top bar and bottom tabs, with the workspace sections as a
+  horizontally scrollable `TabStrip` directly under the top bar. There is no second
+  hamburger; the one sheet's Manage group links back into the workspace.
 - A tournament sub-navigation when the path contains an id: Overview, Registrations,
   Pots and draw, Fixtures, Results, Knockout, Result reports, Announcements, Graphics,
   Settings.
@@ -666,8 +721,10 @@ Every route above exists in the app tree. The overall accent is electric blue.
 ### 9.4 Super Admin console
 
 `src/app/(super-admin)/layout.tsx` requires `super_admin`. The same `workspace-shell.tsx`
-renders a visually distinguishable console (gold-tinted rail) with: Overview, Users,
+renders a visually distinguishable console (gold accent) with: Overview, Users,
 Applications, Tournaments, Result reports, Announcements, Analytics, Audit log, Settings.
+On phones the console uses the same top bar, sheet and bottom tabs as every other role;
+the sections appear as the `TabStrip` under the top bar, and wide tables become cards.
 
 ### 9.5 Access rules
 

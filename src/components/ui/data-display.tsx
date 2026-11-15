@@ -87,7 +87,7 @@ export function initialsFor(name: string): string {
 export type AvatarSize = "xs" | "sm" | "md" | "lg" | "xl" | "hero";
 
 const avatarSizes: Record<AvatarSize, { box: string; text: string; pixels: number }> = {
-  xs: { box: "h-6 w-6", text: "text-[10px]", pixels: 24 },
+  xs: { box: "h-6 w-6", text: "text-xs", pixels: 24 },
   sm: { box: "h-8 w-8", text: "text-xs", pixels: 32 },
   md: { box: "h-10 w-10", text: "text-sm", pixels: 40 },
   lg: { box: "h-14 w-14", text: "text-lg", pixels: 56 },
@@ -158,7 +158,7 @@ export function StatCard({ label, value, hint, icon: Icon, className }: StatCard
           </span>
         ) : null}
       </div>
-      {hint ? <p className="mt-3 text-xs leading-5 text-grey-500">{hint}</p> : null}
+      {hint ? <p className="mt-3 text-xs leading-5 text-grey-400">{hint}</p> : null}
     </Card>
   );
 }

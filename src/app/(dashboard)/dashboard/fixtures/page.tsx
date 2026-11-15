@@ -125,7 +125,7 @@ export default async function FixturesPage() {
                             size="sm"
                           />
                           <div className="min-w-0 flex-1">
-                            <p className="text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
+                            <p className="text-xs font-semibold uppercase tracking-eyebrow text-grey-500">
                               Opponent
                             </p>
                             <Link
@@ -144,13 +144,13 @@ export default async function FixturesPage() {
                             ) : null}
                           </div>
                           <div className="text-right">
-                            <p className="text-[10px] font-semibold uppercase tracking-eyebrow text-grey-500">
+                            <p className="text-xs font-semibold uppercase tracking-eyebrow text-grey-500">
                               {score ? "Result" : "Status"}
                             </p>
                             <p className="mt-0.5 font-display text-lg font-semibold tabular-nums text-white">
                               {score ?? "Scheduled"}
                             </p>
-                            <p className="text-[11px] text-grey-500">
+                            <p className="text-xs text-grey-500">
                               {fixture.homeTag} vs {fixture.awayTag}
                             </p>
                           </div>
@@ -170,7 +170,7 @@ export default async function FixturesPage() {
                               matchLabel={`${fixture.homeTag} ${score ?? ""} ${fixture.awayTag}`}
                             />
                           ) : (
-                            <p className="text-[11px] text-grey-500">
+                            <p className="text-xs text-grey-500">
                               A problem can be reported after a result is recorded.
                             </p>
                           )}

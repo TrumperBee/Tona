@@ -14,7 +14,10 @@ export default async function SuperAdminLayout({
   children: React.ReactNode;
 }>) {
   const user = await requirePageSuperAdmin("/super-admin");
-  const notificationBell = await getNotificationBell(user.userId);
+  const [notificationBell, notices] = await Promise.all([
+    getNotificationBell(user.userId),
+    SiteNotices({}),
+  ]);
   const viewer: Viewer = {
     email: user.email,
     role: user.role,
@@ -26,7 +29,7 @@ export default async function SuperAdminLayout({
       variant="super-admin"
       viewer={viewer}
       notificationBell={notificationBell}
-      notices={<SiteNotices />}
+      notices={notices}
     >
       {children}
     </WorkspaceShell>

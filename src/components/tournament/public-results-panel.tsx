@@ -50,7 +50,7 @@ export function PublicResultsPanel({ matches, tournamentSlug }: PublicResultsPan
                     <h3 className="text-xs font-semibold uppercase tracking-eyebrow text-grey-300">
                       Matchday {day}
                     </h3>
-                    <span className="text-[11px] text-grey-500">
+                    <span className="text-xs text-grey-500">
                       {rows.length} result{rows.length === 1 ? "" : "s"}
                     </span>
                   </div>

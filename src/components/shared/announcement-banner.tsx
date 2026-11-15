@@ -2,12 +2,14 @@
 
 // GCC - site-wide announcement banners.
 //
-// Dismissal is local to the browser and stored per announcement id, so a later
-// announcement still appears. Pinned items are ordered first by the server.
+// Dismissal is stored in a first-party cookie, which the server reads before
+// rendering, so the banner is part of the first paint and never appears late.
+// Pinned items are ordered first by the server.
 import { Megaphone, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
+import { rememberDismissedAnnouncement } from "@/lib/announcements/dismissal";
 import { cn } from "@/lib/utils/cn";
 import type { AnnouncementSeverity } from "@/types/domain";
 
@@ -19,50 +21,21 @@ export interface BannerAnnouncement {
   readonly pinned: boolean;
 }
 
-function dismissalKey(id: string): string {
-  return `gcc:announcement-dismissed:${id}`;
-}
-
 export function AnnouncementBanner({
   announcements,
 }: {
   readonly announcements: readonly BannerAnnouncement[];
 }) {
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    const next = new Set<string>();
-
-    for (const item of announcements) {
-      try {
-        if (window.localStorage.getItem(dismissalKey(item.id)) === "1") {
-          next.add(item.id);
-        }
-      } catch {
-        // Storage can be blocked; showing the banner is still safe.
-      }
-    }
-
-    // The dismissal set can only be read after hydration; localStorage is not
-    // available during server rendering.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDismissed(next);
-    setReady(true);
-  }, [announcements]);
 
   function dismiss(id: string) {
     setDismissed((current) => new Set(current).add(id));
 
     try {
-      window.localStorage.setItem(dismissalKey(id), "1");
+      rememberDismissedAnnouncement(id);
     } catch {
-      // Ignore unavailable storage.
+      // Storage can be blocked; hiding it for this page view is still correct.
     }
-  }
-
-  if (!ready) {
-    return null;
   }
 
   const visible = announcements.filter((item) => !dismissed.has(item.id));
@@ -97,7 +70,7 @@ export function AnnouncementBanner({
               <p className="text-sm font-semibold text-white">
                 {item.title}
                 {item.pinned ? (
-                  <span className="ml-2 rounded-full border border-gold-400/30 bg-gold-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-eyebrow text-gold-200">
+                  <span className="ml-2 rounded-full border border-gold-400/30 bg-gold-400/10 px-2 py-0.5 text-xs font-semibold uppercase tracking-eyebrow text-gold-200">
                     Pinned
                   </span>
                 ) : null}

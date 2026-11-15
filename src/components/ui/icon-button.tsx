@@ -16,8 +16,8 @@ const variantStyles: Record<IconButtonVariant, string> = {
 };
 
 const sizeStyles: Record<IconButtonSize, string> = {
-  sm: "h-8 w-8",
-  md: "h-10 w-10",
+  sm: "h-8 w-8 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11",
+  md: "h-10 w-10 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11",
   lg: "h-12 w-12",
 };
 
