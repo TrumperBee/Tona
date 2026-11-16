@@ -1,6 +1,6 @@
 // GCC - `npm run simulate` entry point.
 //
-// Builds one complete Phase 13 tournament in the Firebase emulators through the
+// Builds one complete Phase 13C tournament in the Firebase emulators through the
 // real routes and prints a readable summary. The same runner powers the
 // end-to-end integration test; this file only owns the console output.
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -42,21 +42,25 @@ describe("tournament simulation", () => {
         sessionCookie.value = cookie;
       },
       seed: 20261313,
+      legs: 2,
       log: line,
     });
 
     console.log("");
     line(`Players: ${summary.playerCount}`);
     line(`League matches: ${summary.leagueMatches} (${summary.leagueResults} results)`);
+    line(`Knockout legs before the final: ${summary.legs} (final always one match)`);
+    line(`Bracket seed: ${summary.seed.slice(0, 16)}...`);
+    line(`Bracket hash: ${summary.bracketHash.slice(0, 16)}...`);
     for (const round of summary.rounds) {
       const deciders =
         round.deciders.length === 0
           ? ""
-          : ` · deciders: ${round.deciders
+          : ` - deciders: ${round.deciders
               .map((decider) => `${decider.tieId} (${decider.method})`)
               .join(", ")}`;
       line(
-        `${round.round}: ${round.ties} tie${round.ties === 1 ? "" : "s"} · ${round.matches} match${round.matches === 1 ? "" : "es"}${deciders}`,
+        `${round.round}: ${round.ties} tie${round.ties === 1 ? "" : "s"} - ${round.matches} match${round.matches === 1 ? "" : "es"}${deciders}`,
       );
     }
     line(`Knockout matches: ${summary.knockoutMatches}`);
@@ -69,6 +73,7 @@ describe("tournament simulation", () => {
 
     expect(summary.playerCount).toBe(36);
     expect(summary.leagueMatches).toBe(144);
+    expect(summary.legs).toBe(2);
     expect(summary.knockoutMatches).toBe(45);
     expect(summary.standingsFrozen).toBe(true);
     expect(summary.championUid).not.toBe(summary.runnerUpUid);

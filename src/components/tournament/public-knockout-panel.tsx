@@ -1,17 +1,24 @@
+"use client";
+
 // GCC - public knockout bracket tab.
 //
-// Server component. Every card is a published tie; nothing is generated in the
-// browser. The champion banner appears only when the final has a recorded
-// winner and the competition is complete.
+// Client component so the bracket can switch between its visual tree and a
+// grouped list, scroll to a round and open a tie sheet. Every value comes from
+// the stored bracket documents: no placeholder is invented, and an empty
+// knockout shows an honest "not generated yet" state instead of sample ties.
 import { ShieldCheck, Swords, Trophy } from "lucide-react";
+import { useState } from "react";
 
+import {
+  KnockoutBracket,
+  toBracketRounds,
+  type BracketTieView,
+} from "@/components/tournament/knockout-bracket";
+import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Avatar, EmptyState } from "@/components/ui/data-display";
-import type {
-  PublicKnockout,
-  PublicKnockoutRound,
-  PublicKnockoutTie,
-} from "@/lib/data/public-knockout";
+import { Avatar } from "@/components/ui/data-display";
+import { KNOCKOUT_ROUND_LABELS, KNOCKOUT_ROUNDS, type KnockoutRound } from "@/lib/engine/knockout";
+import type { PublicKnockout, PublicKnockoutTie } from "@/lib/data/public-knockout";
 import type { StandingBand } from "@/lib/engine/standings/types";
 
 const BAND_LABELS: Record<StandingBand, string> = {
@@ -34,14 +41,14 @@ const DECIDED_BY_LABELS: Record<string, string> = {
   penalties: "Penalties",
 };
 
-const STATUS_LABELS: Record<PublicKnockoutTie["status"], string> = {
+const STATUS_LABELS: Record<BracketTieView["status"], string> = {
   pending: "Pending",
   in_progress: "In progress",
   needs_decider: "Needs decider",
   completed: "Completed",
 };
 
-function statusTone(status: PublicKnockoutTie["status"]) {
+function statusTone(status: BracketTieView["status"]) {
   switch (status) {
     case "completed":
       return "success" as const;
@@ -54,111 +61,144 @@ function statusTone(status: PublicKnockoutTie["status"]) {
   }
 }
 
-function TieCard({ tie }: { readonly tie: PublicKnockoutTie }) {
-  const higherWon = tie.winnerUid !== null && tie.winnerUid === tie.higherSeedUid;
-  const lowerWon = tie.winnerUid !== null && tie.winnerUid === tie.lowerSeedUid;
-  const needsDecider = tie.status === "needs_decider";
+function toBracketTie(tie: PublicKnockoutTie): BracketTieView {
+  return {
+    tieId: tie.tieId,
+    round: tie.round,
+    roundLabel: KNOCKOUT_ROUND_LABELS[tie.round],
+    bracketSlot: tie.bracketSlot,
+    legs: tie.legs,
+    group: tie.group,
+    higher: tie.higher,
+    lower: tie.lower,
+    status: tie.status,
+    aggregate: tie.aggregate,
+    legsPlayed: tie.legsPlayed,
+    winnerUid: tie.winnerUid,
+    winnerTag: tie.winnerUid === tie.higher.uid ? tie.higher.gamerTag : tie.lower.gamerTag,
+    decidedBy: tie.decidedBy,
+    deciderNote: tie.deciderNote,
+    penalties: tie.penalties,
+    matches: tie.matches.map((match) => ({
+      id: match.id,
+      leg: match.leg,
+      homeTag: match.homeTag,
+      awayTag: match.awayTag,
+      homeGoals: match.homeGoals,
+      awayGoals: match.awayGoals,
+      status: match.status,
+    })),
+    complete: tie.complete,
+  };
+}
+
+function TieSheet({
+  tie,
+  open,
+  onOpenChange,
+}: {
+  readonly tie: BracketTieView | null;
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+}) {
+  if (!tie) {
+    return null;
+  }
+
+  const waiting = !tie.higher.uid || !tie.lower.uid;
 
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="flex items-center justify-between gap-2 p-3.5">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold uppercase tracking-eyebrow text-grey-500">
-            Tie {tie.bracketSlot}
-          </span>
-          {tie.group ? <Badge tone="neutral">Play-off {tie.group}</Badge> : null}
-        </div>
-        <Badge tone={statusTone(tie.status)}>{STATUS_LABELS[tie.status]}</Badge>
-      </CardHeader>
-      <CardContent className="space-y-2 p-3.5">
-        <div className="space-y-1.5">
-          <div
-            className={`flex items-center justify-between gap-2 rounded-md px-2 py-1.5 ${
-              higherWon ? "bg-success/[0.08]" : "bg-white/[0.02]"
-            }`}
-          >
-            <span className="flex min-w-0 items-center gap-2">
-              <span className="w-5 shrink-0 text-right text-xs font-semibold tabular-nums text-grey-500">
-                {tie.higherSeedPosition}
-              </span>
-              <span className="truncate text-sm font-medium text-grey-100">
-                {tie.higherSeedTag}
-              </span>
-            </span>
-            <span className="shrink-0 font-display text-sm font-semibold tabular-nums text-white">
-              {tie.aggregate.higherGoals}
-            </span>
-          </div>
-          <div
-            className={`flex items-center justify-between gap-2 rounded-md px-2 py-1.5 ${
-              lowerWon ? "bg-success/[0.08]" : "bg-white/[0.02]"
-            }`}
-          >
-            <span className="flex min-w-0 items-center gap-2">
-              <span className="w-5 shrink-0 text-right text-xs font-semibold tabular-nums text-grey-500">
-                {tie.lowerSeedPosition}
-              </span>
-              <span className="truncate text-sm font-medium text-grey-100">{tie.lowerSeedTag}</span>
-            </span>
-            <span className="shrink-0 font-display text-sm font-semibold tabular-nums text-white">
-              {tie.aggregate.lowerGoals}
-            </span>
-          </div>
+    <BottomSheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title={`${tie.group ? `Play-off ${tie.group}` : tie.roundLabel} · tie ${tie.bracketSlot}`}
+      description={`${tie.higher.uid ? (tie.higher.gamerTag ?? "Player") : tie.higher.source} vs ${
+        tie.lower.uid ? (tie.lower.gamerTag ?? "Player") : tie.lower.source
+      }`}
+    >
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge tone={statusTone(tie.status)}>{STATUS_LABELS[tie.status]}</Badge>
+          <Badge tone="neutral">{tie.legs === 1 ? "Single match" : `${tie.legs} legs`}</Badge>
+          {tie.complete ? <Badge tone="success">{tie.winnerTag} advances</Badge> : null}
         </div>
 
+        <div className="space-y-2 rounded-lg border border-white/10 bg-navy-950/40 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="min-w-0 truncate text-sm text-grey-100">
+              {tie.higher.uid ? tie.higher.gamerTag : tie.higher.source}
+            </span>
+            <span className="font-display text-lg font-semibold tabular-nums text-white">
+              {tie.legsPlayed > 0 ? tie.aggregate.higherGoals : "–"}
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="min-w-0 truncate text-sm text-grey-100">
+              {tie.lower.uid ? tie.lower.gamerTag : tie.lower.source}
+            </span>
+            <span className="font-display text-lg font-semibold tabular-nums text-white">
+              {tie.legsPlayed > 0 ? tie.aggregate.lowerGoals : "–"}
+            </span>
+          </div>
+          <p className="text-xs text-grey-500">
+            {tie.legsPlayed > 0
+              ? `Aggregate after ${tie.legsPlayed} ${tie.legsPlayed === 1 ? "leg" : "legs"}`
+              : "No leg has been played yet."}
+          </p>
+        </div>
+
+        {waiting ? (
+          <p className="rounded-lg border border-white/10 bg-navy-950/40 p-3 text-xs leading-5 text-grey-400">
+            Waiting for {!tie.higher.uid ? tie.higher.source : tie.lower.source}. This tie is
+            created automatically when the feeding tie is decided.
+          </p>
+        ) : null}
+
         {tie.matches.length > 0 ? (
-          <ul className="space-y-1 border-t border-white/10 pt-2 text-xs leading-5 text-grey-500">
+          <ul className="space-y-2">
             {tie.matches.map((match) => (
-              <li key={match.id} className="flex items-center justify-between gap-2">
-                <span className="truncate">
-                  Leg {match.leg}: {match.homeTag} vs {match.awayTag}
-                </span>
-                <span className="shrink-0 font-medium tabular-nums text-grey-300">
-                  {match.status === "completed" && match.homeGoals !== null
-                    ? `${match.homeGoals}–${match.awayGoals}`
-                    : "—"}
-                </span>
+              <li
+                key={match.id}
+                className="rounded-lg border border-white/10 bg-navy-950/40 p-3 text-sm"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-eyebrow text-grey-500">
+                    Leg {match.leg} of {tie.legs}
+                  </span>
+                  <Badge tone={match.status === "completed" ? "success" : "neutral"}>
+                    {match.status === "completed" ? "Result" : "Due"}
+                  </Badge>
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <span className="min-w-0 truncate text-grey-100">{match.homeTag}</span>
+                  <span className="font-display text-base font-semibold tabular-nums text-white">
+                    {match.status === "completed" && match.homeGoals !== null
+                      ? `${match.homeGoals}–${match.awayGoals}`
+                      : "–"}
+                  </span>
+                </div>
+                <p className="mt-1 truncate text-right text-xs text-grey-500">{match.awayTag}</p>
               </li>
             ))}
           </ul>
         ) : null}
 
         {tie.decidedBy ? (
-          <p className="border-t border-white/10 pt-2 text-xs text-grey-400">
-            {DECIDED_BY_LABELS[tie.decidedBy] ?? tie.decidedBy}
-            {tie.penalties ? ` · penalties ${tie.penalties.higher}–${tie.penalties.lower}` : ""}
+          <p className="rounded-lg border border-white/10 bg-navy-950/40 p-3 text-xs leading-5 text-grey-400">
+            Decided by {DECIDED_BY_LABELS[tie.decidedBy] ?? tie.decidedBy}
+            {tie.penalties ? ` · shoot-out ${tie.penalties.higher}–${tie.penalties.lower}` : ""}
             {tie.deciderNote ? ` · ${tie.deciderNote}` : ""}
           </p>
         ) : null}
 
-        {needsDecider ? (
-          <p className="rounded-md border border-warning/25 bg-warning/[0.06] px-2 py-1.5 text-xs text-warning-soft">
+        {tie.status === "needs_decider" ? (
+          <p className="rounded-lg border border-warning/25 bg-warning/[0.06] p-3 text-xs leading-5 text-warning-soft">
             Level after {tie.legsPlayed} {tie.legsPlayed === 1 ? "leg" : "legs"}. The organiser
-            records the winner by extra time or penalties.
+            records the winner by extra time or penalties. There is no away-goals rule.
           </p>
         ) : null}
-      </CardContent>
-    </Card>
-  );
-}
-
-function RoundColumn({ round }: { readonly round: PublicKnockoutRound }) {
-  return (
-    <div className="w-[17.5rem] shrink-0 space-y-3">
-      <div className="flex items-baseline justify-between gap-2">
-        <h3 className="font-display text-sm font-semibold uppercase tracking-display text-white">
-          {round.label}
-        </h3>
-        <span className="text-xs uppercase tracking-eyebrow text-grey-500">
-          {round.ties.length} {round.ties.length === 1 ? "tie" : "ties"}
-        </span>
       </div>
-      <div className="space-y-3">
-        {round.ties.map((tie) => (
-          <TieCard key={tie.tieId} tie={tie} />
-        ))}
-      </div>
-    </div>
+    </BottomSheet>
   );
 }
 
@@ -167,6 +207,9 @@ export interface PublicKnockoutPanelProps {
 }
 
 export function PublicKnockoutPanel({ knockout }: PublicKnockoutPanelProps) {
+  const [selected, setSelected] = useState<BracketTieView | null>(null);
+  const ties = knockout.ties.map(toBracketTie);
+  const rounds = toBracketRounds(ties, KNOCKOUT_ROUNDS as readonly KnockoutRound[]);
   const qualification = (["direct", "playoff_seeded", "playoff_unseeded", "eliminated"] as const)
     .map((band) => ({
       band,
@@ -204,7 +247,7 @@ export function PublicKnockoutPanel({ knockout }: PublicKnockoutPanelProps) {
                   Bracket
                 </p>
                 <p className="mt-1 text-sm font-medium text-grey-200">
-                  {knockout.rounds.length} round{knockout.rounds.length === 1 ? "" : "s"} published
+                  {knockout.ties.length} ties · {knockout.legs === 1 ? "single match" : "two legs"}
                 </p>
               </div>
             </CardContent>
@@ -220,9 +263,9 @@ export function PublicKnockoutPanel({ knockout }: PublicKnockoutPanelProps) {
               </h2>
             </div>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-grey-400">
-              Positions 1–8 went straight to the Round of 16. Positions 9–16 and 17–24 meet in the
-              play-offs, and every tie is decided on aggregate over its published legs. There is no
-              away-goals rule; a level tie is settled by extra time or penalties.
+              Positions 1–8 went straight to the Round of 16. Positions 9–16 and 17–24 met in the
+              play-offs. Every tie is decided on aggregate over its legs; there is no away-goals
+              rule and a level tie is settled by extra time or penalties.
             </p>
           </div>
           <div className="flex items-center gap-2 text-xs text-grey-500">
@@ -260,28 +303,17 @@ export function PublicKnockoutPanel({ knockout }: PublicKnockoutPanelProps) {
           </div>
         ) : null}
 
-        {knockout.rounds.length === 0 ? (
-          <EmptyState
-            icon={Swords}
-            title="Bracket not published"
-            description="The organiser draws each round from the recorded league table. Published ties appear here with their real seeds and results."
-          />
-        ) : (
-          <div className="overflow-x-auto pb-2">
-            <div className="flex min-w-max gap-4">
-              {knockout.rounds.map((round) => (
-                <RoundColumn key={round.round} round={round} />
-              ))}
-            </div>
-          </div>
-        )}
+        <KnockoutBracket rounds={rounds} onSelectTie={(tie) => setSelected(tie)} />
 
-        {!knockout.leagueClosed ? (
-          <p className="rounded-lg border border-white/10 bg-navy-950/50 p-3.5 text-xs leading-5 text-grey-400">
-            The league phase is not closed yet, so no bracket has been drawn. League results remain
-            the only source of qualification.
-          </p>
-        ) : null}
+        <TieSheet
+          tie={selected}
+          open={selected !== null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setSelected(null);
+            }
+          }}
+        />
       </div>
     </section>
   );

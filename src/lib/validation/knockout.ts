@@ -1,26 +1,25 @@
 // GCC - knockout route input schemas.
 //
-// A client never supplies ties, seeds or match ids. It chooses a round, an
-// optional leg count for that round, a decider winner/method and an optional
-// note. The final is always one match.
+// A client never supplies ties, seeds, participants or match ids. It chooses a
+// single leg count for the whole bracket, a decider winner/method and an
+// optional note, or a reason for resetting an unplayed bracket.
 import { z } from "zod";
 
 export const knockoutRoundSchema = z.enum(["playoff", "r16", "qf", "sf", "final"]);
 
 export const knockoutLegsSchema = z.union([z.literal(1), z.literal(2)]);
 
-export const knockoutDrawSchema = z.strictObject({
-  round: knockoutRoundSchema,
-  legs: knockoutLegsSchema.optional(),
+export const knockoutGenerateSchema = z.strictObject({
+  /** Applied to play-offs, R16, QF and SF; the final is always one match. */
+  legs: knockoutLegsSchema.default(2),
 });
 
-export const knockoutPublishSchema = z.strictObject({
-  round: knockoutRoundSchema,
-});
-
-export const knockoutResetSchema = z.strictObject({
-  round: knockoutRoundSchema,
-  reason: z.string().trim().max(500, "That reason is too long.").optional(),
+export const knockoutResetStageSchema = z.strictObject({
+  reason: z
+    .string()
+    .trim()
+    .min(3, "Give a short reason for resetting the bracket.")
+    .max(500, "That reason is too long."),
 });
 
 const penaltyScoreSchema = z.number().int().min(0).max(99);
@@ -37,12 +36,6 @@ export const knockoutDecideSchema = z.strictObject({
     .optional(),
 });
 
-export const tournamentCompleteSchema = z.strictObject({
-  reason: z.string().trim().max(500, "That reason is too long.").optional(),
-});
-
-export type KnockoutDrawInput = z.infer<typeof knockoutDrawSchema>;
-export type KnockoutPublishInput = z.infer<typeof knockoutPublishSchema>;
-export type KnockoutResetInput = z.infer<typeof knockoutResetSchema>;
+export type KnockoutGenerateInput = z.infer<typeof knockoutGenerateSchema>;
+export type KnockoutResetStageInput = z.infer<typeof knockoutResetStageSchema>;
 export type KnockoutDecideInput = z.infer<typeof knockoutDecideSchema>;
-export type TournamentCompleteInput = z.infer<typeof tournamentCompleteSchema>;

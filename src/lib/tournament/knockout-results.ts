@@ -1,24 +1,42 @@
-// GCC - knockout leg result entry, correction and clearing.
+// GCC - knockout leg result entry, correction and clearing with auto-advance.
 //
-// Every mutation re-reads the tournament, the leg match, its tie and every leg
-// of that tie inside one transaction. The tie is recomputed from the current
-// leg scores, so the stored aggregate, status and winner always match the
-// matches. A round is locked as soon as the next round has been published.
+// Every mutation reads the tournament, every knockout tie and every knockout
+// match inside ONE transaction. The affected tie is resolved from its leg
+// scores, and the winner is written into each dependent slot in the same
+// transaction: no separate "advance" button exists.
 //
-// No away-goals rule is applied. A level tie becomes `needs_decider` and only
-// an organiser decider can complete it.
+// No away-goals rule is applied. A tie level on aggregate becomes
+// `needs_decider` and its previous winner is removed. A correction or clear is
+// refused when any dependent tie already holds a result, because rewriting an
+// earlier round after a later result would silently rewrite history.
 import "server-only";
 
 import { Timestamp } from "firebase-admin/firestore";
 
 import { writeAuditLog } from "@/lib/audit/log";
 import type { TournamentAccess } from "@/lib/auth/guards";
-import { knockoutRoundAfter, resolveTie, type KnockoutRound } from "@/lib/engine";
+import { resolveTie, type KnockoutPlayer } from "@/lib/engine";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 import { createNotification } from "@/lib/notifications";
 import { TournamentMutationError } from "@/lib/tournament/errors";
-import { readEngineMatch, readEngineTie, tiePatchFromResolution } from "@/lib/tournament/knockout";
+import {
+  announceCompletion,
+  betterAndWorse,
+  blockingDependentTie,
+  completionFromTie,
+  isKnockoutRound,
+  readCompletionTargets,
+  readEngineMatch,
+  readKnockoutState,
+  resolvableForTie,
+  shortTieLabel,
+  stageBracketAdvance,
+  stageTournamentCompletion,
+  stageTournamentReopen,
+  tiePatchFromResolution,
+  type CompletionSummary,
+} from "@/lib/tournament/knockout";
 import {
   isResultEntryTournamentStatus,
   planResultTransition,
@@ -42,6 +60,22 @@ function readText(value: unknown, fallback: string): string {
   return typeof value === "string" && value.length > 0 ? value : fallback;
 }
 
+interface KnockoutCommit {
+  readonly tournament: TournamentDocument;
+  readonly tieId: string;
+  readonly round: string;
+  readonly homeUid: string;
+  readonly awayUid: string;
+  readonly homeTag: string;
+  readonly awayTag: string;
+  readonly status: string;
+  readonly aggregate: { readonly higherGoals: number; readonly lowerGoals: number };
+  readonly previousResult: { readonly homeGoals: number; readonly awayGoals: number } | null;
+  readonly editCount: number;
+  readonly completion: CompletionSummary | null;
+  readonly reopened: boolean;
+}
+
 async function applyKnockoutMatchChange(
   access: TournamentAccess,
   tournamentId: string,
@@ -50,32 +84,33 @@ async function applyKnockoutMatchChange(
 ): Promise<void> {
   const firestore = getFirebaseAdminFirestore();
   const tournamentRef = firestore.doc(paths.tournament(tournamentId));
-  const matchRef = firestore.doc(paths.tournamentMatch(tournamentId, matchId));
 
-  const committed = await firestore.runTransaction(async (transaction) => {
-    const tournamentSnapshot = await transaction.get(tournamentRef);
+  const committed = await firestore.runTransaction(async (transaction): Promise<KnockoutCommit> => {
+    const state = await readKnockoutState(transaction, tournamentId);
+    const tournament = state.tournament;
+    const canEdit =
+      tournament.status === "knockout" ||
+      (tournament.status === "completed" && access.user.role === "super_admin");
 
-    if (!tournamentSnapshot.exists) {
-      throw new TournamentMutationError("Tournament not found.", 404);
+    if (!canEdit) {
+      throw new TournamentMutationError(
+        tournament.status === "completed"
+          ? "Only the Super Admin may change a result after the tournament is complete."
+          : "Knockout results can only be recorded while the knockout is running.",
+        tournament.status === "completed" ? 403 : 409,
+      );
     }
 
-    const tournament = tournamentSnapshot.data() as TournamentDocument;
-    const matchSnapshot = await transaction.get(matchRef);
+    const matchSnapshot = state.matches.find((document) => document.id === matchId);
 
-    if (!matchSnapshot.exists || matchSnapshot.data()?.tournamentId !== tournamentId) {
+    if (!matchSnapshot || matchSnapshot.data().tournamentId !== tournamentId) {
       throw new TournamentMutationError("Match not found.", 404);
     }
 
-    const matchData = matchSnapshot.data() as Record<string, unknown>;
+    const matchData = matchSnapshot.data();
     const stage = matchData.stage;
 
-    if (
-      stage !== "playoff" &&
-      stage !== "r16" &&
-      stage !== "qf" &&
-      stage !== "sf" &&
-      stage !== "final"
-    ) {
+    if (!isKnockoutRound(stage)) {
       throw new TournamentMutationError("That match is not a knockout tie.", 409);
     }
 
@@ -92,31 +127,10 @@ async function applyKnockoutMatchChange(
       throw new TournamentMutationError("That knockout match has no tie.", 409);
     }
 
-    const tieRef = firestore.doc(paths.tournamentKnockoutTie(tournamentId, tieId));
-    const tieSnapshot = await transaction.get(tieRef);
+    const stored = state.ties.find((tie) => tie.id === tieId);
 
-    if (!tieSnapshot.exists) {
+    if (!stored) {
       throw new TournamentMutationError("Knockout tie not found.", 404);
-    }
-
-    const tieData = tieSnapshot.data() as Record<string, unknown>;
-    const tie = readEngineTie(tieData);
-    const nextRound = knockoutRoundAfter(tie.round as KnockoutRound);
-
-    if (nextRound) {
-      const nextTies = await transaction.get(
-        firestore
-          .collection(paths.tournamentKnockoutTies(tournamentId))
-          .where("round", "==", nextRound)
-          .limit(1),
-      );
-
-      if (!nextTies.empty) {
-        throw new TournamentMutationError(
-          "This round is locked because the next round has been published.",
-          409,
-        );
-      }
     }
 
     const previousResult =
@@ -136,13 +150,20 @@ async function applyKnockoutMatchChange(
       throw new TournamentMutationError(plan.message, 409);
     }
 
-    const legMatches = await transaction.get(
-      firestore.collection(paths.tournamentMatches(tournamentId)).where("tieId", "==", tieId),
-    );
-    const now = Timestamp.now();
-    const engineMatches = legMatches.docs.map((document, index) => {
-      const data = document.data();
-      const base = readEngineMatch(data, index + 1);
+    if (change.action !== "enter") {
+      const blocker = blockingDependentTie(state, tieId);
+
+      if (blocker) {
+        throw new TournamentMutationError(
+          `That change would rewrite ${shortTieLabel(blocker.id)}, which already has a result. Clear or correct that later tie first.`,
+          409,
+        );
+      }
+    }
+
+    const legMatches = state.matches.filter((document) => document.data().tieId === tieId);
+    const engineMatches = legMatches.map((document) => {
+      const base = readEngineMatch(document.data(), 1);
 
       if (document.id !== matchId) {
         return base;
@@ -154,16 +175,30 @@ async function applyKnockoutMatchChange(
         awayGoals: change.awayGoals,
       };
     });
-    const resolution = resolveTie(tie, engineMatches);
+    const resolvable = resolvableForTie(stored.tie);
+    const resolution = resolveTie(resolvable, engineMatches);
+    const { better, worse } = betterAndWorse(stored.tie);
+    const winner: KnockoutPlayer | null =
+      resolution.winnerUid === better.playerId
+        ? better
+        : resolution.winnerUid === worse.playerId
+          ? worse
+          : null;
+    const now = Timestamp.now();
+
+    // The final can end the competition. Read everything completion needs
+    // before the first write of this transaction.
+    const completionTargets =
+      stored.tie.round === "final" ? await readCompletionTargets(transaction, tournamentId) : null;
 
     if (change.action === "clear") {
-      transaction.update(matchRef, {
+      transaction.update(matchSnapshot.ref, {
         result: null,
         status: "scheduled",
         updatedAt: now,
       });
     } else {
-      transaction.update(matchRef, {
+      transaction.update(matchSnapshot.ref, {
         result: {
           homeGoals: change.homeGoals,
           awayGoals: change.awayGoals,
@@ -193,21 +228,60 @@ async function applyKnockoutMatchChange(
       });
     }
 
-    transaction.update(tieRef, tiePatchFromResolution(resolution, tie, now));
+    transaction.update(stored.ref, tiePatchFromResolution(resolution, stored.tie, now));
+
+    const advanced = stageBracketAdvance({
+      transaction,
+      firestore,
+      tournamentId,
+      now,
+      before: state.bracket,
+      ties: state.ties,
+      matches: state.matches,
+      changedTieId: tieId,
+      winner,
+    });
+
+    const finalTie = advanced.bracket.ties.find((tie) => tie.round === "final") ?? null;
+    let completion: CompletionSummary | null = null;
+    let reopened = false;
+
+    if (completionTargets && finalTie?.winner) {
+      completion = stageTournamentCompletion({
+        transaction,
+        tournamentRef,
+        finalTie,
+        registeredUids: completionTargets.registeredUids,
+        membershipSnapshots: completionTargets.membershipSnapshots,
+        now,
+      });
+    } else if (!finalTie?.winner && tournament.status === "completed") {
+      stageTournamentReopen({ transaction, tournamentRef, now });
+      reopened = true;
+    }
 
     return {
       tournament,
-      tie,
-      resolution,
+      tieId,
+      round: stored.tie.round,
       homeUid: readText(matchData.homeUid, ""),
       awayUid: readText(matchData.awayUid, ""),
       homeTag: readText(matchData.homeTag, "Player"),
       awayTag: readText(matchData.awayTag, "Player"),
-      previousResult: hasResult ? previousResult : null,
+      status: resolution.status,
+      aggregate: resolution.aggregate,
+      previousResult: hasResult
+        ? {
+            homeGoals: previousResult?.homeGoals as number,
+            awayGoals: previousResult?.awayGoals as number,
+          }
+        : null,
       editCount:
         typeof (previousResult as { editCount?: unknown } | null)?.editCount === "number"
           ? ((previousResult as { editCount: number }).editCount ?? 0) + 1
           : 1,
+      completion,
+      reopened,
     };
   });
 
@@ -228,59 +302,65 @@ async function applyKnockoutMatchChange(
     before:
       change.action === "enter"
         ? { status: "scheduled", result: null }
-        : {
-            status: "completed",
-            result: committed.previousResult
-              ? {
-                  homeGoals: committed.previousResult.homeGoals,
-                  awayGoals: committed.previousResult.awayGoals,
-                }
-              : null,
-          },
+        : { status: "completed", result: committed.previousResult },
     after: {
       status: change.action === "clear" ? "scheduled" : "completed",
       result:
         change.action === "clear"
           ? null
           : { homeGoals: change.homeGoals, awayGoals: change.awayGoals },
-      tieId: committed.tie.tieId,
-      tieStatus: committed.resolution.status,
-      aggregate: committed.resolution.aggregate,
+      tieId: committed.tieId,
+      tieStatus: committed.status,
+      aggregate: committed.aggregate,
       ...(change.action === "correct" ? { editCount: committed.editCount } : {}),
     },
     reason: change.reason,
   });
+
+  if (committed.reopened) {
+    await writeAuditLog({
+      actorUid: access.user.userId,
+      actorRole: access.user.role,
+      action: "tournament.knockout.reopened",
+      targetType: "tournament",
+      targetId: tournamentId,
+      tournamentId,
+      before: { status: "completed" },
+      after: { status: "knockout" },
+      reason: change.reason,
+    });
+  }
 
   const link = `/tournaments/${committed.tournament.slug}/matches/${matchId}`;
   const scoreText =
     change.homeGoals === null || change.awayGoals === null
       ? "The score was cleared."
       : `The score is ${change.homeGoals}-${change.awayGoals}.`;
+  const title =
+    change.action === "clear"
+      ? "Knockout result cleared"
+      : change.action === "correct"
+        ? "Knockout result corrected"
+        : "Knockout result recorded";
 
   await Promise.all([
     createNotification(committed.homeUid, {
       type: "result",
-      title:
-        change.action === "clear"
-          ? "Knockout result cleared"
-          : change.action === "correct"
-            ? "Knockout result corrected"
-            : "Knockout result recorded",
-      body: `${committed.tournament.name}: ${scoreText} Your tie is now ${committed.resolution.status.replace("_", " ")}.`,
+      title,
+      body: `${committed.tournament.name}: ${scoreText} Your tie is now ${committed.status.replace("_", " ")}.`,
       link,
     }),
     createNotification(committed.awayUid, {
       type: "result",
-      title:
-        change.action === "clear"
-          ? "Knockout result cleared"
-          : change.action === "correct"
-            ? "Knockout result corrected"
-            : "Knockout result recorded",
-      body: `${committed.tournament.name}: ${scoreText} Your tie is now ${committed.resolution.status.replace("_", " ")}.`,
+      title,
+      body: `${committed.tournament.name}: ${scoreText} Your tie is now ${committed.status.replace("_", " ")}.`,
       link,
     }),
   ]).catch(() => undefined);
+
+  if (committed.completion) {
+    await announceCompletion(access, tournamentId, committed.tournament, committed.completion);
+  }
 }
 
 export async function enterKnockoutMatchResult(
@@ -328,3 +408,6 @@ export function isKnockoutStage(value: unknown): boolean {
     value === "playoff" || value === "r16" || value === "qf" || value === "sf" || value === "final"
   );
 }
+
+// Re-exported so the route layer can surface the champion after a final result.
+export { completionFromTie };

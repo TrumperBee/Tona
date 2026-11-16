@@ -1,9 +1,8 @@
 // GCC - public knockout bracket.
 //
-// Server-only. Ties are public only once the tournament reaches the knockout
-// stage (or is completed/archived); an unpublished draft never reaches this
-// module. Every value is a projection of a server-written document: no bracket
-// is generated here and no result is inferred.
+// Server-only. The whole bracket is public as soon as the knockout stage is
+// generated. Every value is a projection of a server-written document: no
+// bracket is generated here and no result is inferred.
 import "server-only";
 
 import {
@@ -12,11 +11,11 @@ import {
   type KnockoutDecidedBy,
   type KnockoutLegs,
   type KnockoutRound,
-  type PlayoffGroup,
 } from "@/lib/engine/knockout";
 import type { StandingBand } from "@/lib/engine/standings/types";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
+import { slotSourceLabel } from "@/lib/tournament/knockout";
 import type { KnockoutTieStatus, TournamentStatus } from "@/types/domain";
 
 export const KNOCKOUT_PUBLIC_STATUSES: readonly TournamentStatus[] = [
@@ -39,18 +38,23 @@ export interface PublicKnockoutMatch {
   readonly status: "scheduled" | "completed";
 }
 
+export interface PublicKnockoutSlot {
+  readonly uid: string | null;
+  readonly gamerTag: string | null;
+  readonly avatarUrl: string | null;
+  readonly position: number | null;
+  /** Placeholder text such as "Winner of R16 3" before the slot resolves. */
+  readonly source: string;
+}
+
 export interface PublicKnockoutTie {
   readonly tieId: string;
   readonly round: KnockoutRound;
   readonly bracketSlot: number;
   readonly legs: KnockoutLegs;
-  readonly higherSeedTag: string;
-  readonly higherSeedPosition: number;
-  readonly lowerSeedTag: string;
-  readonly lowerSeedPosition: number;
-  readonly higherSeedUid: string;
-  readonly lowerSeedUid: string;
-  readonly group: PlayoffGroup | null;
+  readonly group: string | null;
+  readonly higher: PublicKnockoutSlot;
+  readonly lower: PublicKnockoutSlot;
   readonly status: KnockoutTieStatus;
   readonly aggregate: { readonly higherGoals: number; readonly lowerGoals: number };
   readonly legsPlayed: number;
@@ -59,6 +63,7 @@ export interface PublicKnockoutTie {
   readonly deciderNote: string | null;
   readonly penalties: { readonly higher: number; readonly lower: number } | null;
   readonly matches: readonly PublicKnockoutMatch[];
+  readonly complete: boolean;
 }
 
 export interface PublicKnockoutRound {
@@ -82,9 +87,11 @@ export interface PublicKnockoutParticipant {
 
 export interface PublicKnockout {
   readonly rounds: readonly PublicKnockoutRound[];
+  readonly ties: readonly PublicKnockoutTie[];
   readonly qualifiers: readonly PublicKnockoutQualifier[];
   readonly champion: PublicKnockoutParticipant | null;
   readonly runnerUp: PublicKnockoutParticipant | null;
+  readonly legs: KnockoutLegs | null;
   readonly leagueClosed: boolean;
   readonly completed: boolean;
 }
@@ -126,10 +133,43 @@ function readBand(value: unknown): StandingBand {
     : "eliminated";
 }
 
+interface PlayerDirectoryEntry {
+  readonly gamerTag: string;
+  readonly avatarUrl: string | null;
+}
+
+function readSlot(
+  value: unknown,
+  players: ReadonlyMap<string, PlayerDirectoryEntry>,
+): PublicKnockoutSlot {
+  const data =
+    typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+  const ref =
+    typeof data.ref === "object" && data.ref !== null ? (data.ref as Record<string, unknown>) : {};
+  const uid =
+    typeof data.uid === "string" && data.uid.length > 0 && typeof data.position === "number"
+      ? data.uid
+      : null;
+  const player = uid ? players.get(uid) : undefined;
+  const source =
+    ref.type === "seed" && typeof ref.seed === "number"
+      ? slotSourceLabel({ type: "seed", seed: ref.seed })
+      : ref.type === "winnerOf" && typeof ref.tieId === "string"
+        ? slotSourceLabel({ type: "winnerOf", tieId: ref.tieId })
+        : "To be decided";
+
+  return {
+    uid,
+    gamerTag: readText(data.gamerTag, "") || player?.gamerTag || (uid ? uid.slice(0, 12) : null),
+    avatarUrl: player?.avatarUrl ?? null,
+    position: typeof data.position === "number" ? data.position : null,
+    source,
+  };
+}
+
 /**
- * Reads the published knockout bracket for a public tournament page. Returns
- * null before the league closes, when no round has been published, or when
- * Firestore is unavailable. Never throws.
+ * Reads the generated knockout bracket for a public tournament page. Returns
+ * null before the bracket exists or when Firestore is unavailable. Never throws.
  */
 export async function getPublicKnockout(
   tournamentId: string,
@@ -153,39 +193,15 @@ export async function getPublicKnockout(
       return null;
     }
 
-    const standingsByUid = new Map<
-      string,
-      { readonly gamerTag: string; readonly avatarUrl: string | null; readonly band: StandingBand }
-    >();
+    const players = new Map<string, PlayerDirectoryEntry>();
 
     for (const document of standingsSnapshot.docs) {
       const data = document.data();
 
-      standingsByUid.set(document.id, {
+      players.set(document.id, {
         gamerTag: readText(data.gamerTag, document.id.slice(0, 12) || "Player"),
         avatarUrl: typeof data.avatarUrl === "string" ? data.avatarUrl : null,
-        band: readBand(data.band),
       });
-    }
-
-    const tagsByUid = new Map<string, string>();
-
-    for (const document of tiesSnapshot.docs) {
-      const data = document.data();
-
-      if (typeof data.higherSeedUid === "string") {
-        tagsByUid.set(
-          data.higherSeedUid,
-          readText(data.higherSeedTag, data.higherSeedUid.slice(0, 12) || "Player"),
-        );
-      }
-
-      if (typeof data.lowerSeedUid === "string") {
-        tagsByUid.set(
-          data.lowerSeedUid,
-          readText(data.lowerSeedTag, data.lowerSeedUid.slice(0, 12) || "Player"),
-        );
-      }
     }
 
     const matchesByTie = new Map<string, PublicKnockoutMatch[]>();
@@ -215,20 +231,17 @@ export async function getPublicKnockout(
       matchesByTie.set(data.tieId, list);
     }
 
-    const tiesByRound = new Map<KnockoutRound, PublicKnockoutTie[]>();
+    const ties: PublicKnockoutTie[] = [];
 
     for (const document of tiesSnapshot.docs) {
       const data = document.data();
       const round = readRound(data.round);
-      const higherSeedPosition = readSeedPosition(data.higherSeedPosition);
-      const lowerSeedPosition = readSeedPosition(data.lowerSeedPosition);
 
-      if (!round || higherSeedPosition === null || lowerSeedPosition === null) {
+      if (!round) {
         continue;
       }
 
       const tieId = readText(data.tieId, document.id);
-      const list = tiesByRound.get(round) ?? [];
       const aggregate =
         typeof data.aggregate === "object" && data.aggregate !== null
           ? {
@@ -243,29 +256,20 @@ export async function getPublicKnockout(
               lower: readNumber((data.penalties as Record<string, unknown>).lower),
             }
           : null;
+      const status = readTieStatus(data.status);
 
-      list.push({
+      ties.push({
         tieId,
         round,
         bracketSlot: readNumber(data.bracketSlot),
         legs: data.legs === 1 ? 1 : 2,
-        higherSeedTag: readText(
-          data.higherSeedTag,
-          tagsByUid.get(readText(data.higherSeedUid, "")) ?? "Player",
-        ),
-        higherSeedPosition,
-        lowerSeedTag: readText(
-          data.lowerSeedTag,
-          tagsByUid.get(readText(data.lowerSeedUid, "")) ?? "Player",
-        ),
-        lowerSeedPosition,
-        higherSeedUid: readText(data.higherSeedUid, ""),
-        lowerSeedUid: readText(data.lowerSeedUid, ""),
         group:
           data.group === "A" || data.group === "B" || data.group === "C" || data.group === "D"
             ? data.group
             : null,
-        status: readTieStatus(data.status),
+        higher: readSlot(data.higher, players),
+        lower: readSlot(data.lower, players),
+        status,
         aggregate,
         legsPlayed: readNumber(data.legsPlayed),
         winnerUid: typeof data.winnerUid === "string" ? data.winnerUid : null,
@@ -278,19 +282,23 @@ export async function getPublicKnockout(
         deciderNote: typeof data.deciderNote === "string" ? data.deciderNote : null,
         penalties,
         matches: (matchesByTie.get(tieId) ?? []).sort((a, b) => a.leg - b.leg),
+        complete: status === "completed" && typeof data.winnerUid === "string",
       });
-      tiesByRound.set(round, list);
+    }
+
+    if (ties.length === 0) {
+      return null;
     }
 
     const rounds = KNOCKOUT_ROUNDS.flatMap((round): PublicKnockoutRound[] => {
-      const ties = (tiesByRound.get(round) ?? []).sort((a, b) => a.bracketSlot - b.bracketSlot);
+      const roundTies = ties
+        .filter((tie) => tie.round === round)
+        .sort((a, b) => a.bracketSlot - b.bracketSlot);
 
-      return ties.length === 0 ? [] : [{ round, label: KNOCKOUT_ROUND_LABELS[round], ties }];
+      return roundTies.length === 0
+        ? []
+        : [{ round, label: KNOCKOUT_ROUND_LABELS[round], ties: roundTies }];
     });
-
-    if (rounds.length === 0) {
-      return null;
-    }
 
     const qualifiers = standingsSnapshot.docs
       .map((document): PublicKnockoutQualifier | null => {
@@ -311,42 +319,33 @@ export async function getPublicKnockout(
       .filter((row): row is PublicKnockoutQualifier => row !== null)
       .sort((a, b) => a.position - b.position);
 
-    const finalRound = tiesByRound.get("final") ?? [];
-    const finalTie = finalRound.length === 1 ? (finalRound[0] as PublicKnockoutTie) : null;
-    const finalData =
-      finalTie === null
-        ? null
-        : (tiesSnapshot.docs.find((document) => document.data().round === "final")?.data() ?? null);
+    const tournamentData = tournamentSnapshot.data() ?? {};
     const championUid =
-      finalTie && finalTie.status === "completed" && finalTie.winnerUid ? finalTie.winnerUid : null;
+      typeof tournamentData.championUid === "string" ? tournamentData.championUid : null;
     const runnerUpUid =
-      championUid && finalData && typeof finalData.higherSeedUid === "string"
-        ? championUid === finalData.higherSeedUid
-          ? readText(finalData.lowerSeedUid, "")
-          : readText(finalData.higherSeedUid, "")
-        : null;
+      typeof tournamentData.runnerUpUid === "string" ? tournamentData.runnerUpUid : null;
 
     function participant(uid: string | null): PublicKnockoutParticipant | null {
       if (!uid) {
         return null;
       }
 
-      const standing = standingsByUid.get(uid);
+      const player = players.get(uid);
 
       return {
         uid,
-        gamerTag: standing?.gamerTag ?? tagsByUid.get(uid) ?? "Player",
-        avatarUrl: standing?.avatarUrl ?? null,
+        gamerTag: player?.gamerTag ?? (uid.slice(0, 12) || "Player"),
+        avatarUrl: player?.avatarUrl ?? null,
       };
     }
 
-    const tournamentData = tournamentSnapshot.data() ?? {};
-
     return {
       rounds,
+      ties,
       qualifiers,
       champion: participant(championUid),
       runnerUp: participant(runnerUpUid),
+      legs: tournamentData.knockoutLegs === 1 ? 1 : tournamentData.knockoutLegs === 2 ? 2 : null,
       leagueClosed: Boolean(tournamentData.leaguePhaseClosedAt),
       completed: tournamentData.status === "completed" || tournamentData.status === "archived",
     };

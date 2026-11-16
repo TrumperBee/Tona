@@ -8,9 +8,9 @@ import type { Timestamp } from "firebase/firestore";
 import type { TournamentFormatId } from "@/lib/config/formats";
 import type { GameId, PlatformId } from "@/lib/config/games";
 import type {
-  KnockoutConfig,
   KnockoutDecidedBy,
   KnockoutLegs,
+  KnockoutSlot,
   PlayoffGroup,
 } from "@/lib/engine/knockout/types";
 import type {
@@ -384,12 +384,17 @@ export interface TournamentDocument {
   readonly tiebreakerProfile?: TiebreakerProfile;
   /** Last successful full rebuild of the 36 standings documents. */
   readonly standingsUpdatedAt?: Timestamp | null;
-  /** Set when the organiser closes the league phase and the bracket may be drawn. */
+  /** Set when the whole knockout bracket is generated and the table is frozen. */
   readonly leaguePhaseClosedAt?: Timestamp | null;
-  /** Per-round leg counts. The final is always one match. */
-  readonly knockoutConfig?: KnockoutConfig | null;
-  /** Rounds whose ties have been published, in bracket order. */
-  readonly knockoutRounds?: readonly StageType[];
+  /** Leg count chosen for every round before the final; the final is one match. */
+  readonly knockoutLegs?: KnockoutLegs | null;
+  /** The server-generated draw seed; replaying it reproduces the bracket. */
+  readonly knockoutSeed?: string | null;
+  /** Bumped whenever the bracket algorithm changes in a replay-breaking way. */
+  readonly knockoutAlgorithmVersion?: number | null;
+  /** Canonical SHA-256 of the generated bracket, re-checked on integrity reads. */
+  readonly knockoutBracketHash?: string | null;
+  readonly knockoutGeneratedAt?: Timestamp | null;
   readonly championUid?: string | null;
   readonly runnerUpUid?: string | null;
   readonly completedAt?: Timestamp | null;
@@ -618,19 +623,24 @@ export interface StandingDocument {
   readonly updatedAt: Timestamp;
 }
 
+/** One side of a stored knockout tie: its bracket reference plus any known player. */
+export interface KnockoutTieSlotDocument {
+  /** `seed` for a league position, `winnerOf` for the tie that feeds this slot. */
+  readonly ref: KnockoutSlot;
+  readonly uid: string | null;
+  readonly gamerTag: string | null;
+  readonly position: number | null;
+}
+
 export interface KnockoutTieDocument {
   readonly tieId: string;
-  readonly round: StageType;
+  /** Never `league`; every knockout round is generated at once. */
+  readonly round: Exclude<StageType, "league">;
   readonly bracketSlot: number;
   readonly legs: KnockoutLegs;
-  readonly higherSeedUid: string;
-  readonly higherSeedTag: string;
-  readonly higherSeedPosition: number;
-  readonly lowerSeedUid: string;
-  readonly lowerSeedTag: string;
-  readonly lowerSeedPosition: number;
+  readonly higher: KnockoutTieSlotDocument;
+  readonly lower: KnockoutTieSlotDocument;
   readonly group: PlayoffGroup | null;
-  readonly sourceTieIds: readonly string[];
   readonly status: KnockoutTieStatus;
   readonly aggregate: {
     readonly higherGoals: number;
@@ -646,36 +656,6 @@ export interface KnockoutTieDocument {
     readonly lower: number;
   } | null;
   readonly updatedAt: Timestamp;
-}
-
-/** One tie in an unpublished knockout draft; there are no results yet. */
-export interface KnockoutDraftTie {
-  readonly tieId: string;
-  readonly bracketSlot: number;
-  readonly legs: KnockoutLegs;
-  readonly higherSeedUid: string;
-  readonly higherSeedTag: string;
-  readonly higherSeedPosition: number;
-  readonly lowerSeedUid: string;
-  readonly lowerSeedTag: string;
-  readonly lowerSeedPosition: number;
-  readonly group: PlayoffGroup | null;
-  readonly sourceTieIds: readonly string[];
-}
-
-/** Private draft for one knockout round, `tournaments/{id}/knockoutDrafts/{round}`. */
-export interface KnockoutDraftDocument {
-  readonly round: StageType;
-  readonly seed: string;
-  readonly legs: KnockoutLegs;
-  readonly ties: readonly KnockoutDraftTie[];
-  readonly generatedBy: string;
-  readonly generatedAt: Timestamp;
-  readonly generationCount: number;
-  readonly validation: {
-    readonly valid: boolean;
-    readonly issues: readonly { readonly code: string; readonly message: string }[];
-  };
 }
 
 export interface TournamentAnnouncementDocument {

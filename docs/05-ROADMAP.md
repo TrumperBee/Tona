@@ -24,8 +24,8 @@
 | 9   | Pot allocation (manual + shuffle)                  | Plain pots (no country restrictions), seeded draw, admin shuffle, audit trail                                            | Done        |
 | 10  | Fixture engine                                     | Pure constraint-based generator, validator, matchdays, fixture UI                                                        | Done        |
 | 11  | Admin result entry, corrections and result reports | Admin-only score entry, corrections with reason and audit, player "Report a problem" channel                             | Done        |
-| 12  | Standings                                          | Pure standings calculation, tiebreakers, snapshots, qualification bands                                                  | Not started |
-| 13  | Knockout stages                                    | Play-off pairings, bracket, progression, final                                                                           | Not started |
+| 12  | Standings                                          | Pure standings calculation, tiebreakers, snapshots, qualification bands                                                  | Done        |
+| 13  | Knockout stages                                    | One-action bracket generation, seeded play-offs, automatic progression, visual bracket                                   | Done        |
 | 14  | WhatsApp contact                                   | E.164 handling, templates, click-to-chat links, reminders                                                                | Not started |
 | 15  | Graphics                                           | HTML/SVG templates for fixtures, results, standings, shareable profile card; PNG export                                  | Not started |
 | 16  | Email notifications                                | Email delivery and preferences; the in-app inbox and bell shipped with Phase 6                                           | Not started |

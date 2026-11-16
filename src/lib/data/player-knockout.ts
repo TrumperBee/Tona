@@ -1,15 +1,17 @@
 // GCC - a signed-in player's knockout status.
 //
 // Server-only. For every entered tournament in or past the knockout, this
-// module finds the player's latest tie and reports an honest outcome: still
-// alive, waiting for the next draw, eliminated, runner-up or champion. Nothing
-// is inferred from a bracket the server has not published.
+// module reads the generated bracket and reports an honest outcome: still
+// alive, waiting for a dependent tie to fill, eliminated, runner-up or
+// champion. The bracket is written in one server action, so a direct qualifier
+// has a Round-of-16 tie whose opponent is still a placeholder.
 import "server-only";
 
 import { KNOCKOUT_ROUND_LABELS, KNOCKOUT_ROUNDS, type KnockoutRound } from "@/lib/engine/knockout";
 import type { StandingBand } from "@/lib/engine/standings/types";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
+import { slotSourceLabel } from "@/lib/tournament/knockout";
 import type { KnockoutTieStatus, TournamentStatus } from "@/types/domain";
 
 const KNOCKOUT_STATUSES: readonly TournamentStatus[] = ["knockout", "completed", "archived"];
@@ -31,7 +33,10 @@ export interface PlayerKnockoutStatus {
   readonly outcome: PlayerKnockoutOutcome;
   readonly round: KnockoutRound | null;
   readonly roundLabel: string | null;
+  readonly tieId: string | null;
   readonly opponentTag: string | null;
+  /** Placeholder shown when the opponent slot is not decided yet. */
+  readonly opponentSource: string | null;
   readonly tieStatus: KnockoutTieStatus | null;
   /** Goals scored by the player in the latest tie, never the raw higher/lower aggregate. */
   readonly goalsFor: number | null;
@@ -64,6 +69,34 @@ function readRound(value: unknown): KnockoutRound | null {
 
 function roundIndex(round: KnockoutRound): number {
   return KNOCKOUT_ROUNDS.indexOf(round);
+}
+
+interface SlotData {
+  readonly uid: string | null;
+  readonly gamerTag: string | null;
+  readonly position: number | null;
+  readonly source: string;
+}
+
+function readSlot(value: unknown): SlotData {
+  const data =
+    typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+  const ref =
+    typeof data.ref === "object" && data.ref !== null ? (data.ref as Record<string, unknown>) : {};
+  const uid = typeof data.uid === "string" && data.uid.length > 0 ? data.uid : null;
+  const source =
+    ref.type === "seed" && typeof ref.seed === "number"
+      ? slotSourceLabel({ type: "seed", seed: ref.seed })
+      : ref.type === "winnerOf" && typeof ref.tieId === "string"
+        ? slotSourceLabel({ type: "winnerOf", tieId: ref.tieId })
+        : "To be decided";
+
+  return {
+    uid,
+    gamerTag: typeof data.gamerTag === "string" && data.gamerTag.length > 0 ? data.gamerTag : null,
+    position: typeof data.position === "number" ? data.position : null,
+    source,
+  };
 }
 
 export async function getPlayerKnockoutStatus(uid: string): Promise<PlayerKnockoutStatus[]> {
@@ -114,20 +147,27 @@ export async function getPlayerKnockoutStatus(uid: string): Promise<PlayerKnocko
         }
 
         const playerTies = tiesSnapshot.docs
-          .map((document) => ({ id: document.id, data: document.data() }))
+          .map((document) => {
+            const data = document.data();
+
+            return {
+              id: document.id,
+              data,
+              round: readRound(data.round),
+              higher: readSlot(data.higher),
+              lower: readSlot(data.lower),
+            };
+          })
           .filter(
-            (tie) =>
-              tie.data.higherSeedUid === uid ||
-              tie.data.lowerSeedUid === uid ||
-              tie.data.winnerUid === uid,
-          )
-          .map((tie) => ({
-            ...tie,
-            round: readRound(tie.data.round),
-          }))
-          .filter(
-            (tie): tie is { id: string; data: Record<string, unknown>; round: KnockoutRound } =>
-              tie.round !== null,
+            (
+              tie,
+            ): tie is {
+              id: string;
+              data: Record<string, unknown>;
+              round: KnockoutRound;
+              higher: SlotData;
+              lower: SlotData;
+            } => tie.round !== null && (tie.higher.uid === uid || tie.lower.uid === uid),
           )
           .sort((a, b) => {
             const roundDelta = roundIndex(b.round) - roundIndex(a.round);
@@ -155,7 +195,9 @@ export async function getPlayerKnockoutStatus(uid: string): Promise<PlayerKnocko
             outcome: band === "eliminated" ? "eliminated" : "qualified_waiting",
             round: null,
             roundLabel: null,
+            tieId: null,
             opponentTag: null,
+            opponentSource: null,
             tieStatus: null,
             goalsFor: null,
             goalsAgainst: null,
@@ -165,7 +207,9 @@ export async function getPlayerKnockoutStatus(uid: string): Promise<PlayerKnocko
           };
         }
 
-        const isHigher = latest.data.higherSeedUid === uid;
+        const isHigher = latest.higher.uid === uid;
+        const own = isHigher ? latest.higher : latest.lower;
+        const other = isHigher ? latest.lower : latest.higher;
         const tieStatus: KnockoutTieStatus =
           latest.data.status === "in_progress" ||
           latest.data.status === "needs_decider" ||
@@ -186,21 +230,20 @@ export async function getPlayerKnockoutStatus(uid: string): Promise<PlayerKnocko
         const nextMatch = (matchesByTie.get(latest.id) ?? [])
           .filter((match) => match.status !== "completed")
           .sort((a, b) => a.leg - b.leg)[0];
-        const opponentTag = readText(
-          latest.data[isHigher ? "lowerSeedTag" : "higherSeedTag"],
-          "Opponent",
-        );
         const shared = {
           ...base,
           round: latest.round,
           roundLabel: KNOCKOUT_ROUND_LABELS[latest.round],
-          opponentTag,
+          tieId: latest.id,
+          opponentTag: other.uid ? other.gamerTag : null,
+          opponentSource: other.uid ? null : other.source,
           tieStatus,
           goalsFor,
           goalsAgainst,
           played: readNumber(latest.data.legsPlayed),
           nextMatchId: nextMatch?.id ?? null,
           nextLeg: nextMatch?.leg ?? null,
+          position: own.position,
         } as const;
 
         if (tieStatus !== "completed") {

@@ -1546,21 +1546,24 @@ so seeds 1 and 2 can only meet in the final. Quarter-finals and semi-finals pair
 bracket slots, and the final is always one leg. Draws are pure functions of a
 server-generated seed; the client never supplies a tie, seed or match id.
 
-Generated rounds are stored as private `knockoutDrafts/{round}` documents and only become
-public `knockoutTies/{tieId}` plus leg match documents on publish. Every draft is replayed
-through an independent validator that re-derives counts, group pairing, direct-qualifier
-placement and the bracket path. A round can be redrawn only before it is published, and
-an unpublished draft can be reset while a published one is immutable.
+Generated rounds are no longer drafted and published one at a time. Since 13C
+(ADR-069) a single generate action writes all 23 `knockoutTies/{tieId}` documents plus
+the matches whose participants are known; later ties carry `winnerOf` references and are
+filled by ordinary result transactions. Every generated bracket is replayed through an
+independent validator that re-derives counts, group pairing, direct-qualifier placement
+and the bracket path.
 
 **Consequences.**
 
 - There is no away-goals rule. A tie level on aggregate after all legs is stored as
   `needs_decider`; the organiser records the winner, method (`extra_time` or `penalties`),
   an optional note and, for penalties, a consistent penalty score.
-- Closing the league phase freezes the table: `provisional` becomes false for every row
-  and knockout results never rebuild standings.
+- Generating the knockout stage freezes the table: `provisional` becomes false for every
+  row and knockout results never rebuild standings.
 - Result entry and correction dispatch to `knockout-results.ts`, which recomputes the tie
-  from its legs in one transaction and locks a round once the next round is published.
+  from its legs in one transaction, writes the winner into every dependent slot, and
+  refuses a correction or clear while any transitively dependent tie already holds a
+  result.
 - `npm run simulate` runs the same end-to-end runner as the integration test against the
   emulators and prints the per-round summary, so the full path stays verifiable.
 
@@ -1717,3 +1720,54 @@ measures accessibility 100 on the public home page once the contrast and label f
 applied; performance is CPU-bound framework hydration (desktop preset 87, mobile 65-72
 under 4x throttling on a busy 4-core workstation) and must be re-measured on an idle device
 before being treated as a regression.
+
+---
+
+## ADR-069 - One generate action builds the bracket and results advance it
+
+**Date:** 2026-11-16
+**Status:** Accepted
+
+**Context.** Phase 13 first shipped a per-round knockout workflow: close the league, draw
+a private draft, publish the round, play it, repeat, then complete manually. That meant
+five organiser actions per round, a `knockoutDrafts` collection, a second published copy
+of each tie, and a set of failure states between "drawn" and "published" that nobody could
+see. It also allowed a published round to become inconsistent with a later correction.
+
+**Decision.** The organiser gets ONE setup action, "Generate knockout stage". It is
+enabled only when all 144 league results exist and the tournament is in `league_phase`. On
+confirm the server re-reads the results, rebuilds and freezes the standings
+(`provisional: false`), moves the tournament to `knockout`, replays a crypto seed through
+the pure engine, validates the whole bracket independently, and writes all 23 ties in one
+transaction. Only ties whose participants are already known get match documents; every
+later tie stores `{ type: "seed", seed }` or `{ type: "winnerOf", tieId }` slot references.
+The transaction also stores `knockoutLegs`, `knockoutSeed`, `knockoutAlgorithmVersion` and
+`knockoutBracketHash`, notifies all 36 players in chunks and writes an audit entry. A
+second generate call returns the stored summary without writing.
+
+Every enter, correct, clear and decider transaction resolves the affected tie and writes
+its winner into every dependent slot. A tie whose two sides are both known gets its leg
+matches created automatically. A correction or clear is refused while any transitively
+dependent tie already holds a result, and the message names the blocking tie. If a
+correction changes the winner, dependent matches that still have no result are deleted and
+rebuilt; a result that already exists in a later round is never rewritten silently.
+Completing the final writes `championUid`, `runnerUpUid`, `completedAt` and status
+`completed` inside the same transaction, then notifies and audits. Nothing is clock-driven
+and there is no manual complete step.
+
+An unplayed bracket can be discarded with `POST knockout/reset` and a reason. Reset is
+refused once any knockout result exists, because the bracket is the record of the draw.
+
+**Consequences.**
+
+- There is one bracket document per tie, not a draft plus a published copy. The public and
+  organiser surfaces read the same data, and an empty bracket is an honest empty state.
+- The drawing and the bracket path live in `buildKnockoutBracket`; `validateBracket` is
+  separate and re-derives structure, so a generator bug cannot validate itself.
+- Later rounds never carry a stale participant: they resolve from slot references on every
+  read and are rewritten only inside the result transaction that changed their source.
+- The stored aggregate and penalty score are keyed by the structural `higher`/`lower`
+  slot, and the better-ranked participant is derived when the tie resolves, so the bracket
+  stays correct even when a later-round top slot holds the worse-ranked player.
+- Tests can drive one generate call and then only the ordinary result routes, which is
+  what `npm run simulate` and the integration suite do for one- and two-legged brackets.

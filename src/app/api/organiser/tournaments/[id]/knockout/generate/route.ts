@@ -1,14 +1,15 @@
-// GCC - draw one knockout round into a private draft.
+// GCC - generate the complete knockout bracket.
 //
-// POST /api/organiser/tournaments/[id]/knockout/draw
-// Body: { round, legs? }. Re-drawing before publication is how the organiser
-// changes the leg count for a round. A published round is immutable.
+// POST /api/organiser/tournaments/[id]/knockout/generate
+// Body: { legs }. The server re-reads the 144 league results, freezes the table,
+// draws and validates all 23 ties and creates the matches whose participants
+// are already known. Calling it twice returns the stored bracket.
 import { NextResponse, type NextRequest } from "next/server";
 
 import { guardOrganiserMutation } from "@/lib/organiser/route-guard";
-import { drawKnockoutRound } from "@/lib/tournament/knockout";
+import { generateKnockoutStage } from "@/lib/tournament/knockout";
 import { tournamentErrorResponse } from "@/lib/tournament/route-errors";
-import { knockoutDrawSchema } from "@/lib/validation/knockout";
+import { knockoutGenerateSchema } from "@/lib/validation/knockout";
 
 export const runtime = "nodejs";
 
@@ -17,7 +18,7 @@ interface RouteContext {
 }
 
 export async function POST(request: NextRequest, context: RouteContext): Promise<NextResponse> {
-  const guard = await guardOrganiserMutation(request, "knockout-draw", 10, 60);
+  const guard = await guardOrganiserMutation(request, "knockout-generate", 5, 60);
 
   if (!guard.ok) {
     return guard.response;
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest, context: RouteContext): Promise
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const parsed = knockoutDrawSchema.safeParse(body);
+  const parsed = knockoutGenerateSchema.safeParse(body);
 
   if (!parsed.success) {
     return tournamentErrorResponse(parsed.error);
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest, context: RouteContext): Promise
   }
 
   try {
-    const result = await drawKnockoutRound(id, parsed.data.round, parsed.data.legs);
+    const result = await generateKnockoutStage(id, parsed.data.legs);
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {
     return tournamentErrorResponse(error);

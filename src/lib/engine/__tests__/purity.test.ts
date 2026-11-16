@@ -15,7 +15,6 @@ const ENGINE_FILES = [
   "fixtures/validate.ts",
   "knockout/bracket.ts",
   "knockout/index.ts",
-  "knockout/playoffs.ts",
   "knockout/types.ts",
   "standings/calculate.ts",
   "standings/index.ts",

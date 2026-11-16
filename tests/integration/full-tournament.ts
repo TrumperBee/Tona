@@ -1,16 +1,18 @@
-// GCC - shared full-tournament simulator for Phase 13.
+// GCC - shared full-tournament simulator for Phase 13C.
 //
 // It drives the real route handlers against the Firebase emulators: shuffles and
 // confirms the draw, generates and publishes the 144 league fixtures, records
-// every league result in bulk, closes the league, then draws, publishes and
-// plays every knockout round (including any decider) before completing the
-// tournament. The knockout integration test uses it as its end-to-end case and
-// `npm run simulate` uses the same runner to print a readable summary.
+// every league result in bulk, then takes the single "generate knockout stage"
+// action. After that every knockout leg is entered through the ordinary result
+// routes, which advance the winner and create the next matches automatically,
+// until the final completes the tournament. The knockout integration test uses
+// it as its end-to-end case and `npm run simulate` prints the same summary.
 //
 // The caller must mock `next/headers` (session cookie) before importing this
 // module. Route handlers are imported dynamically so that mock is in place.
 import { NextRequest } from "next/server";
 
+import { KNOCKOUT_ROUNDS, KNOCKOUT_ROUND_TIE_COUNTS } from "@/lib/engine/knockout";
 import { getFirebaseAdminAuth, getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 
@@ -19,14 +21,7 @@ const PLAYER_COUNT = 36;
 const LEAGUE_MATCH_TOTAL = 144;
 const LEAGUE_MATCHDAY_COUNT = 8;
 const BULK_BATCH_SIZE = 18;
-const KNOCKOUT_ROUNDS = ["playoff", "r16", "qf", "sf", "final"] as const;
-const KNOCKOUT_TIE_COUNTS: Readonly<Record<string, number>> = {
-  playoff: 8,
-  r16: 8,
-  qf: 4,
-  sf: 2,
-  final: 1,
-};
+const KNOCKOUT_TIE_TOTAL = 23;
 
 export type SimulationRound = (typeof KNOCKOUT_ROUNDS)[number];
 
@@ -36,18 +31,33 @@ export interface SimulationUser {
   readonly gamerTag: string;
 }
 
+export interface SimulationSlotRef {
+  readonly type: string;
+  readonly seed: number | null;
+  readonly tieId: string | null;
+}
+
+export interface SimulationSlot {
+  readonly uid: string | null;
+  readonly gamerTag: string | null;
+  readonly position: number | null;
+  /** The structural source of the slot: a league seed or a feeding tie. */
+  readonly ref: SimulationSlotRef;
+  /** Placeholder label before the slot resolves, e.g. "Winner of P4". */
+  readonly source: string;
+}
+
 export interface SimulationTie {
   readonly tieId: string;
   readonly round: SimulationRound;
   readonly bracketSlot: number;
-  readonly legs: number;
-  readonly higherSeedUid: string;
-  readonly lowerSeedUid: string;
-  readonly higherSeedPosition: number;
-  readonly lowerSeedPosition: number;
+  readonly legs: 1 | 2;
   readonly group: string | null;
+  readonly higher: SimulationSlot;
+  readonly lower: SimulationSlot;
   readonly status: string;
   readonly winnerUid: string | null;
+  readonly legsPlayed: number;
 }
 
 export interface SimulationDecider {
@@ -70,6 +80,9 @@ export interface FullTournamentSummary {
   readonly playerCount: number;
   readonly leagueMatches: number;
   readonly leagueResults: number;
+  readonly legs: 1 | 2;
+  readonly seed: string;
+  readonly bracketHash: string;
   readonly championUid: string;
   readonly championTag: string;
   readonly runnerUpUid: string;
@@ -85,6 +98,8 @@ export interface FullTournamentOptions {
   readonly slug?: string;
   readonly name?: string;
   readonly seed?: number;
+  /** Legs used for every round before the final. The final is always one. */
+  readonly legs?: 1 | 2;
   readonly setSession: (cookie: string) => void;
   readonly log?: (line: string) => void;
 }
@@ -342,9 +357,9 @@ export async function createSimulationTournament(options: {
 }
 
 /**
- * Seeds a league table and 144 match documents directly. Used by prerequisite
- * tests that need a closed or nearly closed league without replaying 144 route
- * calls. `completedMatches` controls how many rows carry a result.
+ * Seeds 144 league match documents directly. Used by prerequisite tests that
+ * need a complete or nearly complete league without replaying 144 route calls.
+ * `completedMatches` controls how many rows carry a result.
  */
 export async function seedLeagueState(options: {
   readonly tournamentId: string;
@@ -389,46 +404,6 @@ export async function seedLeagueState(options: {
     );
   }
 
-  const bands = (position: number) =>
-    position <= 8
-      ? "direct"
-      : position <= 16
-        ? "playoff_seeded"
-        : position <= 24
-          ? "playoff_unseeded"
-          : "eliminated";
-
-  for (let index = 0; index < PLAYER_COUNT; index += 1) {
-    const position = index + 1;
-
-    batch.set(firestore.doc(paths.tournamentStanding(options.tournamentId, playerUid(index))), {
-      tournamentId: options.tournamentId,
-      gamerTag: playerTag(index),
-      avatarUrl: null,
-      lot: index + 1,
-      played: 8,
-      won: Math.max(0, 8 - index),
-      drawn: 0,
-      lost: Math.min(8, index),
-      goalsFor: Math.max(0, 20 - index),
-      goalsAgainst: index,
-      goalDifference: Math.max(0, 20 - index) - index,
-      points: Math.max(0, (8 - index) * 3),
-      awayGoals: Math.max(0, 10 - index),
-      wins: Math.max(0, 8 - index),
-      awayWins: Math.max(0, 4 - Math.floor(index / 2)),
-      opponentPoints: 0,
-      opponentGoalDifference: 0,
-      opponentGoalsFor: 0,
-      form: [],
-      position,
-      separatedBy: null,
-      band: bands(position),
-      provisional: true,
-      updatedAt: now,
-    });
-  }
-
   await batch.commit();
 }
 
@@ -445,104 +420,247 @@ export async function clearRateLimits(): Promise<void> {
   await batch.commit();
 }
 
+function shortTieLabel(tieId: string): string {
+  const playoff = /^playoff-([a-d])(\d)$/.exec(tieId);
+
+  if (playoff) {
+    return `P${(playoff[1] ?? "").toUpperCase()}${playoff[2] ?? ""}`;
+  }
+
+  if (tieId === "final-1") {
+    return "Final";
+  }
+
+  const other = /^(r16|qf|sf)-(\d+)$/.exec(tieId);
+
+  if (other) {
+    return `${other[1] === "r16" ? "R16" : (other[1] ?? "").toUpperCase()} ${other[2] ?? ""}`;
+  }
+
+  return tieId;
+}
+
+function readSlot(value: unknown): SimulationSlot {
+  const data =
+    typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+  const ref =
+    typeof data.ref === "object" && data.ref !== null ? (data.ref as Record<string, unknown>) : {};
+
+  return {
+    uid: typeof data.uid === "string" && data.uid.length > 0 ? data.uid : null,
+    gamerTag: typeof data.gamerTag === "string" && data.gamerTag.length > 0 ? data.gamerTag : null,
+    position: typeof data.position === "number" ? data.position : null,
+    ref: {
+      type: typeof ref.type === "string" ? ref.type : "unknown",
+      seed: typeof ref.seed === "number" ? ref.seed : null,
+      tieId: typeof ref.tieId === "string" ? ref.tieId : null,
+    },
+    source:
+      ref.type === "seed" && typeof ref.seed === "number"
+        ? `Seed ${ref.seed}`
+        : ref.type === "winnerOf" && typeof ref.tieId === "string"
+          ? `Winner of ${shortTieLabel(ref.tieId)}`
+          : "To be decided",
+  };
+}
+
+function toSimulationTie(id: string, data: Record<string, unknown>): SimulationTie {
+  return {
+    tieId: typeof data.tieId === "string" ? data.tieId : id,
+    round: data.round as SimulationRound,
+    bracketSlot: typeof data.bracketSlot === "number" ? data.bracketSlot : 0,
+    legs: data.legs === 1 ? 1 : 2,
+    group: typeof data.group === "string" ? data.group : null,
+    higher: readSlot(data.higher),
+    lower: readSlot(data.lower),
+    status: typeof data.status === "string" ? data.status : "pending",
+    winnerUid: typeof data.winnerUid === "string" ? data.winnerUid : null,
+    legsPlayed: typeof data.legsPlayed === "number" ? data.legsPlayed : 0,
+  };
+}
+
+export async function readKnockoutTies(tournamentId: string): Promise<SimulationTie[]> {
+  const snapshot = await getFirebaseAdminFirestore()
+    .collection(paths.tournamentKnockoutTies(tournamentId))
+    .get();
+
+  return snapshot.docs
+    .map((document) => toSimulationTie(document.id, document.data()))
+    .sort((a, b) => {
+      const roundDelta = KNOCKOUT_ROUNDS.indexOf(a.round) - KNOCKOUT_ROUNDS.indexOf(b.round);
+      return roundDelta !== 0 ? roundDelta : a.bracketSlot - b.bracketSlot;
+    });
+}
+
 export async function readRoundTies(
   tournamentId: string,
   round: SimulationRound,
 ): Promise<SimulationTie[]> {
-  const snapshot = await getFirebaseAdminFirestore()
-    .collection(paths.tournamentKnockoutTies(tournamentId))
-    .where("round", "==", round)
-    .get();
-
-  return snapshot.docs
-    .map((document) => {
-      const data = document.data() as Record<string, unknown>;
-
-      return {
-        tieId: String(data.tieId ?? document.id),
-        round: data.round as SimulationRound,
-        bracketSlot: typeof data.bracketSlot === "number" ? data.bracketSlot : 0,
-        legs: data.legs === 1 ? 1 : 2,
-        higherSeedUid: String(data.higherSeedUid ?? ""),
-        lowerSeedUid: String(data.lowerSeedUid ?? ""),
-        higherSeedPosition:
-          typeof data.higherSeedPosition === "number" ? data.higherSeedPosition : 0,
-        lowerSeedPosition: typeof data.lowerSeedPosition === "number" ? data.lowerSeedPosition : 0,
-        group: typeof data.group === "string" ? data.group : null,
-        status: typeof data.status === "string" ? data.status : "pending",
-        winnerUid: typeof data.winnerUid === "string" ? data.winnerUid : null,
-      } satisfies SimulationTie;
-    })
-    .sort((a, b) => a.bracketSlot - b.bracketSlot);
+  return (await readKnockoutTies(tournamentId)).filter((tie) => tie.round === round);
 }
 
 export async function readTie(tournamentId: string, tieId: string): Promise<SimulationTie> {
   const snapshot = await getFirebaseAdminFirestore()
     .doc(paths.tournamentKnockoutTie(tournamentId, tieId))
     .get();
-  const data = snapshot.data() as Record<string, unknown> | undefined;
 
-  if (!snapshot.exists || !data) {
+  if (!snapshot.exists) {
     throw new Error(`Knockout tie ${tieId} was not found.`);
   }
 
-  return {
-    tieId: String(data.tieId ?? tieId),
-    round: data.round as SimulationRound,
-    bracketSlot: typeof data.bracketSlot === "number" ? data.bracketSlot : 0,
-    legs: data.legs === 1 ? 1 : 2,
-    higherSeedUid: String(data.higherSeedUid ?? ""),
-    lowerSeedUid: String(data.lowerSeedUid ?? ""),
-    higherSeedPosition: typeof data.higherSeedPosition === "number" ? data.higherSeedPosition : 0,
-    lowerSeedPosition: typeof data.lowerSeedPosition === "number" ? data.lowerSeedPosition : 0,
-    group: typeof data.group === "string" ? data.group : null,
-    status: typeof data.status === "string" ? data.status : "pending",
-    winnerUid: typeof data.winnerUid === "string" ? data.winnerUid : null,
-  };
+  return toSimulationTie(tieId, snapshot.data() ?? {});
 }
 
-/** Draws and immediately publishes one round through the real routes. */
-export async function drawAndPublishRound(
+export async function readTieMatches(
   tournamentId: string,
-  round: SimulationRound,
-): Promise<{ readonly ties: number; readonly matches: number }> {
-  const [drawRoute, publishRoute] = await Promise.all([
-    import("@/app/api/organiser/tournaments/[id]/knockout/draw/route"),
-    import("@/app/api/organiser/tournaments/[id]/knockout/publish/route"),
-  ]);
-  const path = `/api/organiser/tournaments/${tournamentId}/knockout`;
-  const drawn = await invoke(drawRoute.POST, buildRequest("POST", `${path}/draw`, { round }), {
-    id: tournamentId,
-  });
+  tieId: string,
+): Promise<{ readonly id: string; readonly leg: number; readonly status: string }[]> {
+  const snapshot = await getFirebaseAdminFirestore()
+    .collection(paths.tournamentMatches(tournamentId))
+    .where("tieId", "==", tieId)
+    .get();
 
-  if (drawn.status !== 200) {
-    throw new Error(
-      `Drawing the ${round} failed (${drawn.status}): ${String(drawn.body.error ?? "")}`,
-    );
-  }
+  return snapshot.docs
+    .map((document) => ({
+      id: document.id,
+      leg: typeof document.data().leg === "number" ? (document.data().leg as number) : 1,
+      status: typeof document.data().status === "string" ? (document.data().status as string) : "",
+    }))
+    .sort((a, b) => a.leg - b.leg);
+}
 
-  const published = await invoke(
-    publishRoute.POST,
-    buildRequest("POST", `${path}/publish`, { round }),
+/** Takes the single knockout generation action through the real route. */
+export async function generateKnockout(
+  tournamentId: string,
+  legs: 1 | 2 = 2,
+): Promise<RouteResult> {
+  const generateRoute =
+    await import("@/app/api/organiser/tournaments/[id]/knockout/generate/route");
+
+  return invoke(
+    generateRoute.POST,
+    buildRequest("POST", `/api/organiser/tournaments/${tournamentId}/knockout/generate`, {
+      legs,
+    }),
     { id: tournamentId },
   );
+}
 
-  if (published.status !== 200) {
-    throw new Error(
-      `Publishing the ${round} failed (${published.status}): ${String(published.body.error ?? "")}`,
-    );
+/** Resets an unplayed bracket through the real route. */
+export async function resetKnockout(
+  tournamentId: string,
+  reason = "Resetting the emulator bracket",
+): Promise<RouteResult> {
+  const resetRoute = await import("@/app/api/organiser/tournaments/[id]/knockout/reset/route");
+
+  return invoke(
+    resetRoute.POST,
+    buildRequest("POST", `/api/organiser/tournaments/${tournamentId}/knockout/reset`, {
+      reason,
+    }),
+    { id: tournamentId },
+  );
+}
+
+export async function enterKnockoutResult(
+  tournamentId: string,
+  matchId: string,
+  homeGoals: number,
+  awayGoals: number,
+): Promise<RouteResult> {
+  const enterRoute = await import("@/app/api/organiser/tournaments/[id]/results/enter/route");
+
+  return invoke(
+    enterRoute.POST,
+    buildRequest("POST", `/api/organiser/tournaments/${tournamentId}/results/enter`, {
+      matchId,
+      homeGoals,
+      awayGoals,
+    }),
+    { id: tournamentId },
+  );
+}
+
+export async function correctKnockoutResult(
+  tournamentId: string,
+  matchId: string,
+  homeGoals: number,
+  awayGoals: number,
+  reason = "Correcting the recorded knockout score",
+): Promise<RouteResult> {
+  const correctRoute = await import("@/app/api/organiser/tournaments/[id]/results/correct/route");
+
+  return invoke(
+    correctRoute.POST,
+    buildRequest("POST", `/api/organiser/tournaments/${tournamentId}/results/correct`, {
+      matchId,
+      homeGoals,
+      awayGoals,
+      reason,
+    }),
+    { id: tournamentId },
+  );
+}
+
+export async function clearKnockoutResult(
+  tournamentId: string,
+  matchId: string,
+  reason = "Clearing the recorded knockout score",
+): Promise<RouteResult> {
+  const clearRoute = await import("@/app/api/organiser/tournaments/[id]/results/clear/route");
+
+  return invoke(
+    clearRoute.POST,
+    buildRequest("POST", `/api/organiser/tournaments/${tournamentId}/results/clear`, {
+      matchId,
+      reason,
+    }),
+    { id: tournamentId },
+  );
+}
+
+export async function decideKnockoutTie(
+  tournamentId: string,
+  tieId: string,
+  body: {
+    readonly winnerUid: string;
+    readonly method: "extra_time" | "penalties";
+    readonly note?: string;
+    readonly penalties?: { readonly higher: number; readonly lower: number };
+  },
+): Promise<RouteResult> {
+  const decideRoute =
+    await import("@/app/api/organiser/tournaments/[id]/knockout/ties/[tieId]/decide/route");
+
+  return invoke(
+    decideRoute.POST,
+    buildRequest(
+      "POST",
+      `/api/organiser/tournaments/${tournamentId}/knockout/ties/${tieId}/decide`,
+      body,
+    ),
+    { id: tournamentId, tieId },
+  );
+}
+
+function betterPlayer(tie: SimulationTie): SimulationSlot {
+  const higher = tie.higher;
+  const lower = tie.lower;
+
+  if (!higher.uid || !lower.uid) {
+    throw new Error(`Tie ${tie.tieId} is missing a participant.`);
   }
 
-  return {
-    ties: Number(published.body.tieCount ?? 0),
-    matches: Number(published.body.matchCount ?? 0),
-  };
+  return (higher.position ?? Number.MAX_SAFE_INTEGER) <= (lower.position ?? Number.MAX_SAFE_INTEGER)
+    ? higher
+    : lower;
 }
 
 /**
- * Plays every leg of a published round, records a decider when a tie is level
- * and returns the deciders it recorded. `forcePenaltyTie` makes the tie in that
+ * Plays every leg of one round, records a decider when a tie is level and
+ * returns the deciders it recorded. `forcePenaltyTie` makes the tie in that
  * bracket slot level on aggregate so the penalties path is always exercised.
+ * Later rounds are created automatically by the previous round's results.
  */
 export async function playKnockoutRound(options: {
   readonly tournamentId: string;
@@ -554,41 +672,44 @@ export async function playKnockoutRound(options: {
   readonly matches: number;
   readonly deciders: SimulationDecider[];
 }> {
-  const [enterRoute, decideRoute] = await Promise.all([
-    import("@/app/api/organiser/tournaments/[id]/results/enter/route"),
-    import("@/app/api/organiser/tournaments/[id]/knockout/ties/[tieId]/decide/route"),
-  ]);
+  await clearRateLimits();
   const ties = await readRoundTies(options.tournamentId, options.round);
+  const expected = KNOCKOUT_ROUND_TIE_COUNTS[options.round];
   const deciders: SimulationDecider[] = [];
   let matches = 0;
 
-  if (ties.length !== KNOCKOUT_TIE_COUNTS[options.round]) {
-    throw new Error(
-      `Expected ${KNOCKOUT_TIE_COUNTS[options.round]} ${options.round} ties, found ${ties.length}.`,
-    );
+  if (ties.length !== expected) {
+    throw new Error(`Expected ${expected} ${options.round} ties, found ${ties.length}.`);
   }
 
   for (const tie of ties) {
-    const level = options.forcePenaltyTie === tie.bracketSlot;
-    const legs = tie.legs;
+    if (!tie.higher.uid || !tie.lower.uid) {
+      throw new Error(`Tie ${tie.tieId} has an unresolved participant.`);
+    }
 
-    for (let leg = 1; leg <= legs; leg += 1) {
-      const matchId = `${tie.tieId}-l${leg}`;
+    const legMatches = await readTieMatches(options.tournamentId, tie.tieId);
+
+    if (legMatches.length !== tie.legs) {
+      throw new Error(
+        `Tie ${tie.tieId} should have ${tie.legs} match document(s), found ${legMatches.length}.`,
+      );
+    }
+
+    const level = options.forcePenaltyTie === tie.bracketSlot;
+
+    for (const match of legMatches) {
       const homeGoals = level ? 0 : Math.floor(options.random() * 4);
       const awayGoals = level ? 0 : Math.floor(options.random() * 4);
-      const entered = await invoke(
-        enterRoute.POST,
-        buildRequest("POST", `/api/organiser/tournaments/${options.tournamentId}/results/enter`, {
-          matchId,
-          homeGoals,
-          awayGoals,
-        }),
-        { id: options.tournamentId },
+      const entered = await enterKnockoutResult(
+        options.tournamentId,
+        match.id,
+        homeGoals,
+        awayGoals,
       );
 
       if (entered.status !== 200) {
         throw new Error(
-          `Entering ${matchId} failed (${entered.status}): ${String(entered.body.error ?? "")}`,
+          `Entering ${match.id} failed (${entered.status}): ${String(entered.body.error ?? "")}`,
         );
       }
 
@@ -598,24 +719,16 @@ export async function playKnockoutRound(options: {
     const stored = await readTie(options.tournamentId, tie.tieId);
 
     if (stored.status === "needs_decider") {
+      const winner = betterPlayer(stored);
       const method = level ? "penalties" : "extra_time";
-      const winnerUid = stored.higherSeedUid;
-      const decided = await invoke(
-        decideRoute.POST,
-        buildRequest(
-          "POST",
-          `/api/organiser/tournaments/${options.tournamentId}/knockout/ties/${tie.tieId}/decide`,
-          {
-            winnerUid,
-            method,
-            note: level
-              ? "Level after two legs; decided on penalties."
-              : "Level after two legs; decided in extra time.",
-            ...(level ? { penalties: { higher: 4, lower: 3 } } : {}),
-          },
-        ),
-        { id: options.tournamentId, tieId: tie.tieId },
-      );
+      const decided = await decideKnockoutTie(options.tournamentId, tie.tieId, {
+        winnerUid: winner.uid as string,
+        method,
+        note: level
+          ? "Level after every leg; decided on penalties."
+          : "Level after every leg; decided in extra time.",
+        ...(level ? { penalties: { higher: 4, lower: 3 } } : {}),
+      });
 
       if (decided.status !== 200) {
         throw new Error(
@@ -627,7 +740,7 @@ export async function playKnockoutRound(options: {
         tieId: tie.tieId,
         round: options.round,
         method,
-        winnerUid,
+        winnerUid: winner.uid as string,
       });
     }
   }
@@ -667,15 +780,15 @@ function standingsFingerprint(
 }
 
 /**
- * Runs the league phase: shuffle and confirm the draw, publish fixtures, enter
- * every league result in bulk and close the table. Returns a fingerprint of the
- * frozen standings so callers can prove knockout results never alter them.
+ * Runs the league phase: shuffle and confirm the draw, publish fixtures and
+ * enter every league result in bulk. The table is frozen later by the single
+ * knockout generation action, not here.
  */
 export async function runLeaguePhase(options: {
   readonly tournamentId: string;
   readonly random: () => number;
   readonly log?: (line: string) => void;
-}): Promise<{ readonly leagueMatches: number; readonly standingsFingerprint: string }> {
+}): Promise<{ readonly leagueMatches: number }> {
   const log = options.log ?? (() => undefined);
   const tournamentId = options.tournamentId;
 
@@ -754,39 +867,13 @@ export async function runLeaguePhase(options: {
 
   log("All 144 league results recorded.");
 
-  const closeRoute =
-    await import("@/app/api/organiser/tournaments/[id]/knockout/close-league/route");
-  const closed = await invoke(
-    closeRoute.POST,
-    buildRequest("POST", `${base}/knockout/close-league`),
-    { id: tournamentId },
-  );
-
-  if (closed.status !== 200) {
-    throw new Error(
-      `Closing the league failed (${closed.status}): ${String(closed.body.error ?? "")}`,
-    );
-  }
-
-  const standingsAfterClose = await firestore
-    .collection(paths.tournamentStandings(tournamentId))
-    .get();
-
-  if (standingsAfterClose.docs.some((document) => document.data().provisional !== false)) {
-    throw new Error("Closing the league left a provisional standings row.");
-  }
-
-  log("League phase closed and the table frozen.");
-
-  return {
-    leagueMatches: leagueMatches.length,
-    standingsFingerprint: standingsFingerprint(standingsAfterClose.docs),
-  };
+  return { leagueMatches: leagueMatches.length };
 }
 
 /**
- * Runs the complete Phase 13 tournament: 36 registrations, a shuffled draw,
- * 144 league results, a closed league and every knockout round.
+ * Runs the complete Phase 13C tournament: 36 registrations, a shuffled draw,
+ * 144 league results, one bracket generation and every knockout round played
+ * until the final completes the tournament automatically.
  */
 export async function runFullTournamentSimulation(
   options: FullTournamentOptions,
@@ -797,6 +884,7 @@ export async function runFullTournamentSimulation(
   const slug = options.slug ?? "simulation-cup";
   const name = options.name ?? "Simulation Cup";
   const random = createRandom(options.seed ?? 20261313);
+  const legs = options.legs ?? 2;
 
   const owner = await createEmulatorUser({
     email: `${slug}-owner@example.com`,
@@ -808,21 +896,38 @@ export async function runFullTournamentSimulation(
   log(`Created ${name} with ${PLAYER_COUNT} registered players.`);
 
   const league = await runLeaguePhase({ tournamentId, random, log });
+
+  await clearRateLimits();
+  const generated = await generateKnockout(tournamentId, legs);
+
+  if (generated.status !== 200) {
+    throw new Error(
+      `Generating the knockout stage failed (${generated.status}): ${String(generated.body.error ?? "")}`,
+    );
+  }
+
+  const seed = String(generated.body.seed ?? "");
+  const firestore = getFirebaseAdminFirestore();
+  const standingsAfterGenerate = await firestore
+    .collection(paths.tournamentStandings(tournamentId))
+    .get();
+  const frozenFingerprint = standingsFingerprint(standingsAfterGenerate.docs);
+
+  if (standingsAfterGenerate.docs.some((document) => document.data().provisional !== false)) {
+    throw new Error("Generating the bracket left a provisional standings row.");
+  }
+  log("Knockout stage generated and the league table frozen.");
+
   const rounds: SimulationRoundSummary[] = [];
 
   for (const round of KNOCKOUT_ROUNDS) {
     await clearRateLimits();
-    const published = await drawAndPublishRound(tournamentId, round);
     const played = await playKnockoutRound({
       tournamentId,
       round,
       random,
       forcePenaltyTie: round === "playoff" ? 1 : undefined,
     });
-
-    if (published.ties !== played.ties || published.matches !== played.matches) {
-      throw new Error(`The published ${round} counts do not match the played counts.`);
-    }
 
     rounds.push({
       round,
@@ -839,21 +944,6 @@ export async function runFullTournamentSimulation(
     );
   }
 
-  const completeRoute =
-    await import("@/app/api/organiser/tournaments/[id]/knockout/complete/route");
-  const completed = await invoke(
-    completeRoute.POST,
-    buildRequest("POST", `/api/organiser/tournaments/${tournamentId}/knockout/complete`, {}),
-    { id: tournamentId },
-  );
-
-  if (completed.status !== 200) {
-    throw new Error(
-      `Completing the tournament failed (${completed.status}): ${String(completed.body.error ?? "")}`,
-    );
-  }
-
-  const firestore = getFirebaseAdminFirestore();
   const tournamentSnapshot = await firestore.doc(paths.tournament(tournamentId)).get();
   const tournament = tournamentSnapshot.data() ?? {};
   const championUid = String(tournament.championUid ?? "");
@@ -868,8 +958,13 @@ export async function runFullTournamentSimulation(
     ]),
   );
   const standingsAfter = await firestore.collection(paths.tournamentStandings(tournamentId)).get();
-  const standingsFrozen = standingsFingerprint(standingsAfter.docs) === league.standingsFingerprint;
+  const standingsFrozen = standingsFingerprint(standingsAfter.docs) === frozenFingerprint;
   const knockoutMatches = rounds.reduce((total, round) => total + round.matches, 0);
+  const ties = await readKnockoutTies(tournamentId);
+
+  if (ties.length !== KNOCKOUT_TIE_TOTAL) {
+    throw new Error(`Expected ${KNOCKOUT_TIE_TOTAL} knockout ties, found ${ties.length}.`);
+  }
 
   if (!championUid || !runnerUpUid || tournament.status !== "completed") {
     throw new Error("The tournament did not finish with a champion and runner-up.");
@@ -881,6 +976,9 @@ export async function runFullTournamentSimulation(
     playerCount: registrationSnapshot.size,
     leagueMatches: league.leagueMatches,
     leagueResults: league.leagueMatches,
+    legs,
+    seed,
+    bracketHash: String(tournament.knockoutBracketHash ?? ""),
     championUid,
     championTag: tags.get(championUid) ?? championUid,
     runnerUpUid,

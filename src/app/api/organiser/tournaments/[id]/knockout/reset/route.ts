@@ -1,14 +1,13 @@
-// GCC - complete the tournament after the final.
+// GCC - reset an unplayed knockout bracket.
 //
-// POST /api/organiser/tournaments/[id]/knockout/complete
-// Records the champion and runner-up, moves the tournament to `completed` and
-// leaves the league table frozen exactly as it was when the league closed.
+// POST /api/organiser/tournaments/[id]/knockout/reset
+// Body: { reason }. Allowed only while no knockout tie or leg has a result.
 import { NextResponse, type NextRequest } from "next/server";
 
 import { guardOrganiserMutation } from "@/lib/organiser/route-guard";
-import { completeTournament } from "@/lib/tournament/knockout";
+import { resetKnockoutStage } from "@/lib/tournament/knockout";
 import { tournamentErrorResponse } from "@/lib/tournament/route-errors";
-import { tournamentCompleteSchema } from "@/lib/validation/knockout";
+import { knockoutResetStageSchema } from "@/lib/validation/knockout";
 
 export const runtime = "nodejs";
 
@@ -17,7 +16,7 @@ interface RouteContext {
 }
 
 export async function POST(request: NextRequest, context: RouteContext): Promise<NextResponse> {
-  const guard = await guardOrganiserMutation(request, "knockout-complete", 5, 60);
+  const guard = await guardOrganiserMutation(request, "knockout-reset", 5, 60);
 
   if (!guard.ok) {
     return guard.response;
@@ -28,10 +27,10 @@ export async function POST(request: NextRequest, context: RouteContext): Promise
   try {
     body = await request.json();
   } catch {
-    body = {};
+    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const parsed = tournamentCompleteSchema.safeParse(body);
+  const parsed = knockoutResetStageSchema.safeParse(body);
 
   if (!parsed.success) {
     return tournamentErrorResponse(parsed.error);
@@ -44,7 +43,7 @@ export async function POST(request: NextRequest, context: RouteContext): Promise
   }
 
   try {
-    const result = await completeTournament(id, parsed.data.reason);
+    const result = await resetKnockoutStage(id, parsed.data.reason);
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {
     return tournamentErrorResponse(error);

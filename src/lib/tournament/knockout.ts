@@ -1,64 +1,79 @@
-// GCC - knockout draw, publication, deciders and completion.
+// GCC - knockout stage generation, reset, deciders and bracket progression.
 //
-// Every mutation re-reads the tournament, the relevant ties and the draft in a
-// single Firestore transaction. The client never supplies a tie, a seed or a
-// match id; the server generates the seed and replays it through the pure
-// engine, then validates the result independently before storing anything.
+// The organiser takes ONE action: "Generate knockout stage". In a single
+// transaction the server re-reads the 144 league results, rebuilds and freezes
+// the standings, proves every result exists, replays a server-generated seed
+// through the pure engine, independently validates the whole 23-tie bracket and
+// writes it. No client ever supplies a tie, a seed, a match id or a participant.
 //
-// The league table is frozen when the league phase closes: later knockout
-// results never rebuild standings.
+// Later rounds are stored as placeholders that name the tie feeding them. A
+// result transaction writes a winner into those slots and creates the dependent
+// matches; nothing is clock-driven and no away-goals rule applies.
 import "server-only";
 
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
-import { FieldValue, Timestamp, type QuerySnapshot } from "firebase-admin/firestore";
+import {
+  FieldValue,
+  Timestamp,
+  type DocumentReference,
+  type DocumentSnapshot,
+  type Firestore,
+  type QueryDocumentSnapshot,
+  type Transaction,
+} from "firebase-admin/firestore";
 
 import { writeAuditLog } from "@/lib/audit/log";
-import { requireTournamentOwnerOrSuperAdmin } from "@/lib/auth/guards";
+import { requireTournamentOwnerOrSuperAdmin, type TournamentAccess } from "@/lib/auth/guards";
 import {
+  advanceBracket,
   applyDecider,
-  buildNextRound,
-  buildPlayoffTies,
-  buildRoundOf16Ties,
-  DEFAULT_KNOCKOUT_CONFIG,
+  awayUidForLeg,
+  buildKnockoutBracket,
+  dependentTieIds,
+  homeUidForLeg,
+  KNOCKOUT_ALGORITHM_VERSION,
   KNOCKOUT_ROUNDS,
   KNOCKOUT_ROUND_LABELS,
-  KNOCKOUT_ROUND_TIE_COUNTS,
-  nextRoundFor,
   resolveTie,
-  validateKnockoutRound,
-  validateProgression,
-  winnerPosition,
-  type KnockoutConfig,
+  validateBracket,
+  type BracketSlot,
+  type BracketTie,
+  type KnockoutBracket,
   type KnockoutDecider,
   type KnockoutLegs,
   type KnockoutMatch,
   type KnockoutPlayer,
   type KnockoutRound,
-  type KnockoutTie,
-  type PlayoffWinner,
+  type KnockoutSlot,
+  type ResolvableTie,
   type TieResolution,
 } from "@/lib/engine";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 import { createNotifications } from "@/lib/notifications";
 import { TournamentMutationError } from "@/lib/tournament/errors";
+import {
+  buildStandingsPlan,
+  readStandingsContextInTransaction,
+  stageStandingsWrites,
+} from "@/lib/tournament/standings";
 import type { KnockoutDecideInput } from "@/lib/validation/knockout";
-import type { KnockoutDraftTie, KnockoutTieDocument, TournamentDocument } from "@/types/domain";
+import type {
+  KnockoutTieDocument,
+  KnockoutTieSlotDocument,
+  TournamentDocument,
+} from "@/types/domain";
 
 const SEED_BYTES = 32;
 const LEAGUE_MATCH_TOTAL = 144;
 const PLAYER_COUNT = 36;
+const TIE_TOTAL = 23;
 
 export const KNOCKOUT_ROUND_ORDER: readonly KnockoutRound[] = KNOCKOUT_ROUNDS;
 
-export function roundIndex(round: KnockoutRound): number {
-  return KNOCKOUT_ROUND_ORDER.indexOf(round);
-}
-
-export function previousKnockoutRound(round: KnockoutRound): KnockoutRound | null {
-  const index = roundIndex(round);
-  return index > 0 ? (KNOCKOUT_ROUND_ORDER[index - 1] ?? null) : null;
+export function isKnockoutRound(value: unknown): value is KnockoutRound {
+  return typeof value === "string" && KNOCKOUT_ROUND_ORDER.includes(value as KnockoutRound);
 }
 
 function newSeed(): string {
@@ -69,113 +84,278 @@ function readText(value: unknown, fallback: string): string {
   return typeof value === "string" && value.length > 0 ? value : fallback;
 }
 
-function isKnockoutRound(value: unknown): value is KnockoutRound {
-  return typeof value === "string" && KNOCKOUT_ROUND_ORDER.includes(value as KnockoutRound);
+function roundIndex(round: KnockoutRound): number {
+  return KNOCKOUT_ROUND_ORDER.indexOf(round);
 }
 
-export function normaliseConfig(value: unknown): KnockoutConfig {
-  const data =
-    typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
-  const leg = (round: KnockoutRound): KnockoutLegs =>
-    data[round] === 1 || data[round] === 2
-      ? (data[round] as KnockoutLegs)
-      : DEFAULT_KNOCKOUT_CONFIG[round];
+/** Short, stable tie name used in messages: "Play-off A1", "R16 3", "Final". */
+export function shortTieLabel(tieId: string): string {
+  const playoff = /^playoff-([a-d])(\d)$/.exec(tieId);
 
-  return {
-    playoff: leg("playoff"),
-    r16: leg("r16"),
-    qf: leg("qf"),
-    sf: leg("sf"),
-    final: 1,
-  };
+  if (playoff) {
+    return `Play-off ${playoff[1]?.toUpperCase()}${playoff[2]}`;
+  }
+
+  if (tieId === "final-1") {
+    return "Final";
+  }
+
+  const other = /^(r16|qf|sf)-(\d+)$/.exec(tieId);
+
+  if (other) {
+    const prefix = other[1] === "r16" ? "R16" : (other[1]?.toUpperCase() ?? "");
+    return `${prefix} ${other[2]}`;
+  }
+
+  return tieId;
 }
 
-interface StoredMatch {
-  readonly result: { readonly homeGoals: number; readonly awayGoals: number } | null;
+/** Human label for a slot that has no known participant yet. */
+export function slotSourceLabel(ref: KnockoutSlot): string {
+  return ref.type === "seed" ? `Seed ${ref.seed}` : `Winner of ${shortTieLabel(ref.tieId)}`;
 }
 
-function readStoredResult(value: unknown): StoredMatch["result"] {
+function readSlotRef(value: unknown): KnockoutSlot | null {
   if (typeof value !== "object" || value === null) {
     return null;
   }
 
   const data = value as Record<string, unknown>;
 
-  return typeof data.homeGoals === "number" && typeof data.awayGoals === "number"
-    ? { homeGoals: data.homeGoals, awayGoals: data.awayGoals }
-    : null;
+  if (data.type === "seed" && typeof data.seed === "number" && Number.isInteger(data.seed)) {
+    return { type: "seed", seed: data.seed };
+  }
+
+  if (data.type === "winnerOf" && typeof data.tieId === "string" && data.tieId.length > 0) {
+    return { type: "winnerOf", tieId: data.tieId };
+  }
+
+  return null;
 }
 
-/** A stored tie plus its persisted status, which the pure engine does not own. */
-export type StoredKnockoutTie = KnockoutTie & {
-  readonly status: KnockoutTieDocument["status"];
-};
+function readSlot(value: unknown): BracketSlot {
+  const data =
+    typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+  const ref = readSlotRef(data.ref) ?? { type: "seed", seed: 0 };
+  const uid =
+    typeof data.uid === "string" && data.uid.length > 0 && typeof data.position === "number"
+      ? data.uid
+      : null;
+  const player: KnockoutPlayer | null =
+    uid && typeof data.position === "number"
+      ? {
+          playerId: uid,
+          position: data.position,
+          gamerTag: typeof data.gamerTag === "string" ? data.gamerTag : undefined,
+        }
+      : null;
 
-function readTieStatus(value: unknown): KnockoutTieDocument["status"] {
-  return value === "in_progress" || value === "needs_decider" || value === "completed"
-    ? value
-    : "pending";
+  return { ref, player };
 }
 
-/** Reads a stored tie document back into the pure engine shape. */
-export function readEngineTie(data: Record<string, unknown>): StoredKnockoutTie {
+export function slotDocument(slot: BracketSlot): KnockoutTieSlotDocument {
   return {
-    tieId: readText(data.tieId, ""),
-    round: isKnockoutRound(data.round) ? data.round : "final",
-    bracketSlot: typeof data.bracketSlot === "number" ? data.bracketSlot : 0,
-    legs: data.legs === 1 ? 1 : 2,
-    higherSeedUid: readText(data.higherSeedUid, ""),
-    lowerSeedUid: readText(data.lowerSeedUid, ""),
-    higherSeedPosition: typeof data.higherSeedPosition === "number" ? data.higherSeedPosition : 0,
-    lowerSeedPosition: typeof data.lowerSeedPosition === "number" ? data.lowerSeedPosition : 0,
-    group:
-      data.group === "A" || data.group === "B" || data.group === "C" || data.group === "D"
-        ? data.group
-        : null,
-    sourceTieIds: Array.isArray(data.sourceTieIds)
-      ? data.sourceTieIds.filter((id): id is string => typeof id === "string")
-      : [],
-    winnerUid: typeof data.winnerUid === "string" ? data.winnerUid : null,
-    winnerPosition: typeof data.winnerPosition === "number" ? data.winnerPosition : null,
-    status: readTieStatus(data.status),
+    ref: slot.ref,
+    uid: slot.player?.playerId ?? null,
+    gamerTag: slot.player?.gamerTag ?? null,
+    position: slot.player?.position ?? null,
   };
 }
 
-/** Reads a stored leg match into the pure engine match shape. */
+function readGroup(value: unknown): BracketTie["group"] {
+  return value === "A" || value === "B" || value === "C" || value === "D" ? value : null;
+}
+
+export interface StoredTie {
+  readonly id: string;
+  readonly ref: DocumentReference;
+  readonly data: Record<string, unknown>;
+  readonly tie: BracketTie;
+}
+
+/** Reads one stored tie document back into the pure engine shape. */
+export function readStoredTie(
+  id: string,
+  ref: DocumentReference,
+  data: Record<string, unknown>,
+): StoredTie {
+  const higher = readSlot(data.higher);
+  const lower = readSlot(data.lower);
+  const winnerUid = typeof data.winnerUid === "string" ? data.winnerUid : null;
+  const winner =
+    (higher.player?.playerId === winnerUid ? higher.player : null) ??
+    (lower.player?.playerId === winnerUid ? lower.player : null);
+
+  return {
+    id,
+    ref,
+    data,
+    tie: {
+      tieId: readText(data.tieId, id),
+      round: isKnockoutRound(data.round) ? data.round : "final",
+      bracketSlot: typeof data.bracketSlot === "number" ? data.bracketSlot : 0,
+      legs: data.legs === 1 ? 1 : 2,
+      higher,
+      lower,
+      group: readGroup(data.group),
+      winner,
+    },
+  };
+}
+
+function sortTies<T extends { readonly tie: BracketTie }>(ties: readonly T[]): T[] {
+  return [...ties].sort((a, b) => {
+    const delta = roundIndex(a.tie.round) - roundIndex(b.tie.round);
+    return delta !== 0 ? delta : a.tie.bracketSlot - b.tie.bracketSlot;
+  });
+}
+
+export interface KnockoutState {
+  readonly tournament: TournamentDocument;
+  readonly ties: readonly StoredTie[];
+  readonly bracket: KnockoutBracket;
+  readonly matches: readonly QueryDocumentSnapshot[];
+}
+
+/** Reads everything one knockout mutation needs, before any write. */
+export async function readKnockoutState(
+  transaction: Transaction,
+  tournamentId: string,
+): Promise<KnockoutState> {
+  const firestore = getFirebaseAdminFirestore();
+  const [tournamentSnapshot, tiesSnapshot, matchesSnapshot] = await Promise.all([
+    transaction.get(firestore.doc(paths.tournament(tournamentId))),
+    transaction.get(firestore.collection(paths.tournamentKnockoutTies(tournamentId))),
+    transaction.get(firestore.collection(paths.tournamentMatches(tournamentId))),
+  ]);
+
+  if (!tournamentSnapshot.exists) {
+    throw new TournamentMutationError("Tournament not found.", 404);
+  }
+
+  const tournament = tournamentSnapshot.data() as TournamentDocument;
+  const ties = sortTies(
+    tiesSnapshot.docs.map((document) => readStoredTie(document.id, document.ref, document.data())),
+  );
+  const bracket: KnockoutBracket = {
+    seed: typeof tournament.knockoutSeed === "string" ? tournament.knockoutSeed : "",
+    legs: tournament.knockoutLegs === 1 ? 1 : 2,
+    ties: ties.map((entry) => entry.tie),
+  };
+
+  return { tournament, ties, bracket, matches: matchesSnapshot.docs };
+}
+
+export function knockoutMatchDocuments(
+  matches: readonly QueryDocumentSnapshot[],
+): readonly QueryDocumentSnapshot[] {
+  return matches.filter((document) => {
+    const stage = document.data().stage;
+    return (
+      stage === "playoff" ||
+      stage === "r16" ||
+      stage === "qf" ||
+      stage === "sf" ||
+      stage === "final"
+    );
+  });
+}
+
+/** Reads one stored leg match into the pure engine shape. */
 export function readEngineMatch(data: Record<string, unknown>, fallbackLeg: number): KnockoutMatch {
-  const result = readStoredResult(data.result);
+  const result =
+    typeof data.result === "object" && data.result !== null
+      ? (data.result as Record<string, unknown>)
+      : null;
+  const hasResult = typeof result?.homeGoals === "number" && typeof result?.awayGoals === "number";
 
   return {
     leg: typeof data.leg === "number" ? data.leg : fallbackLeg,
     homeUid: readText(data.homeUid, ""),
     awayUid: readText(data.awayUid, ""),
-    homeGoals: result?.homeGoals ?? null,
-    awayGoals: result?.awayGoals ?? null,
+    homeGoals: hasResult ? (result?.homeGoals as number) : null,
+    awayGoals: hasResult ? (result?.awayGoals as number) : null,
   };
 }
 
 /**
- * The tie patch derived from a resolution. A level tie is stored as
- * `needs_decider` with no winner; any new result clears a previous decider
- * until the organiser records a fresh one.
+ * The home-advantage rule expressed for the pure engine: the better league
+ * position is the "higher seed". In a single match the better-ranked player
+ * hosts; over two legs the lower-ranked player hosts the first leg.
  */
+export function resolvableForTie(tie: BracketTie): ResolvableTie {
+  const first = tie.higher.player;
+  const second = tie.lower.player;
+
+  if (!first || !second) {
+    throw new TournamentMutationError(
+      `Tie ${shortTieLabel(tie.tieId)} cannot be played before both participants are known.`,
+      409,
+    );
+  }
+
+  const [better, worse] = first.position < second.position ? [first, second] : [second, first];
+
+  return {
+    tieId: tie.tieId,
+    legs: tie.legs,
+    higherSeedUid: better.playerId,
+    lowerSeedUid: worse.playerId,
+  };
+}
+
+/** True when the structural `higher` slot holds the better-ranked player. */
+function higherSlotIsBetter(tie: BracketTie): boolean {
+  const first = tie.higher.player;
+  const second = tie.lower.player;
+
+  return !first || !second ? true : first.position < second.position;
+}
+
+/**
+ * The engine resolves a tie by league rank, but stored aggregates and penalty
+ * scores are keyed by the structural `higher`/`lower` slots so every view can
+ * render a score next to the participant it belongs to. This converts one to
+ * the other.
+ */
+export function slotAggregate(
+  tie: BracketTie,
+  resolution: TieResolution,
+): { readonly higherGoals: number; readonly lowerGoals: number } {
+  return higherSlotIsBetter(tie)
+    ? resolution.aggregate
+    : {
+        higherGoals: resolution.aggregate.lowerGoals,
+        lowerGoals: resolution.aggregate.higherGoals,
+      };
+}
+
+export function slotPenalties(
+  tie: BracketTie,
+  penalties: { readonly higher: number; readonly lower: number } | null,
+): { readonly higher: number; readonly lower: number } | null {
+  if (!penalties) {
+    return null;
+  }
+
+  return higherSlotIsBetter(tie) ? penalties : { higher: penalties.lower, lower: penalties.higher };
+}
+
+/** The stored fields that describe a tie's current result. */
 export function tiePatchFromResolution(
   resolution: TieResolution,
-  tie: Pick<
-    KnockoutTie,
-    "higherSeedUid" | "lowerSeedUid" | "higherSeedPosition" | "lowerSeedPosition"
-  >,
+  tie: BracketTie,
   now: Timestamp,
 ): Record<string, unknown> {
   return {
     status: resolution.status,
-    aggregate: resolution.aggregate,
+    aggregate: slotAggregate(tie, resolution),
     legsPlayed: resolution.legsPlayed,
     winnerUid: resolution.winnerUid,
     winnerPosition: resolution.winnerUid
-      ? resolution.winnerUid === tie.higherSeedUid
-        ? tie.higherSeedPosition
-        : tie.lowerSeedPosition
+      ? resolution.winnerUid === tie.higher.player?.playerId
+        ? (tie.higher.player?.position ?? null)
+        : (tie.lower.player?.position ?? null)
       : null,
     decidedBy: resolution.decidedBy,
     deciderNote: null,
@@ -184,274 +364,242 @@ export function tiePatchFromResolution(
   };
 }
 
-function readStandingsPlayers(
-  snapshot: QuerySnapshot,
-): Map<string, { readonly position: number; readonly gamerTag: string }> {
-  const players = new Map<string, { position: number; gamerTag: string }>();
+export function betterAndWorse(tie: BracketTie): {
+  readonly better: KnockoutPlayer;
+  readonly worse: KnockoutPlayer;
+} {
+  const first = tie.higher.player;
+  const second = tie.lower.player;
 
-  for (const document of snapshot.docs) {
-    const data = document.data();
-
-    if (typeof data.position !== "number" || !Number.isInteger(data.position)) {
-      continue;
-    }
-
-    players.set(document.id, {
-      position: data.position,
-      gamerTag: readText(data.gamerTag, document.id.slice(0, 12) || "Player"),
-    });
-  }
-
-  return players;
-}
-
-function allEngineTies(tiesSnapshot: QuerySnapshot): StoredKnockoutTie[] {
-  return tiesSnapshot.docs.map((document) => readEngineTie(document.data()));
-}
-
-function tiesForRound(
-  ties: readonly StoredKnockoutTie[],
-  round: KnockoutRound,
-): StoredKnockoutTie[] {
-  return ties.filter((tie) => tie.round === round).sort((a, b) => a.bracketSlot - b.bracketSlot);
-}
-
-function requireRoundPrerequisites(round: KnockoutRound, ties: readonly StoredKnockoutTie[]): void {
-  const existing = tiesForRound(ties, round);
-
-  if (existing.length > 0) {
+  if (!first || !second) {
     throw new TournamentMutationError(
-      `The ${KNOCKOUT_ROUND_LABELS[round].toLowerCase()} has already been published.`,
+      `Tie ${shortTieLabel(tie.tieId)} needs two participants.`,
       409,
     );
   }
 
-  const previous = previousKnockoutRound(round);
-
-  if (!previous) {
-    return;
-  }
-
-  const previousTies = tiesForRound(ties, previous);
-  const expectedCount = KNOCKOUT_ROUND_TIE_COUNTS[previous];
-
-  if (previousTies.length !== expectedCount) {
-    throw new TournamentMutationError(
-      `Publish the ${KNOCKOUT_ROUND_LABELS[previous].toLowerCase()} before drawing the ${KNOCKOUT_ROUND_LABELS[round].toLowerCase()}.`,
-      409,
-    );
-  }
-
-  if (previousTies.some((tie) => tie.status !== "completed" || !tie.winnerUid)) {
-    throw new TournamentMutationError(
-      `Every ${KNOCKOUT_ROUND_LABELS[previous].toLowerCase()} tie must be decided first.`,
-      409,
-    );
-  }
+  return first.position < second.position
+    ? { better: first, worse: second }
+    : { better: second, worse: first };
 }
 
-function tagFor(players: Map<string, { readonly gamerTag: string }>, uid: string): string {
-  return players.get(uid)?.gamerTag ?? (uid.slice(0, 12) || "Player");
-}
+function matchDocumentForTie(
+  tournamentId: string,
+  tie: BracketTie,
+  leg: number,
+  now: Timestamp,
+): Record<string, unknown> {
+  const resolvable = resolvableForTie(tie);
+  const homeUid = homeUidForLeg(resolvable, leg);
+  const awayUid = awayUidForLeg(resolvable, leg);
+  const players = [tie.higher.player, tie.lower.player];
 
-function buildScheduledTies(input: {
-  readonly round: KnockoutRound;
-  readonly legs: KnockoutLegs;
-  readonly standings: Map<string, { readonly position: number; readonly gamerTag: string }>;
-  readonly ties: readonly StoredKnockoutTie[];
-  readonly seed: string;
-}): KnockoutTie[] {
-  const { round, legs, standings, ties, seed } = input;
-
-  if (round === "playoff") {
-    const players: KnockoutPlayer[] = [...standings.entries()].map(([uid, player]) => ({
-      playerId: uid,
-      position: player.position,
-      gamerTag: player.gamerTag,
-    }));
-
-    if (players.length !== PLAYER_COUNT) {
-      throw new TournamentMutationError(
-        `The knockout needs all ${PLAYER_COUNT} league positions.`,
-        409,
-      );
-    }
-
-    return [...buildPlayoffTies({ standings: players, seed, legs })];
-  }
-
-  if (round === "r16") {
-    const directQualifiers: KnockoutPlayer[] = [];
-    const directPlayers = [...standings.entries()].filter(
-      ([, player]) => player.position >= 1 && player.position <= 8,
-    );
-
-    if (directPlayers.length !== 8) {
-      throw new TournamentMutationError("The league table has no complete top eight.", 409);
-    }
-
-    for (const [uid, player] of directPlayers) {
-      directQualifiers.push({
-        playerId: uid,
-        position: player.position,
-        gamerTag: player.gamerTag,
-      });
-    }
-
-    const playoffTies = tiesForRound(ties, "playoff");
-    const playoffWinners: PlayoffWinner[] = playoffTies.map((tie) => ({
-      playerId: tie.winnerUid as string,
-      position: tie.winnerPosition as number,
-      group: tie.group as PlayoffWinner["group"],
-      tieId: tie.tieId,
-      gamerTag: tagFor(standings, tie.winnerUid as string),
-    }));
-
-    return [...buildRoundOf16Ties({ directQualifiers, playoffWinners, seed, legs })];
-  }
-
-  const previous = previousKnockoutRound(round);
-
-  if (!previous) {
-    throw new TournamentMutationError("There is no round before the play-offs.", 409);
-  }
-
-  const previousTies = tiesForRound(ties, previous);
-
-  return [...buildNextRound(previousTies, legs)];
-}
-
-function draftTieFromEngine(
-  tie: KnockoutTie,
-  standings: Map<string, { readonly gamerTag: string }>,
-): KnockoutDraftTie {
   return {
+    tournamentId,
+    stage: tie.round,
+    matchday: 0,
+    homeUid,
+    awayUid,
+    homeTag:
+      players.find((player) => player?.playerId === homeUid)?.gamerTag ??
+      (homeUid.slice(0, 12) || "Player"),
+    awayTag:
+      players.find((player) => player?.playerId === awayUid)?.gamerTag ??
+      (awayUid.slice(0, 12) || "Player"),
+    participants: [homeUid, awayUid],
+    status: "scheduled",
+    scheduledAt: null,
+    result: null,
     tieId: tie.tieId,
-    bracketSlot: tie.bracketSlot,
-    legs: tie.legs,
-    higherSeedUid: tie.higherSeedUid,
-    higherSeedTag: tagFor(standings, tie.higherSeedUid),
-    higherSeedPosition: tie.higherSeedPosition,
-    lowerSeedUid: tie.lowerSeedUid,
-    lowerSeedTag: tagFor(standings, tie.lowerSeedUid),
-    lowerSeedPosition: tie.lowerSeedPosition,
-    group: tie.group,
-    sourceTieIds: tie.sourceTieIds,
+    leg,
+    updatedAt: now,
   };
 }
 
-function draftTieToEngine(tie: KnockoutDraftTie, round: KnockoutRound): KnockoutTie {
+export function tieToDocument(tie: BracketTie, now: Timestamp): Record<string, unknown> {
   return {
     tieId: tie.tieId,
-    round,
+    round: tie.round,
     bracketSlot: tie.bracketSlot,
     legs: tie.legs,
-    higherSeedUid: tie.higherSeedUid,
-    lowerSeedUid: tie.lowerSeedUid,
-    higherSeedPosition: tie.higherSeedPosition,
-    lowerSeedPosition: tie.lowerSeedPosition,
+    higher: slotDocument(tie.higher),
+    lower: slotDocument(tie.lower),
     group: tie.group,
-    sourceTieIds: tie.sourceTieIds,
+    status: "pending",
+    aggregate: { higherGoals: 0, lowerGoals: 0 },
+    legsPlayed: 0,
     winnerUid: null,
     winnerPosition: null,
+    decidedBy: null,
+    deciderNote: null,
+    penalties: null,
+    updatedAt: now,
   };
 }
 
-/** Server-side draft shape; `generatedAt` is an Admin SDK Timestamp. */
-export interface StoredKnockoutDraft {
-  readonly round: KnockoutRound;
-  readonly seed: string;
-  readonly legs: KnockoutLegs;
-  readonly ties: readonly KnockoutDraftTie[];
-  readonly generatedBy: string;
-  readonly generatedAt: Timestamp;
-  readonly generationCount: number;
-  readonly validation: {
-    readonly valid: boolean;
-    readonly issues: readonly { readonly code: string; readonly message: string }[];
-  };
+/** True when a stored tie has any result, including a decider. */
+export function tieHasResult(tie: StoredTie): boolean {
+  return (
+    (typeof tie.data.legsPlayed === "number" && tie.data.legsPlayed > 0) ||
+    tie.data.status === "completed" ||
+    tie.data.status === "needs_decider"
+  );
 }
 
-function readDraft(
-  data: Record<string, unknown> | undefined,
-  round: KnockoutRound,
-): StoredKnockoutDraft | null {
-  if (!data || !Array.isArray(data.ties) || data.round !== round) {
-    return null;
+/** Names the first dependent tie that already has a result, if any. */
+export function blockingDependentTie(
+  state: Pick<KnockoutState, "bracket" | "ties">,
+  tieId: string,
+): StoredTie | null {
+  const dependents = dependentTieIds(state.bracket, tieId);
+
+  return state.ties.find((entry) => dependents.has(entry.id) && tieHasResult(entry)) ?? null;
+}
+
+export interface BracketAdvanceResult {
+  readonly bracket: KnockoutBracket;
+  readonly finalWinner: KnockoutPlayer | null;
+  readonly createdMatches: number;
+  readonly deletedMatches: number;
+}
+
+/**
+ * Writes one tie winner (or its removal) into every dependent slot, deletes the
+ * dependent leg matches that no longer describe a scheduled tie and creates the
+ * matches for any tie that has just become playable. The caller has already
+ * refused the change if a dependent tie held a result.
+ */
+export function stageBracketAdvance(input: {
+  readonly transaction: Transaction;
+  readonly firestore: Firestore;
+  readonly tournamentId: string;
+  readonly now: Timestamp;
+  readonly before: KnockoutBracket;
+  readonly ties: readonly StoredTie[];
+  readonly matches: readonly QueryDocumentSnapshot[];
+  readonly changedTieId: string;
+  readonly winner: KnockoutPlayer | null;
+}): BracketAdvanceResult {
+  const { transaction, firestore, tournamentId, now, before, ties, matches } = input;
+  const after = advanceBracket(before, { tieId: input.changedTieId, winner: input.winner });
+  const beforeById = new Map(before.ties.map((tie) => [tie.tieId, tie] as const));
+  const storedById = new Map(ties.map((tie) => [tie.id, tie] as const));
+  const matchesByTie = new Map<string, QueryDocumentSnapshot[]>();
+
+  for (const document of matches) {
+    const tieId = document.data().tieId;
+
+    if (typeof tieId !== "string") {
+      continue;
+    }
+
+    const list = matchesByTie.get(tieId) ?? [];
+    list.push(document);
+    matchesByTie.set(tieId, list);
   }
 
-  const ties: KnockoutDraftTie[] = [];
+  let createdMatches = 0;
+  let deletedMatches = 0;
+  const participantsChanged = new Set<string>();
 
-  for (const entry of data.ties) {
-    if (typeof entry !== "object" || entry === null) {
+  for (const tie of after.ties) {
+    if (tie.tieId === input.changedTieId) {
       continue;
     }
 
-    const tie = entry as Record<string, unknown>;
+    const previous = beforeById.get(tie.tieId);
+    const stored = storedById.get(tie.tieId);
 
-    if (
-      typeof tie.tieId !== "string" ||
-      typeof tie.bracketSlot !== "number" ||
-      typeof tie.higherSeedUid !== "string" ||
-      typeof tie.lowerSeedUid !== "string" ||
-      typeof tie.higherSeedPosition !== "number" ||
-      typeof tie.lowerSeedPosition !== "number"
-    ) {
+    if (!previous || !stored) {
       continue;
     }
 
-    ties.push({
-      tieId: tie.tieId,
-      bracketSlot: tie.bracketSlot,
-      legs: tie.legs === 1 ? 1 : 2,
-      higherSeedUid: tie.higherSeedUid,
-      higherSeedTag: readText(tie.higherSeedTag, "Player"),
-      higherSeedPosition: tie.higherSeedPosition,
-      lowerSeedUid: tie.lowerSeedUid,
-      lowerSeedTag: readText(tie.lowerSeedTag, "Player"),
-      lowerSeedPosition: tie.lowerSeedPosition,
-      group:
-        tie.group === "A" || tie.group === "B" || tie.group === "C" || tie.group === "D"
-          ? tie.group
-          : null,
-      sourceTieIds: Array.isArray(tie.sourceTieIds)
-        ? tie.sourceTieIds.filter((id): id is string => typeof id === "string")
-        : [],
+    const changed =
+      previous.higher.player?.playerId !== tie.higher.player?.playerId ||
+      previous.lower.player?.playerId !== tie.lower.player?.playerId;
+
+    if (!changed) {
+      continue;
+    }
+
+    participantsChanged.add(tie.tieId);
+    const existing = matchesByTie.get(tie.tieId) ?? [];
+
+    for (const document of existing) {
+      transaction.delete(document.ref);
+      deletedMatches += 1;
+    }
+
+    transaction.update(stored.ref, {
+      higher: slotDocument(tie.higher),
+      lower: slotDocument(tie.lower),
+      status: "pending",
+      aggregate: { higherGoals: 0, lowerGoals: 0 },
+      legsPlayed: 0,
+      winnerUid: null,
+      winnerPosition: null,
+      decidedBy: null,
+      deciderNote: null,
+      penalties: null,
+      updatedAt: now,
     });
   }
 
+  for (const tie of after.ties) {
+    if (tie.tieId === input.changedTieId) {
+      continue;
+    }
+
+    if (!tie.higher.player || !tie.lower.player) {
+      continue;
+    }
+
+    const existing = matchesByTie.get(tie.tieId) ?? [];
+
+    if (existing.length > 0 && !participantsChanged.has(tie.tieId)) {
+      continue;
+    }
+
+    for (let leg = 1; leg <= tie.legs; leg += 1) {
+      transaction.set(
+        firestore.doc(paths.tournamentMatch(tournamentId, `${tie.tieId}-l${leg}`)),
+        matchDocumentForTie(tournamentId, tie, leg, now),
+      );
+      createdMatches += 1;
+    }
+  }
+
+  const finalTie = after.ties.find((tie) => tie.round === "final") ?? null;
+
   return {
-    round,
-    seed: readText(data.seed, ""),
-    legs: data.legs === 1 ? 1 : 2,
-    ties,
-    generatedBy: readText(data.generatedBy, ""),
-    generatedAt: (data.generatedAt as Timestamp | undefined) ?? Timestamp.now(),
-    generationCount: typeof data.generationCount === "number" ? data.generationCount : 1,
-    validation: {
-      valid:
-        typeof data.validation === "object" &&
-        data.validation !== null &&
-        (data.validation as { valid?: unknown }).valid === true,
-      issues: [],
-    },
+    bracket: after,
+    finalWinner: finalTie?.winner ?? null,
+    createdMatches,
+    deletedMatches,
   };
 }
 
-function roundLegs(
-  round: KnockoutRound,
-  config: KnockoutConfig,
-  requested: KnockoutLegs | undefined,
-): KnockoutLegs {
-  if (round === "final") {
-    if (requested !== undefined && requested !== 1) {
-      throw new TournamentMutationError("The final is always one match.", 409);
-    }
+/** Stable SHA-256 over the generated bracket's structure and participants. */
+export function bracketHash(bracket: KnockoutBracket): string {
+  const canonical = sortTies(bracket.ties.map((tie) => ({ tie }))).map(({ tie }) => ({
+    tieId: tie.tieId,
+    round: tie.round,
+    bracketSlot: tie.bracketSlot,
+    legs: tie.legs,
+    higher: { ref: tie.higher.ref, uid: tie.higher.player?.playerId ?? null },
+    lower: { ref: tie.lower.ref, uid: tie.lower.player?.playerId ?? null },
+    group: tie.group,
+  }));
 
-    return 1;
-  }
+  return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
+}
 
-  return requested ?? config[round];
+export interface OrganiserKnockoutSlotView {
+  readonly uid: string | null;
+  readonly gamerTag: string | null;
+  readonly position: number | null;
+  /** What the slot means before it is resolved, e.g. "Winner of R16 3". */
+  readonly source: string;
 }
 
 export interface OrganiserKnockoutMatchView {
@@ -469,143 +617,125 @@ export interface OrganiserKnockoutMatchView {
 export interface OrganiserKnockoutTieView {
   readonly tieId: string;
   readonly round: KnockoutRound;
+  readonly roundLabel: string;
   readonly bracketSlot: number;
   readonly legs: KnockoutLegs;
-  readonly higherSeedUid: string;
-  readonly higherSeedTag: string;
-  readonly higherSeedPosition: number;
-  readonly lowerSeedUid: string;
-  readonly lowerSeedTag: string;
-  readonly lowerSeedPosition: number;
   readonly group: string | null;
+  readonly higher: OrganiserKnockoutSlotView;
+  readonly lower: OrganiserKnockoutSlotView;
   readonly status: KnockoutTieDocument["status"];
   readonly aggregate: KnockoutTieDocument["aggregate"];
   readonly legsPlayed: number;
   readonly winnerUid: string | null;
+  readonly winnerTag: string | null;
   readonly decidedBy: KnockoutTieDocument["decidedBy"];
   readonly deciderNote: string | null;
   readonly penalties: KnockoutTieDocument["penalties"];
   readonly matches: readonly OrganiserKnockoutMatchView[];
-}
-
-export interface OrganiserKnockoutRoundView {
-  readonly round: KnockoutRound;
-  readonly label: string;
-  readonly legs: KnockoutLegs;
-  readonly draft: StoredKnockoutDraft | null;
-  readonly published: boolean;
   readonly complete: boolean;
-  readonly ties: readonly OrganiserKnockoutTieView[];
 }
 
 export interface OrganiserKnockoutView {
   readonly tournament: TournamentDocument;
-  readonly rounds: readonly OrganiserKnockoutRoundView[];
+  readonly ties: readonly OrganiserKnockoutTieView[];
   readonly leagueMatchesCompleted: number;
   readonly leagueMatchesTotal: number;
-  readonly leagueClosed: boolean;
+  readonly generated: boolean;
+  readonly seed: string | null;
+  readonly legs: KnockoutLegs | null;
+  readonly bracketHash: string | null;
+  readonly championUid: string | null;
   readonly championTag: string | null;
+  readonly runnerUpUid: string | null;
   readonly runnerUpTag: string | null;
+  readonly qualifiers: {
+    readonly direct: number;
+    readonly playoff: number;
+    readonly eliminated: number;
+  };
+}
+
+function readSlotView(slot: BracketSlot): OrganiserKnockoutSlotView {
+  return {
+    uid: slot.player?.playerId ?? null,
+    gamerTag: slot.player?.gamerTag ?? null,
+    position: slot.player?.position ?? null,
+    source: slotSourceLabel(slot.ref),
+  };
+}
+
+function readTieStatus(value: unknown): KnockoutTieDocument["status"] {
+  return value === "in_progress" || value === "needs_decider" || value === "completed"
+    ? value
+    : "pending";
 }
 
 /** Guarded read for the organiser knockout workspace. */
 export async function getOrganiserKnockout(tournamentId: string): Promise<OrganiserKnockoutView> {
   const access = await requireTournamentOwnerOrSuperAdmin(tournamentId);
   const firestore = getFirebaseAdminFirestore();
-  const [tiesSnapshot, matchesSnapshot, draftsSnapshot, standingsSnapshot] = await Promise.all([
+  const [tiesSnapshot, matchesSnapshot, standingsSnapshot] = await Promise.all([
     firestore.collection(paths.tournamentKnockoutTies(tournamentId)).get(),
     firestore.collection(paths.tournamentMatches(tournamentId)).get(),
-    firestore.collection(paths.tournamentKnockoutDrafts(tournamentId)).get(),
     firestore.collection(paths.tournamentStandings(tournamentId)).get(),
   ]);
-
-  const standings = readStandingsPlayers(standingsSnapshot);
-  const config = normaliseConfig(access.tournament.knockoutConfig);
-  const drafts = new Map<string, StoredKnockoutDraft>();
-
-  for (const document of draftsSnapshot.docs) {
-    if (!isKnockoutRound(document.id)) {
-      continue;
-    }
-
-    const draft = readDraft(document.data(), document.id);
-
-    if (draft) {
-      drafts.set(document.id, draft);
-    }
-  }
 
   const matchesByTie = new Map<string, OrganiserKnockoutMatchView[]>();
 
   for (const document of matchesSnapshot.docs) {
     const data = document.data();
 
-    if (typeof data.tieId !== "string" || typeof data.leg !== "number") {
+    if (typeof data.tieId !== "string") {
       continue;
     }
 
+    const result =
+      typeof data.result === "object" && data.result !== null
+        ? (data.result as Record<string, unknown>)
+        : null;
     const list = matchesByTie.get(data.tieId) ?? [];
-    const result = readStoredResult(data.result);
 
     list.push({
       id: document.id,
-      leg: data.leg,
+      leg: typeof data.leg === "number" ? data.leg : 1,
       homeUid: readText(data.homeUid, ""),
       awayUid: readText(data.awayUid, ""),
       homeTag: readText(data.homeTag, "Player"),
       awayTag: readText(data.awayTag, "Player"),
-      homeGoals: result?.homeGoals ?? null,
-      awayGoals: result?.awayGoals ?? null,
+      homeGoals: typeof result?.homeGoals === "number" ? result.homeGoals : null,
+      awayGoals: typeof result?.awayGoals === "number" ? result.awayGoals : null,
       status: data.status === "completed" ? "completed" : "scheduled",
     });
     matchesByTie.set(data.tieId, list);
   }
 
-  const tiesByRound = new Map<KnockoutRound, OrganiserKnockoutTieView[]>();
+  const ties = sortTies(
+    tiesSnapshot.docs.map((document) => readStoredTie(document.id, document.ref, document.data())),
+  ).map((entry): OrganiserKnockoutTieView => {
+    const { tie, data } = entry;
+    const matches = (matchesByTie.get(tie.tieId) ?? []).sort((a, b) => a.leg - b.leg);
+    const status = readTieStatus(data.status);
 
-  for (const document of tiesSnapshot.docs) {
-    const data = document.data();
-
-    if (!isKnockoutRound(data.round)) {
-      continue;
-    }
-
-    const tie = readEngineTie(data);
-    const list = tiesByRound.get(tie.round) ?? [];
-
-    list.push({
+    return {
       tieId: tie.tieId,
       round: tie.round,
+      roundLabel: KNOCKOUT_ROUND_LABELS[tie.round],
       bracketSlot: tie.bracketSlot,
       legs: tie.legs,
-      higherSeedUid: tie.higherSeedUid,
-      higherSeedTag: readText(data.higherSeedTag, tagFor(standings, tie.higherSeedUid)),
-      higherSeedPosition: tie.higherSeedPosition,
-      lowerSeedUid: tie.lowerSeedUid,
-      lowerSeedTag: readText(data.lowerSeedTag, tagFor(standings, tie.lowerSeedUid)),
-      lowerSeedPosition: tie.lowerSeedPosition,
       group: tie.group,
-      status:
-        data.status === "in_progress" ||
-        data.status === "needs_decider" ||
-        data.status === "completed"
-          ? data.status
-          : "pending",
+      higher: readSlotView(tie.higher),
+      lower: readSlotView(tie.lower),
+      status,
       aggregate:
         typeof data.aggregate === "object" && data.aggregate !== null
           ? {
-              higherGoals:
-                typeof (data.aggregate as { higherGoals?: unknown }).higherGoals === "number"
-                  ? ((data.aggregate as { higherGoals: number }).higherGoals ?? 0)
-                  : 0,
-              lowerGoals:
-                typeof (data.aggregate as { lowerGoals?: unknown }).lowerGoals === "number"
-                  ? ((data.aggregate as { lowerGoals: number }).lowerGoals ?? 0)
-                  : 0,
+              higherGoals: Number((data.aggregate as { higherGoals?: unknown }).higherGoals ?? 0),
+              lowerGoals: Number((data.aggregate as { lowerGoals?: unknown }).lowerGoals ?? 0),
             }
           : { higherGoals: 0, lowerGoals: 0 },
       legsPlayed: typeof data.legsPlayed === "number" ? data.legsPlayed : 0,
-      winnerUid: tie.winnerUid ?? null,
+      winnerUid: tie.winner?.playerId ?? null,
+      winnerTag: tie.winner?.gamerTag ?? null,
       decidedBy:
         data.decidedBy === "aggregate" ||
         data.decidedBy === "extra_time" ||
@@ -616,97 +746,145 @@ export async function getOrganiserKnockout(tournamentId: string): Promise<Organi
       penalties:
         typeof data.penalties === "object" && data.penalties !== null
           ? {
-              higher:
-                typeof (data.penalties as { higher?: unknown }).higher === "number"
-                  ? ((data.penalties as { higher: number }).higher ?? 0)
-                  : 0,
-              lower:
-                typeof (data.penalties as { lower?: unknown }).lower === "number"
-                  ? ((data.penalties as { lower: number }).lower ?? 0)
-                  : 0,
+              higher: Number((data.penalties as { higher?: unknown }).higher ?? 0),
+              lower: Number((data.penalties as { lower?: unknown }).lower ?? 0),
             }
           : null,
-      matches: (matchesByTie.get(tie.tieId) ?? []).sort((a, b) => a.leg - b.leg),
-    });
-    tiesByRound.set(tie.round, list);
-  }
-
-  const rounds = KNOCKOUT_ROUND_ORDER.map((round): OrganiserKnockoutRoundView => {
-    const ties = (tiesByRound.get(round) ?? []).sort((a, b) => a.bracketSlot - b.bracketSlot);
-
-    return {
-      round,
-      label: KNOCKOUT_ROUND_LABELS[round],
-      legs: round === "final" ? 1 : config[round],
-      draft: drafts.get(round) ?? null,
-      published: ties.length > 0,
-      complete:
-        ties.length > 0 &&
-        ties.every((tie) => tie.status === "completed" && tie.winnerUid !== null),
-      ties,
+      matches,
+      complete: status === "completed" && tie.winner !== null,
     };
   });
 
-  // Count the real completed league match documents rather than trusting a
-  // cached counter; the close action checks the same documents, so the button
-  // and the server boundary always agree.
+  const tags = new Map<string, string>();
+
+  for (const document of standingsSnapshot.docs) {
+    const tag = document.data().gamerTag;
+
+    if (typeof tag === "string" && tag.length > 0) {
+      tags.set(document.id, tag);
+    }
+  }
+
   const leagueMatchesCompleted = matchesSnapshot.docs.filter((document) => {
     const data = document.data();
     return data.stage === "league" && data.status === "completed";
   }).length;
+  const positions = standingsSnapshot.docs
+    .map((document) => document.data().position)
+    .filter((position): position is number => typeof position === "number");
+  const seed =
+    typeof access.tournament.knockoutSeed === "string" ? access.tournament.knockoutSeed : null;
 
   return {
     tournament: access.tournament,
-    rounds,
+    ties,
     leagueMatchesCompleted,
     leagueMatchesTotal: LEAGUE_MATCH_TOTAL,
-    leagueClosed: Boolean(access.tournament.leaguePhaseClosedAt),
-    championTag:
-      access.tournament.championUid && standings.has(access.tournament.championUid)
-        ? (standings.get(access.tournament.championUid)?.gamerTag ?? null)
-        : null,
-    runnerUpTag:
-      access.tournament.runnerUpUid && standings.has(access.tournament.runnerUpUid)
-        ? (standings.get(access.tournament.runnerUpUid)?.gamerTag ?? null)
-        : null,
+    generated: ties.length === TIE_TOTAL,
+    seed,
+    legs:
+      access.tournament.knockoutLegs === 1 ? 1 : access.tournament.knockoutLegs === 2 ? 2 : null,
+    bracketHash: access.tournament.knockoutBracketHash ?? null,
+    championUid: access.tournament.championUid ?? null,
+    championTag: access.tournament.championUid
+      ? (tags.get(access.tournament.championUid) ?? null)
+      : null,
+    runnerUpUid: access.tournament.runnerUpUid ?? null,
+    runnerUpTag: access.tournament.runnerUpUid
+      ? (tags.get(access.tournament.runnerUpUid) ?? null)
+      : null,
+    qualifiers: {
+      direct: positions.filter((position) => position >= 1 && position <= 8).length,
+      playoff: positions.filter((position) => position >= 9 && position <= 24).length,
+      eliminated: positions.filter((position) => position >= 25).length,
+    },
   };
 }
 
-/** Closes the league phase once all 144 results exist. Standings stay frozen. */
-export async function closeLeaguePhase(
+export interface GenerateKnockoutResult {
+  readonly generated: boolean;
+  readonly seed: string;
+  readonly legs: KnockoutLegs;
+  readonly tieCount: number;
+  readonly matchCount: number;
+}
+
+/**
+ * The single knockout generation action. It is idempotent: a second call for an
+ * already-generated bracket returns the stored summary and writes nothing.
+ */
+export async function generateKnockoutStage(
   tournamentId: string,
-): Promise<{ readonly closedAt: Timestamp }> {
+  legs: KnockoutLegs,
+): Promise<GenerateKnockoutResult> {
   const access = await requireTournamentOwnerOrSuperAdmin(tournamentId);
   const firestore = getFirebaseAdminFirestore();
   const tournamentRef = firestore.doc(paths.tournament(tournamentId));
-  const matchesRef = firestore.collection(paths.tournamentMatches(tournamentId));
-  const standingsRef = firestore.collection(paths.tournamentStandings(tournamentId));
+  const tiesRef = firestore.collection(paths.tournamentKnockoutTies(tournamentId));
+  const seed = newSeed();
+  const now = Timestamp.now();
 
-  const closed = await firestore.runTransaction(async (transaction) => {
-    const tournamentSnapshot = await transaction.get(tournamentRef);
+  const result = await firestore.runTransaction(async (transaction) => {
+    const context = await readStandingsContextInTransaction(transaction, tournamentId);
+    const tournament = context.tournament;
+    const tiesSnapshot = await transaction.get(tiesRef);
 
-    if (!tournamentSnapshot.exists) {
-      throw new TournamentMutationError("Tournament not found.", 404);
+    if (tiesSnapshot.size === TIE_TOTAL) {
+      const existingSeed =
+        typeof tournament.knockoutSeed === "string" ? tournament.knockoutSeed : "";
+
+      if (existingSeed.length === 0) {
+        throw new TournamentMutationError(
+          "The stored bracket is incomplete. Reset it before generating again.",
+          409,
+        );
+      }
+
+      const matchesSnapshot = await transaction.get(
+        firestore.collection(paths.tournamentMatches(tournamentId)),
+      );
+
+      return {
+        generated: false,
+        seed: existingSeed,
+        legs:
+          tournament.knockoutLegs === 1
+            ? (1 as const)
+            : ((tournament.knockoutLegs ?? legs) as KnockoutLegs),
+        tieCount: TIE_TOTAL,
+        matchCount: matchesSnapshot.docs.filter(
+          (document) =>
+            document.data().stage !== "league" && document.data().status === "scheduled",
+        ).length,
+        hash: tournament.knockoutBracketHash ?? "",
+        playerIds: [],
+        championUid: tournament.championUid ?? null,
+        tournamentName: tournament.name,
+        slug: tournament.slug,
+      };
     }
 
-    const tournament = tournamentSnapshot.data() as TournamentDocument;
-
-    if (tournament.status !== "league_phase") {
+    if (tiesSnapshot.size > 0) {
       throw new TournamentMutationError(
-        "The league phase can only be closed while it is running.",
+        "The stored bracket is incomplete. Reset it before generating again.",
         409,
       );
     }
 
-    const matchesSnapshot = await transaction.get(matchesRef);
-    const standingsSnapshot = await transaction.get(standingsRef);
-    const leagueMatches = matchesSnapshot.docs.filter(
+    if (tournament.status !== "league_phase") {
+      throw new TournamentMutationError(
+        "Generate the knockout stage only while the league phase is running.",
+        409,
+      );
+    }
+
+    const leagueMatches = context.matchDocs.filter(
       (document) => document.data().stage === "league",
     );
 
     if (leagueMatches.length !== LEAGUE_MATCH_TOTAL) {
       throw new TournamentMutationError(
-        `Close the league phase only after all ${LEAGUE_MATCH_TOTAL} matches exist; found ${leagueMatches.length}.`,
+        `Generate the knockout stage only after all ${LEAGUE_MATCH_TOTAL} league matches exist; found ${leagueMatches.length}.`,
         409,
       );
     }
@@ -722,135 +900,39 @@ export async function closeLeaguePhase(
       );
     }
 
-    const now = Timestamp.now();
-    // Freeze the table: the league is complete, so every row stops being
-    // provisional. Knockout results never touch these documents again.
-    for (const document of standingsSnapshot.docs) {
-      transaction.update(document.ref, { provisional: false, updatedAt: now });
-    }
+    // Rebuild the table from the stored results so the bracket uses the exact
+    // ordering this transaction freezes, not a cached projection.
+    const plan = buildStandingsPlan(context.source, new Map(), now);
+    const identities = new Map(plan.players.map((player) => [player.uid, player] as const));
+    const players: KnockoutPlayer[] = plan.rows.map((row) => {
+      const identity = identities.get(row.id);
 
-    transaction.update(tournamentRef, {
-      status: "knockout",
-      leaguePhaseClosedAt: now,
-      knockoutConfig: normaliseConfig(tournament.knockoutConfig),
-      knockoutRounds: [],
-      championUid: null,
-      runnerUpUid: null,
-      completedAt: null,
-      updatedAt: FieldValue.serverTimestamp(),
+      if (!identity) {
+        throw new TournamentMutationError("A standings row has no player identity.", 500);
+      }
+
+      return {
+        playerId: row.id,
+        position: row.position,
+        gamerTag: identity.gamerTag,
+      };
     });
 
-    return {
-      closedAt: now,
-      bands: standingsSnapshot.docs.map((document) => ({
-        uid: document.id,
-        position:
-          typeof document.data().position === "number" ? (document.data().position as number) : 0,
-      })),
-    };
-  });
-  const { closedAt } = closed;
-
-  await writeAuditLog({
-    actorUid: access.user.userId,
-    actorRole: access.user.role,
-    action: "tournament.league_phase.closed",
-    targetType: "tournament",
-    targetId: tournamentId,
-    tournamentId,
-    before: { status: "league_phase" },
-    after: {
-      status: "knockout",
-      leagueMatchesCompleted: LEAGUE_MATCH_TOTAL,
-      leaguePhaseClosedAt: closedAt.toDate().toISOString(),
-    },
-  });
-
-  const direct = closed.bands
-    .filter((band) => band.position >= 1 && band.position <= 8)
-    .map((band) => band.uid);
-  const playoff = closed.bands
-    .filter((band) => band.position >= 9 && band.position <= 24)
-    .map((band) => band.uid);
-  const eliminated = closed.bands.filter((band) => band.position >= 25).map((band) => band.uid);
-  const link = `/tournaments/${access.tournament.slug}`;
-
-  await Promise.all(
-    [
-      createNotifications(direct, {
-        type: "tournament",
-        title: "You qualified directly for the Round of 16",
-        body: "The league phase is closed. The top eight go straight into the knockout Round of 16.",
-        link,
-      }),
-      createNotifications(playoff, {
-        type: "tournament",
-        title: "You are in the knockout play-offs",
-        body: "The league phase is closed. Positions 9-24 meet in the play-offs for a place in the Round of 16.",
-        link,
-      }),
-      createNotifications(eliminated, {
-        type: "tournament",
-        title: "Your league phase has ended",
-        body: "The league phase is closed. The final table is frozen and the knockout bracket is being prepared.",
-        link,
-      }),
-    ].map((notification) => notification.catch(() => undefined)),
-  );
-
-  return { closedAt };
-}
-
-export interface DrawKnockoutRoundResult {
-  readonly round: KnockoutRound;
-  readonly legs: KnockoutLegs;
-  readonly tieCount: number;
-  readonly generationCount: number;
-  readonly seed: string;
-}
-
-/** Builds and stores a private draft for one knockout round. */
-export async function drawKnockoutRound(
-  tournamentId: string,
-  round: KnockoutRound,
-  requestedLegs?: KnockoutLegs,
-): Promise<DrawKnockoutRoundResult> {
-  const access = await requireTournamentOwnerOrSuperAdmin(tournamentId);
-  const firestore = getFirebaseAdminFirestore();
-  const tournamentRef = firestore.doc(paths.tournament(tournamentId));
-  const tiesRef = firestore.collection(paths.tournamentKnockoutTies(tournamentId));
-  const standingsRef = firestore.collection(paths.tournamentStandings(tournamentId));
-  const draftRef = firestore.doc(paths.tournamentKnockoutDraft(tournamentId, round));
-  const seed = newSeed();
-
-  const result = await firestore.runTransaction(async (transaction) => {
-    const tournamentSnapshot = await transaction.get(tournamentRef);
-
-    if (!tournamentSnapshot.exists) {
-      throw new TournamentMutationError("Tournament not found.", 404);
+    if (players.length !== PLAYER_COUNT) {
+      throw new TournamentMutationError(
+        `The knockout needs all ${PLAYER_COUNT} league positions; found ${players.length}.`,
+        409,
+      );
     }
 
-    const tournament = tournamentSnapshot.data() as TournamentDocument;
-
-    if (tournament.status !== "knockout" || !tournament.leaguePhaseClosedAt) {
-      throw new TournamentMutationError("Close the league phase before drawing the knockout.", 409);
-    }
-
-    const [tiesSnapshot, standingsSnapshot, draftSnapshot] = await Promise.all([
-      transaction.get(tiesRef),
-      transaction.get(standingsRef),
-      transaction.get(draftRef),
-    ]);
-    const ties = allEngineTies(tiesSnapshot);
-    requireRoundPrerequisites(round, ties);
-
-    const standings = readStandingsPlayers(standingsSnapshot);
-    const config = normaliseConfig(tournament.knockoutConfig);
-    const legs = roundLegs(round, config, requestedLegs);
-    let built: KnockoutTie[];
+    let bracket: KnockoutBracket;
 
     try {
-      built = buildScheduledTies({ round, legs, standings, ties, seed });
+      bracket = buildKnockoutBracket({
+        standings: players,
+        seed,
+        legs,
+      });
     } catch (error) {
       throw new TournamentMutationError(
         error instanceof Error ? error.message : "The knockout draw failed.",
@@ -858,120 +940,124 @@ export async function drawKnockoutRound(
       );
     }
 
-    const validation = validateKnockoutRound({ round, ties: built });
+    const validation = validateBracket(bracket);
 
-    if (validation.valid === false) {
+    if (!validation.valid) {
       throw new TournamentMutationError(
-        `The draw did not pass validation: ${validation.issues.map((issue) => issue.message).join(" ")}`,
+        `The generated bracket is invalid: ${validation.issues.map((issue) => issue.message).join(" ")}`,
         500,
       );
     }
 
-    const previous = readDraft(draftSnapshot.data(), round);
-    const now = Timestamp.now();
-    const generationCount = (previous?.generationCount ?? 0) + 1;
-    const draft: StoredKnockoutDraft = {
-      round,
-      seed,
-      legs,
-      ties: built.map((tie) => draftTieFromEngine(tie, standings)),
-      generatedBy: access.user.userId,
-      generatedAt: now,
-      generationCount,
-      validation: { valid: true, issues: [] },
-    };
+    let matchCount = 0;
 
-    transaction.set(draftRef, draft);
+    for (const tie of bracket.ties) {
+      transaction.set(
+        firestore.doc(paths.tournamentKnockoutTie(tournamentId, tie.tieId)),
+        tieToDocument(tie, now),
+      );
+
+      if (!tie.higher.player || !tie.lower.player) {
+        continue;
+      }
+
+      for (let leg = 1; leg <= tie.legs; leg += 1) {
+        const matchId = `${tie.tieId}-l${leg}`;
+        transaction.set(
+          firestore.doc(paths.tournamentMatch(tournamentId, matchId)),
+          matchDocumentForTie(tournamentId, tie, leg, now),
+        );
+        matchCount += 1;
+      }
+    }
+
+    stageStandingsWrites(transaction, tournamentId, plan);
+    const hash = bracketHash(bracket);
     transaction.update(tournamentRef, {
-      [`knockoutConfig.${round}`]: legs,
+      status: "knockout",
+      leaguePhaseClosedAt: now,
+      knockoutLegs: legs,
+      knockoutSeed: seed,
+      knockoutAlgorithmVersion: KNOCKOUT_ALGORITHM_VERSION,
+      knockoutBracketHash: hash,
+      knockoutGeneratedAt: now,
+      leagueMatchesCompleted: LEAGUE_MATCH_TOTAL,
+      standingsUpdatedAt: now,
+      championUid: null,
+      runnerUpUid: null,
+      completedAt: null,
       updatedAt: FieldValue.serverTimestamp(),
     });
 
-    return { legs, tieCount: built.length, generationCount };
-  });
-
-  await writeAuditLog({
-    actorUid: access.user.userId,
-    actorRole: access.user.role,
-    action: "tournament.knockout.drawn",
-    targetType: "knockoutDraft",
-    targetId: `${tournamentId}/${round}`,
-    tournamentId,
-    before: null,
-    after: {
-      round,
+    return {
+      generated: true,
       seed,
-      legs: result.legs,
-      tieCount: result.tieCount,
-      generationCount: result.generationCount,
-    },
+      legs,
+      tieCount: bracket.ties.length,
+      matchCount,
+      hash,
+      playerIds: players.map((player) => player.playerId),
+      championUid: null,
+      tournamentName: tournament.name,
+      slug: tournament.slug,
+    };
   });
 
-  return { round, ...result, seed };
-}
+  if (result.generated) {
+    await writeAuditLog({
+      actorUid: access.user.userId,
+      actorRole: access.user.role,
+      action: "tournament.knockout.generated",
+      targetType: "tournament",
+      targetId: tournamentId,
+      tournamentId,
+      before: { status: "league_phase" },
+      after: {
+        status: "knockout",
+        seed: result.seed,
+        legs: result.legs,
+        tieCount: result.tieCount,
+        matchCount: result.matchCount,
+        algorithmVersion: KNOCKOUT_ALGORITHM_VERSION,
+        bracketHash: result.hash,
+      },
+    });
 
-function tieDocument(
-  tie: KnockoutTie,
-  tags: { readonly higher: string; readonly lower: string },
-  now: Timestamp,
-): Record<string, unknown> {
+    const link = `/tournaments/${result.slug}`;
+
+    await createNotifications(result.playerIds, {
+      type: "tournament",
+      title: "The knockout bracket is live",
+      body: `${result.tournamentName}: the league table is frozen and every knockout tie is published. Check your path to the final.`,
+      link,
+    }).catch(() => undefined);
+  }
+
   return {
-    tieId: tie.tieId,
-    round: tie.round,
-    bracketSlot: tie.bracketSlot,
-    legs: tie.legs,
-    higherSeedUid: tie.higherSeedUid,
-    higherSeedTag: tags.higher,
-    higherSeedPosition: tie.higherSeedPosition,
-    lowerSeedUid: tie.lowerSeedUid,
-    lowerSeedTag: tags.lower,
-    lowerSeedPosition: tie.lowerSeedPosition,
-    group: tie.group,
-    sourceTieIds: tie.sourceTieIds,
-    status: "pending",
-    aggregate: { higherGoals: 0, lowerGoals: 0 },
-    legsPlayed: 0,
-    winnerUid: null,
-    winnerPosition: null,
-    decidedBy: null,
-    deciderNote: null,
-    penalties: null,
-    updatedAt: now,
+    generated: result.generated,
+    seed: result.seed,
+    legs: result.legs,
+    tieCount: result.tieCount,
+    matchCount: result.matchCount,
   };
 }
 
-function homeUid(tie: KnockoutTie, leg: number): string {
-  // Inlined here to avoid importing a helper twice; the rule is fixed.
-  if (tie.legs === 1) {
-    return tie.higherSeedUid;
-  }
-
-  return leg === 1 ? tie.lowerSeedUid : tie.higherSeedUid;
-}
-
-function awayUid(tie: KnockoutTie, leg: number): string {
-  return homeUid(tie, leg) === tie.higherSeedUid ? tie.lowerSeedUid : tie.higherSeedUid;
-}
-
-export interface PublishKnockoutRoundResult {
-  readonly round: KnockoutRound;
-  readonly tieCount: number;
-  readonly matchCount: number;
-}
-
-/** Publishes a validated draft as public ties and leg matches. */
-export async function publishKnockoutRound(
+/** Deletes a generated bracket that has no knockout result yet. */
+export async function resetKnockoutStage(
   tournamentId: string,
-  round: KnockoutRound,
-): Promise<PublishKnockoutRoundResult> {
+  reason: string | undefined,
+): Promise<{ readonly deletedTies: number; readonly deletedMatches: number }> {
   const access = await requireTournamentOwnerOrSuperAdmin(tournamentId);
   const firestore = getFirebaseAdminFirestore();
   const tournamentRef = firestore.doc(paths.tournament(tournamentId));
   const tiesRef = firestore.collection(paths.tournamentKnockoutTies(tournamentId));
-  const draftRef = firestore.doc(paths.tournamentKnockoutDraft(tournamentId, round));
 
   const result = await firestore.runTransaction(async (transaction) => {
-    const tournamentSnapshot = await transaction.get(tournamentRef);
+    const [tournamentSnapshot, tiesSnapshot, matchesSnapshot] = await Promise.all([
+      transaction.get(tournamentRef),
+      transaction.get(tiesRef),
+      transaction.get(firestore.collection(paths.tournamentMatches(tournamentId))),
+    ]);
 
     if (!tournamentSnapshot.exists) {
       throw new TournamentMutationError("Tournament not found.", 404);
@@ -980,197 +1066,85 @@ export async function publishKnockoutRound(
     const tournament = tournamentSnapshot.data() as TournamentDocument;
 
     if (tournament.status !== "knockout") {
-      throw new TournamentMutationError("The knockout is not running.", 409);
+      throw new TournamentMutationError("There is no running knockout stage to reset.", 409);
     }
 
-    const [tiesSnapshot, draftSnapshot] = await Promise.all([
-      transaction.get(tiesRef),
-      transaction.get(draftRef),
-    ]);
-    const ties = allEngineTies(tiesSnapshot);
-    requireRoundPrerequisites(round, ties);
-
-    const draft = readDraft(draftSnapshot.data(), round);
-
-    if (!draft || draft.ties.length !== KNOCKOUT_ROUND_TIE_COUNTS[round]) {
+    if (tiesSnapshot.size !== TIE_TOTAL) {
       throw new TournamentMutationError(
-        `Draw the ${KNOCKOUT_ROUND_LABELS[round].toLowerCase()} before publishing it.`,
+        "The stored bracket is incomplete. Contact the Super Admin.",
         409,
       );
     }
 
-    const engineTies = draft.ties.map((tie) => draftTieToEngine(tie, round));
-    const validation = validateKnockoutRound({ round, ties: engineTies });
-    const previous = previousKnockoutRound(round);
-    // The Round of 16 comes from the seeded play-off groups, not from adjacent
-    // play-off slots, so its own validator owns the path. Every later round is
-    // a direct adjacent-slot progression.
-    const progression =
-      previous === null || previous === "playoff"
-        ? { valid: true, issues: [] }
-        : validateProgression(tiesForRound(ties, previous), engineTies);
+    const ties = tiesSnapshot.docs.map((document) =>
+      readStoredTie(document.id, document.ref, document.data()),
+    );
+    const withResult = ties.find((tie) => tieHasResult(tie));
 
-    if (!validation.valid || !progression.valid) {
+    if (withResult) {
       throw new TournamentMutationError(
-        `The stored draft is invalid: ${[...validation.issues, ...progression.issues]
-          .map((issue) => issue.message)
-          .join(" ")}`,
+        `The knockout has a recorded result in ${shortTieLabel(withResult.id)}. Reset is only possible before any knockout result exists.`,
         409,
       );
     }
 
-    const now = Timestamp.now();
-    const tags = new Map<string, string>();
-
-    for (const tie of draft.ties) {
-      tags.set(tie.higherSeedUid, tie.higherSeedTag);
-      tags.set(tie.lowerSeedUid, tie.lowerSeedTag);
-    }
-
-    let matchCount = 0;
-
-    for (const tie of engineTies) {
-      const document = tieDocument(
-        tie,
-        {
-          higher: tags.get(tie.higherSeedUid) ?? (tie.higherSeedUid.slice(0, 12) || "Player"),
-          lower: tags.get(tie.lowerSeedUid) ?? (tie.lowerSeedUid.slice(0, 12) || "Player"),
-        },
-        now,
-      );
-
-      transaction.set(
-        firestore.doc(paths.tournamentKnockoutTie(tournamentId, tie.tieId)),
-        document,
-      );
-
-      for (let leg = 1; leg <= tie.legs; leg += 1) {
-        const home = homeUid(tie, leg);
-        const away = awayUid(tie, leg);
-        const matchId = `${tie.tieId}-l${leg}`;
-
-        transaction.set(firestore.doc(paths.tournamentMatch(tournamentId, matchId)), {
-          tournamentId,
-          stage: round,
-          matchday: 0,
-          homeUid: home,
-          awayUid: away,
-          homeTag: tags.get(home) ?? (home.slice(0, 12) || "Player"),
-          awayTag: tags.get(away) ?? (away.slice(0, 12) || "Player"),
-          participants: [home, away],
-          status: "scheduled",
-          scheduledAt: null,
-          result: null,
-          tieId: tie.tieId,
-          leg,
-          updatedAt: now,
-        });
-        matchCount += 1;
-      }
-    }
-
-    const rounds = Array.isArray(tournament.knockoutRounds)
-      ? tournament.knockoutRounds.filter(isKnockoutRound)
-      : [];
-    const nextRounds = [...rounds.filter((value) => value !== round), round].sort(
-      (a, b) => roundIndex(a) - roundIndex(b),
+    const knockoutMatches = knockoutMatchDocuments(matchesSnapshot.docs);
+    const completed = knockoutMatches.find(
+      (document) => document.data().status === "completed" || document.data().result !== null,
     );
 
-    transaction.delete(draftRef);
+    if (completed) {
+      throw new TournamentMutationError(
+        "The knockout has a recorded leg result. Reset is only possible before any knockout result exists.",
+        409,
+      );
+    }
+
+    for (const tie of ties) {
+      transaction.delete(tie.ref);
+    }
+
+    for (const document of knockoutMatches) {
+      transaction.delete(document.ref);
+    }
+
     transaction.update(tournamentRef, {
-      knockoutRounds: nextRounds,
-      [`knockoutConfig.${round}`]: draft.legs,
+      status: "league_phase",
+      leaguePhaseClosedAt: null,
+      knockoutLegs: null,
+      knockoutSeed: null,
+      knockoutAlgorithmVersion: null,
+      knockoutBracketHash: null,
+      knockoutGeneratedAt: null,
+      championUid: null,
+      runnerUpUid: null,
+      completedAt: null,
       updatedAt: FieldValue.serverTimestamp(),
     });
 
-    return { tieCount: engineTies.length, matchCount, playerIds: [...tags.keys()] };
+    return { deletedTies: ties.length, deletedMatches: knockoutMatches.length };
   });
 
   await writeAuditLog({
     actorUid: access.user.userId,
     actorRole: access.user.role,
-    action: "tournament.knockout.published",
-    targetType: "knockoutRound",
-    targetId: `${tournamentId}/${round}`,
+    action: "tournament.knockout.reset",
+    targetType: "tournament",
+    targetId: tournamentId,
     tournamentId,
-    before: null,
+    before: { status: "knockout" },
     after: {
-      round,
-      tieCount: result.tieCount,
-      matchCount: result.matchCount,
+      status: "league_phase",
+      deletedTies: result.deletedTies,
+      deletedMatches: result.deletedMatches,
     },
+    reason: reason ?? null,
   });
 
-  for (let index = 0; index < result.playerIds.length; index += 18) {
-    await createNotifications(result.playerIds.slice(index, index + 18), {
-      type: "fixture",
-      title: `${KNOCKOUT_ROUND_LABELS[round]} drawn`,
-      body: "Your knockout tie is published. Check the bracket and the match list.",
-      link: `/tournaments/${access.tournament.slug}`,
-    }).catch(() => undefined);
-  }
-
-  return { round, tieCount: result.tieCount, matchCount: result.matchCount };
+  return result;
 }
 
-/** Deletes an unpublished draft. Published rounds are immutable. */
-export async function resetKnockoutRound(
-  tournamentId: string,
-  round: KnockoutRound,
-  reason: string | undefined,
-): Promise<{ readonly deleted: boolean }> {
-  const access = await requireTournamentOwnerOrSuperAdmin(tournamentId);
-  const firestore = getFirebaseAdminFirestore();
-  const tournamentRef = firestore.doc(paths.tournament(tournamentId));
-  const tiesRef = firestore.collection(paths.tournamentKnockoutTies(tournamentId));
-  const draftRef = firestore.doc(paths.tournamentKnockoutDraft(tournamentId, round));
-
-  const deleted = await firestore.runTransaction(async (transaction) => {
-    const tournamentSnapshot = await transaction.get(tournamentRef);
-
-    if (!tournamentSnapshot.exists) {
-      throw new TournamentMutationError("Tournament not found.", 404);
-    }
-
-    const [tiesSnapshot, draftSnapshot] = await Promise.all([
-      transaction.get(tiesRef),
-      transaction.get(draftRef),
-    ]);
-    const published = tiesSnapshot.docs.some((document) => document.data().round === round);
-
-    if (published) {
-      throw new TournamentMutationError(
-        "A published round is immutable. Knockout rounds can only be reset before publication.",
-        409,
-      );
-    }
-
-    if (!draftSnapshot.exists) {
-      return false;
-    }
-
-    transaction.delete(draftRef);
-    return true;
-  });
-
-  if (deleted) {
-    await writeAuditLog({
-      actorUid: access.user.userId,
-      actorRole: access.user.role,
-      action: "tournament.knockout.draft_reset",
-      targetType: "knockoutDraft",
-      targetId: `${tournamentId}/${round}`,
-      tournamentId,
-      before: { round },
-      after: { deleted: true },
-      reason: reason ?? null,
-    });
-  }
-
-  return { deleted };
-}
-
-/** Applies the organiser's extra-time or penalty decider to a level tie. */
+/** Applies an organiser decider to a level tie and advances the bracket. */
 export async function decideKnockoutTie(
   tournamentId: string,
   tieId: string,
@@ -1178,36 +1152,28 @@ export async function decideKnockoutTie(
 ): Promise<{ readonly winnerUid: string }> {
   const access = await requireTournamentOwnerOrSuperAdmin(tournamentId);
   const firestore = getFirebaseAdminFirestore();
-  const tournamentRef = firestore.doc(paths.tournament(tournamentId));
-  const tieRef = firestore.doc(paths.tournamentKnockoutTie(tournamentId, tieId));
-  const matchesRef = firestore
-    .collection(paths.tournamentMatches(tournamentId))
-    .where("tieId", "==", tieId);
 
-  const decidedResult = await firestore.runTransaction(async (transaction) => {
-    const tournamentSnapshot = await transaction.get(tournamentRef);
+  const decided = await firestore.runTransaction(async (transaction) => {
+    const state = await readKnockoutState(transaction, tournamentId);
 
-    if (!tournamentSnapshot.exists) {
-      throw new TournamentMutationError("Tournament not found.", 404);
-    }
-
-    if ((tournamentSnapshot.data() as TournamentDocument).status !== "knockout") {
+    if (state.tournament.status !== "knockout") {
       throw new TournamentMutationError("The knockout is not running.", 409);
     }
 
-    const [tieSnapshot, matchesSnapshot] = await Promise.all([
-      transaction.get(tieRef),
-      transaction.get(matchesRef),
-    ]);
+    const stored = state.ties.find((tie) => tie.id === tieId);
 
-    if (!tieSnapshot.exists) {
+    if (!stored) {
       throw new TournamentMutationError("Knockout tie not found.", 404);
     }
 
-    const data = tieSnapshot.data() as Record<string, unknown>;
-    const tie = readEngineTie(data);
-    const matches = matchesSnapshot.docs.map((document) => readEngineMatch(document.data(), 0));
-    const resolution = resolveTie(tie, matches);
+    if (!stored.tie.higher.player || !stored.tie.lower.player) {
+      throw new TournamentMutationError("That tie has no participants yet.", 409);
+    }
+
+    const legMatches = state.matches.filter((document) => document.data().tieId === tieId);
+    const engineMatches = legMatches.map((document) => readEngineMatch(document.data(), 0));
+    const resolvable = resolvableForTie(stored.tie);
+    const resolution = resolveTie(resolvable, engineMatches);
 
     if (resolution.status !== "needs_decider") {
       throw new TournamentMutationError(
@@ -1222,10 +1188,10 @@ export async function decideKnockoutTie(
       note: input.note ?? null,
       penalties: input.penalties ?? null,
     };
-    let decided: TieResolution;
+    let completed: TieResolution;
 
     try {
-      decided = applyDecider(resolution, tie, decider);
+      completed = applyDecider(resolution, resolvable, decider);
     } catch (error) {
       throw new TournamentMutationError(
         error instanceof Error ? error.message : "The decider is invalid.",
@@ -1233,27 +1199,62 @@ export async function decideKnockoutTie(
       );
     }
 
-    if (!decided.winnerUid) {
+    if (!completed.winnerUid) {
       throw new TournamentMutationError("The decider did not produce a winner.", 500);
     }
 
+    const { better, worse } = betterAndWorse(stored.tie);
     const now = Timestamp.now();
-    const position =
-      decided.winnerUid === tie.higherSeedUid ? tie.higherSeedPosition : tie.lowerSeedPosition;
+    const patch = tiePatchFromResolution(completed, stored.tie, now);
+    const winner = completed.winnerUid === better.playerId ? better : worse;
 
-    transaction.update(tieRef, {
+    // A decider on the final completes the tournament in the same transaction.
+    // Read the registrations and memberships before the first write.
+    const completionTargets =
+      stored.tie.round === "final" ? await readCompletionTargets(transaction, tournamentId) : null;
+
+    transaction.update(stored.ref, {
+      ...patch,
       status: "completed",
-      aggregate: decided.aggregate,
-      legsPlayed: decided.legsPlayed,
-      winnerUid: decided.winnerUid,
-      winnerPosition: position,
-      decidedBy: decided.decidedBy,
+      decidedBy: decider.method,
       deciderNote: decider.note,
-      penalties: decider.penalties,
-      updatedAt: now,
+      penalties: slotPenalties(stored.tie, decider.penalties),
     });
 
-    return { winnerUid: decided.winnerUid, tie, round: tie.round };
+    const advanced = stageBracketAdvance({
+      transaction,
+      firestore,
+      tournamentId,
+      now,
+      before: state.bracket,
+      ties: state.ties,
+      matches: state.matches,
+      changedTieId: tieId,
+      winner,
+    });
+    let completion: CompletionSummary | null = null;
+
+    if (completionTargets && advanced.finalWinner) {
+      const finalTie = advanced.bracket.ties.find((tie) => tie.round === "final") ?? null;
+
+      if (finalTie) {
+        completion = stageTournamentCompletion({
+          transaction,
+          tournamentRef: firestore.doc(paths.tournament(tournamentId)),
+          finalTie,
+          registeredUids: completionTargets.registeredUids,
+          membershipSnapshots: completionTargets.membershipSnapshots,
+          now,
+        });
+      }
+    }
+
+    return {
+      winnerUid: winner.playerId,
+      round: stored.tie.round,
+      tournament: state.tournament,
+      completion,
+    };
   });
 
   await writeAuditLog({
@@ -1265,8 +1266,8 @@ export async function decideKnockoutTie(
     tournamentId,
     before: { status: "needs_decider" },
     after: {
-      round: decidedResult.round,
-      winnerUid: decidedResult.winnerUid,
+      round: decided.round,
+      winnerUid: decided.winnerUid,
       method: input.method,
       penalties: input.penalties ?? null,
       note: input.note ?? null,
@@ -1274,100 +1275,123 @@ export async function decideKnockoutTie(
     reason: input.note ?? null,
   });
 
-  return { winnerUid: decidedResult.winnerUid };
+  if (decided.completion) {
+    await announceCompletion(access, tournamentId, decided.tournament, decided.completion);
+  }
+
+  return { winnerUid: decided.winnerUid };
 }
 
-/** Completes the tournament once the final has a winner. Standings stay frozen. */
-export async function completeTournament(
-  tournamentId: string,
-  reason: string | undefined,
-): Promise<{ readonly championUid: string; readonly runnerUpUid: string }> {
-  const access = await requireTournamentOwnerOrSuperAdmin(tournamentId);
-  const firestore = getFirebaseAdminFirestore();
-  const tournamentRef = firestore.doc(paths.tournament(tournamentId));
-  const tiesRef = firestore.collection(paths.tournamentKnockoutTies(tournamentId));
-  const registrationsRef = firestore.collection(paths.tournamentRegistrations(tournamentId));
+export interface CompletionSummary {
+  readonly championUid: string;
+  readonly runnerUpUid: string;
+  readonly championTag: string;
+  readonly runnerUpTag: string;
+}
 
-  const summary = await firestore.runTransaction(async (transaction) => {
-    const tournamentSnapshot = await transaction.get(tournamentRef);
+export function completionFromTie(tie: BracketTie): CompletionSummary | null {
+  if (!tie.winner || !tie.higher.player || !tie.lower.player) {
+    return null;
+  }
 
-    if (!tournamentSnapshot.exists) {
-      throw new TournamentMutationError("Tournament not found.", 404);
+  const runnerUp =
+    tie.winner.playerId === tie.higher.player.playerId ? tie.lower.player : tie.higher.player;
+
+  return {
+    championUid: tie.winner.playerId,
+    runnerUpUid: runnerUp.playerId,
+    championTag: tie.winner.gamerTag ?? "Champion",
+    runnerUpTag: runnerUp.gamerTag ?? "Runner-up",
+  };
+}
+
+/**
+ * Marks the tournament complete and every membership finished. Called only
+ * after the final has a winner, inside the same transaction that recorded it.
+ */
+export function stageTournamentCompletion(input: {
+  readonly transaction: Transaction;
+  readonly tournamentRef: DocumentReference;
+  readonly finalTie: BracketTie;
+  readonly registeredUids: readonly string[];
+  readonly membershipSnapshots: readonly DocumentSnapshot[];
+  readonly now: Timestamp;
+}): CompletionSummary | null {
+  const summary = completionFromTie(input.finalTie);
+
+  if (!summary) {
+    return null;
+  }
+
+  input.membershipSnapshots.forEach((snapshot) => {
+    if (!snapshot.exists) {
+      return;
     }
 
-    const tournament = tournamentSnapshot.data() as TournamentDocument;
-
-    if (tournament.status !== "knockout") {
-      throw new TournamentMutationError(
-        "Complete the tournament only while the knockout is running.",
-        409,
-      );
-    }
-
-    const [tiesSnapshot, registrationsSnapshot] = await Promise.all([
-      transaction.get(tiesRef),
-      transaction.get(registrationsRef),
-    ]);
-    const finalDocs = tiesSnapshot.docs.filter((document) => document.data().round === "final");
-
-    if (finalDocs.length !== 1) {
-      throw new TournamentMutationError("Publish and decide the final first.", 409);
-    }
-
-    const finalData = finalDocs[0]?.data() ?? {};
-    const finalTie = readEngineTie(finalData);
-    const finalStatus = finalData.status;
-
-    if (finalStatus !== "completed" || !finalTie.winnerUid) {
-      throw new TournamentMutationError("The final has no winner yet.", 409);
-    }
-
-    const championUid = finalTie.winnerUid;
-    const runnerUpUid =
-      championUid === finalTie.higherSeedUid ? finalTie.lowerSeedUid : finalTie.higherSeedUid;
-    const now = Timestamp.now();
-    const registeredUids = registrationsSnapshot.docs
-      .filter((document) => document.data().status === "registered")
-      .map((document) => document.id);
-    const membershipDocs = await Promise.all(
-      registeredUids.map((uid) =>
-        transaction.get(firestore.doc(paths.userMembership(uid, tournamentId))),
-      ),
-    );
-
-    membershipDocs.forEach((snapshot, index) => {
-      const uid = registeredUids[index];
-
-      if (!uid || !snapshot.exists) {
-        return;
-      }
-
-      const data = snapshot.data() ?? {};
-
-      transaction.update(snapshot.ref, {
-        status: "completed",
-        playerStatus: data.playerStatus ?? data.status ?? "registered",
-        updatedAt: now,
-      });
-    });
-
-    transaction.update(tournamentRef, {
+    const data = snapshot.data() ?? {};
+    input.transaction.update(snapshot.ref, {
       status: "completed",
-      championUid,
-      runnerUpUid,
-      completedAt: now,
-      updatedAt: FieldValue.serverTimestamp(),
+      playerStatus: data.playerStatus ?? data.status ?? "registered",
+      updatedAt: input.now,
     });
-
-    return {
-      championUid,
-      runnerUpUid,
-      playerIds: registeredUids,
-      slug: tournament.slug,
-      name: tournament.name,
-    };
   });
 
+  input.transaction.update(input.tournamentRef, {
+    status: "completed",
+    championUid: summary.championUid,
+    runnerUpUid: summary.runnerUpUid,
+    completedAt: input.now,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+
+  return summary;
+}
+
+/** Reopens a completed tournament when a Super Admin clears its final winner. */
+export function stageTournamentReopen(input: {
+  readonly transaction: Transaction;
+  readonly tournamentRef: DocumentReference;
+  readonly now: Timestamp;
+}): void {
+  input.transaction.update(input.tournamentRef, {
+    status: "knockout",
+    championUid: null,
+    runnerUpUid: null,
+    completedAt: null,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+}
+
+export async function readCompletionTargets(
+  transaction: Transaction,
+  tournamentId: string,
+): Promise<{
+  readonly registeredUids: readonly string[];
+  readonly membershipSnapshots: readonly DocumentSnapshot[];
+}> {
+  const firestore = getFirebaseAdminFirestore();
+  const registrationsSnapshot = await transaction.get(
+    firestore
+      .collection(paths.tournamentRegistrations(tournamentId))
+      .where("status", "==", "registered"),
+  );
+  const registeredUids = registrationsSnapshot.docs.map((document) => document.id);
+  const membershipSnapshots = await Promise.all(
+    registeredUids.map((uid) =>
+      transaction.get(firestore.doc(paths.userMembership(uid, tournamentId))),
+    ),
+  );
+
+  return { registeredUids, membershipSnapshots };
+}
+
+/** Post-transaction completion side effects: audit plus a message to everyone. */
+export async function announceCompletion(
+  access: TournamentAccess,
+  tournamentId: string,
+  tournament: TournamentDocument,
+  summary: CompletionSummary,
+): Promise<void> {
   await writeAuditLog({
     actorUid: access.user.userId,
     actorRole: access.user.role,
@@ -1381,20 +1405,21 @@ export async function completeTournament(
       championUid: summary.championUid,
       runnerUpUid: summary.runnerUpUid,
     },
-    reason: reason ?? null,
   });
 
-  for (let index = 0; index < summary.playerIds.length; index += 18) {
-    await createNotifications(summary.playerIds.slice(index, index + 18), {
+  const firestore = getFirebaseAdminFirestore();
+  const registrations = await firestore
+    .collection(paths.tournamentRegistrations(tournamentId))
+    .where("status", "==", "registered")
+    .get();
+
+  await createNotifications(
+    registrations.docs.map((document) => document.id),
+    {
       type: "tournament",
-      title: `${summary.name} is complete`,
-      body: "The final result is in. The champion and the frozen league table are on the tournament page.",
-      link: `/tournaments/${summary.slug}`,
-    }).catch(() => undefined);
-  }
-
-  return { championUid: summary.championUid, runnerUpUid: summary.runnerUpUid };
+      title: `${tournament.name} is complete`,
+      body: `${summary.championTag} is the champion. The final result and the frozen league table are on the tournament page.`,
+      link: `/tournaments/${tournament.slug}`,
+    },
+  ).catch(() => undefined);
 }
-
-// Re-exported for the knockout result module so both paths share one rule.
-export { nextRoundFor, winnerPosition };

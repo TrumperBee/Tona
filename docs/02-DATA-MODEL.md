@@ -54,7 +54,7 @@
 | `tournaments/{id}/matches/{matchId}`          | tournamentId, stage, matchday, homeUid, awayUid, homeTag, awayTag, participants, status, scheduledAt, result, updatedAt                                                                                                                                      | Owner/Super Admin always; public once fixtures are published                |
 | `tournaments/{id}/resultReports/{id}`         | tournamentId, matchId, reportedBy, reportedByTag, reason (10–500), status, adminNote, resolvedBy, resolvedAt, createdAt                                                                                                                                      | Reporter, owner, Super Admin                                                |
 | `tournaments/{id}/standings/{uid}`            | Derived gamerTag, MP, W, D, L, GF, GA, GD, Pts, position, qualificationBand                                                                                                                                                                                  | Public with a public tournament; owner and Super Admin always               |
-| `tournaments/{id}/knockoutTies/{id}`          | round, seeds, legs, aggregate, winnerUid, status                                                                                                                                                                                                             | Public with a public tournament; owner and Super Admin always               |
+| `tournaments/{id}/knockoutTies/{id}`          | round, bracketSlot, legs, higher/lower slot refs and participants, aggregate, winnerUid, status                                                                                                                                                              | Public with a public tournament; owner and Super Admin always               |
 | `tournaments/{id}/announcements/{id}`         | title, body, authorUid, publishedAt                                                                                                                                                                                                                          | Public with a public tournament; owner and Super Admin always               |
 | `announcements/{id}`                          | Platform-wide title, body, severity, pinned, publishedAt, expiresAt, authorUid, createdAt, updatedAt, deletedAt                                                                                                                                              | Published, unexpired, non-deleted: anyone; otherwise Super Admin            |
 | `hallOfFame/{id}`                             | tournamentId, season, championUid/tag, finalistUid/tag, thirdPlace, stats                                                                                                                                                                                    | Anyone                                                                      |
@@ -390,8 +390,14 @@ rows from confirmed results; clients never write them.
 
 ### 3.13 `tournaments/{id}/knockoutTies/{id}` — knockout tie
 
-Fields: `round`, `seeds { home, away }`, `legs[]`, `aggregate { homeGoals,
-awayGoals }`, `winnerUid`, `status` (`scheduled`, `in_progress`, `completed`).
+Fields: `tieId`, `round`, `bracketSlot`, `legs` (1 or 2), `higher` and `lower`
+slot documents (`ref` = `{ type: "seed", seed }` or `{ type: "winnerOf", tieId }`,
+plus the resolved `uid`, `gamerTag` and league `position` or null), `group`,
+`aggregate { higherGoals, lowerGoals }` keyed by the structural slot, `legsPlayed`,
+`status` (`pending`, `in_progress`, `needs_decider`, `completed`), `winnerUid`,
+`winnerPosition`, `decidedBy`, `deciderNote`, optional `penalties { higher, lower }`
+and `updatedAt`. The final is always one leg. The document is server-written and
+publicly readable once the tournament is in a knockout/public status.
 
 ### 3.14 Announcements
 

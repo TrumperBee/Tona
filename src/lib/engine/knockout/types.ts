@@ -71,6 +71,9 @@ export const R16_OPPONENT_GROUP: Readonly<Record<number, PlayoffGroup>> = {
 export const KNOCKOUT_LEG_CHOICES = [1, 2] as const;
 export type KnockoutLegs = (typeof KNOCKOUT_LEG_CHOICES)[number];
 
+/** Bumped whenever the bracket algorithm changes in a replay-breaking way. */
+export const KNOCKOUT_ALGORITHM_VERSION = 2;
+
 export interface KnockoutConfig {
   readonly playoff: KnockoutLegs;
   readonly r16: KnockoutLegs;
@@ -95,34 +98,46 @@ export interface KnockoutPlayer {
   readonly gamerTag?: string;
 }
 
-export interface PlayoffWinner {
-  readonly playerId: string;
-  readonly position: number;
-  readonly group: PlayoffGroup;
-  readonly tieId: string;
-  readonly gamerTag?: string;
+/**
+ * A bracket slot points either at a fixed league seed or at the winner of an
+ * earlier tie. Nothing about a later round is inferred before its source tie
+ * completes.
+ */
+export type KnockoutSlot =
+  | { readonly type: "seed"; readonly seed: number }
+  | { readonly type: "winnerOf"; readonly tieId: string };
+
+export interface BracketSlot {
+  readonly ref: KnockoutSlot;
+  /** Known participant, or null while the source tie is undecided. */
+  readonly player: KnockoutPlayer | null;
 }
 
-/** A pure description of one knockout tie, independent of storage. */
-export interface KnockoutTie {
+/** One tie in the complete bracket, including unresolved later rounds. */
+export interface BracketTie {
   readonly tieId: string;
   readonly round: KnockoutRound;
   /** 1-based position inside the round. Adjacent slots form the next round. */
   readonly bracketSlot: number;
   readonly legs: KnockoutLegs;
-  readonly higherSeedUid: string;
-  readonly lowerSeedUid: string;
-  /** League-phase positions used for home advantage and ranking. */
-  readonly higherSeedPosition: number;
-  readonly lowerSeedPosition: number;
+  readonly higher: BracketSlot;
+  readonly lower: BracketSlot;
   /** The play-off group this tie belongs to, or null in later rounds. */
   readonly group: PlayoffGroup | null;
-  /** Previous-round ties that produced the two participants. */
-  readonly sourceTieIds: readonly string[];
-  /** Winner of this tie when it is completed. */
-  readonly winnerUid?: string | null;
-  /** League position of the winner, recorded for the next round. */
-  readonly winnerPosition?: number | null;
+  readonly winner: KnockoutPlayer | null;
+}
+
+export interface KnockoutBracket {
+  readonly seed: string;
+  /** Configured leg count for every round before the final. */
+  readonly legs: KnockoutLegs;
+  readonly ties: readonly BracketTie[];
+}
+
+export interface BracketTieResult {
+  readonly tieId: string;
+  /** Null clears a previously recorded winner. */
+  readonly winner: KnockoutPlayer | null;
 }
 
 export interface KnockoutMatch {
@@ -153,6 +168,14 @@ export interface KnockoutDecider {
   readonly method: Exclude<KnockoutDecidedBy, "aggregate">;
   readonly note: string | null;
   readonly penalties: { readonly higher: number; readonly lower: number } | null;
+}
+
+/** Minimal tie shape needed to resolve a stored tie from its leg matches. */
+export interface ResolvableTie {
+  readonly tieId: string;
+  readonly legs: KnockoutLegs;
+  readonly higherSeedUid: string;
+  readonly lowerSeedUid: string;
 }
 
 export type TieResolution =
@@ -193,9 +216,9 @@ export type KnockoutValidationCode =
   | "r16-direct-seed-invalid"
   | "r16-opponent-invalid"
   | "r16-group-invalid"
-  | "progression-count-invalid"
-  | "progression-source-invalid"
-  | "progression-winner-invalid";
+  | "slot-reference-invalid"
+  | "slot-unresolved-invalid"
+  | "winner-invalid";
 
 export interface KnockoutValidationIssue {
   readonly code: KnockoutValidationCode;

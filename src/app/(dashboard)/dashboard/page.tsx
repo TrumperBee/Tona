@@ -248,7 +248,7 @@ export default async function DashboardPage() {
       <section>
         <SectionHeading
           title="Knockout status"
-          description="Your latest published knockout tie in every competition that reached the bracket. A level tie is settled by the organiser's extra-time or penalty decider."
+          description="Where you stand in every generated bracket: direct qualifier, play-off, eliminated, still alive or champion. Your next tie appears as soon as its opponent is decided."
         />
         <div className="mt-5">
           {knockout.length === 0 ? (
@@ -256,7 +256,7 @@ export default async function DashboardPage() {
               icon={Swords}
               eyebrow="Knockout status"
               title="No knockout bracket yet"
-              description="When a competition you entered closes its league phase and publishes a round, your tie and its result appear here."
+              description="When a competition you entered has all 144 league results and the organiser generates the knockout stage, your path appears here."
             />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2">
@@ -269,8 +269,8 @@ export default async function DashboardPage() {
                       : entry.outcome === "active"
                         ? { label: "Still in the bracket", tone: "info" as const }
                         : entry.outcome === "eliminated"
-                          ? { label: "Knockout run ended", tone: "danger" as const }
-                          : { label: "Waiting for the next draw", tone: "neutral" as const };
+                          ? { label: "Eliminated", tone: "danger" as const }
+                          : { label: "Through", tone: "success" as const };
                 const href =
                   entry.outcome === "active" && entry.nextMatchId
                     ? `/tournaments/${entry.slug}/matches/${entry.nextMatchId}`
@@ -283,7 +283,9 @@ export default async function DashboardPage() {
                         <div>
                           <CardTitle className="text-lg">{entry.name}</CardTitle>
                           <p className="mt-1 text-xs text-grey-400">
-                            {entry.roundLabel ?? "Knockout"}
+                            {entry.band
+                              ? STANDING_BAND_LABELS[entry.band]
+                              : (entry.roundLabel ?? "Knockout")}
                           </p>
                         </div>
                         <Badge tone={meta.tone}>{meta.label}</Badge>
@@ -295,11 +297,16 @@ export default async function DashboardPage() {
                           {entry.roundLabel} vs{" "}
                           <span className="font-medium text-grey-100">{entry.opponentTag}</span>
                         </p>
+                      ) : entry.roundLabel && entry.opponentSource ? (
+                        <p>
+                          {entry.roundLabel}: waiting for{" "}
+                          <span className="font-medium text-grey-200">{entry.opponentSource}</span>
+                        </p>
                       ) : (
                         <p>
                           {entry.outcome === "eliminated"
-                            ? "You did not reach the published bracket."
-                            : "The next round has not been drawn yet."}
+                            ? "Your run in this competition has ended."
+                            : "Your next tie is created automatically when the feeding tie is decided."}
                         </p>
                       )}
                       {entry.goalsFor !== null &&
@@ -315,7 +322,9 @@ export default async function DashboardPage() {
                           href={href}
                           className="text-sm font-semibold text-electric-300 underline-offset-4 hover:underline"
                         >
-                          {entry.outcome === "active" ? "Open your tie" : "Open tournament"}
+                          {entry.outcome === "active" && entry.nextMatchId
+                            ? "Open your tie"
+                            : "Open tournament"}
                         </Link>
                         {entry.tieStatus === "needs_decider" ? (
                           <Badge tone="warning">Decider pending</Badge>
