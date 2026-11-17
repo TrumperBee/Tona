@@ -1,22 +1,35 @@
 // GCC - participant dashboard overview.
 // Real Firestore data only: the profile, memberships and zeroed statistics that
 // the server has actually written. Empty states explain what will appear.
-import { CalendarDays, Compass, ListOrdered, Swords, UserRound } from "lucide-react";
+import { CalendarDays, ListOrdered, Swords, UserRound } from "lucide-react";
 import Link from "next/link";
 
 import { PageHeader, SectionHeading } from "@/components/shared/page-header";
 import { buttonStyles } from "@/components/ui/button-styles";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { EmptyState, StatCard } from "@/components/ui/data-display";
+import { Avatar, EmptyState, StatCard } from "@/components/ui/data-display";
 import { requirePageSignedIn } from "@/lib/auth/page-access";
 import { getGame } from "@/lib/config/games";
 import { TOURNAMENT_STATUS_META } from "@/lib/config/tournament-status";
 import { getPlayerKnockoutStatus } from "@/lib/data/player-knockout";
+import { getPlayerMatchHistory, type MatchOutcome } from "@/lib/data/player-match-history";
 import { getPlayerStandings } from "@/lib/data/player-standings";
 import { STANDING_BAND_LABELS } from "@/lib/engine/standings/types";
 import { getOwnProfile } from "@/lib/profile/server";
+import { formatDate } from "@/lib/utils/dates";
 
 export const metadata = { title: "Dashboard" };
+
+const DASHBOARD_HISTORY_SIZE = 5;
+
+const OUTCOME_META: Record<
+  MatchOutcome,
+  { readonly label: string; readonly tone: "success" | "neutral" | "danger" }
+> = {
+  win: { label: "Win", tone: "success" },
+  draw: { label: "Draw", tone: "neutral" },
+  loss: { label: "Loss", tone: "danger" },
+};
 
 export default async function DashboardPage() {
   const user = await requirePageSignedIn("/dashboard");
@@ -43,6 +56,9 @@ export default async function DashboardPage() {
   const game = getGame(privateProfile.preferredGame);
   const standings = await getPlayerStandings(user.userId);
   const knockout = await getPlayerKnockoutStatus(user.userId);
+  const recentMatches = await getPlayerMatchHistory(user.userId, {
+    pageSize: DASHBOARD_HISTORY_SIZE,
+  });
 
   return (
     <div className="space-y-8">
@@ -340,14 +356,69 @@ export default async function DashboardPage() {
       </section>
 
       <section>
-        <SectionHeading title="Match history" />
+        <SectionHeading
+          title="Recent matches"
+          description="Your last recorded results. History is built from results entered by tournament admins."
+          action={
+            <Link
+              href="/dashboard/profile#match-history"
+              className={buttonStyles({ variant: "secondary", size: "sm" })}
+            >
+              Full history
+            </Link>
+          }
+        />
         <div className="mt-5">
-          <EmptyState
-            icon={Compass}
-            eyebrow="Match history"
-            title="No recorded matches yet"
-            description="Match history is built from results entered by tournament admins. It stays empty until your first real match is recorded."
-          />
+          {recentMatches.rows.length === 0 ? (
+            <EmptyState
+              icon={CalendarDays}
+              eyebrow="Match history"
+              title="No recorded matches yet"
+              description="Match history is built from results entered by tournament admins. It stays empty until your first real match is recorded."
+            />
+          ) : (
+            <ul className="space-y-3">
+              {recentMatches.rows.map((match) => {
+                const outcome = OUTCOME_META[match.outcome];
+
+                return (
+                  <li key={match.cursor}>
+                    <Card>
+                      <CardContent className="flex flex-wrap items-center gap-3 pt-5">
+                        <Avatar name={match.opponentTag} src={match.opponentAvatarUrl} size="sm" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-grey-100">
+                            <Link
+                              href={`/players/${encodeURIComponent(match.opponentTag)}`}
+                              className="underline-offset-4 hover:underline"
+                            >
+                              @{match.opponentTag}
+                            </Link>
+                          </p>
+                          <p className="mt-0.5 truncate text-xs text-grey-400">
+                            {match.tournamentName} · matchday {match.matchday}
+                            {match.recordedAt ? ` · ${formatDate(match.recordedAt)}` : ""}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <Badge tone={outcome.tone}>{outcome.label}</Badge>
+                          <p className="font-display text-lg font-semibold tabular-nums text-white">
+                            {match.homeGoals}–{match.awayGoals}
+                          </p>
+                          <Link
+                            href={`/tournaments/${match.tournamentSlug}/matches/${match.matchId}`}
+                            className="text-xs font-semibold text-electric-300 underline-offset-4 hover:underline"
+                          >
+                            Open match
+                          </Link>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
       </section>
     </div>

@@ -380,7 +380,7 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
         </div>
       </section>
 
-      <section>
+      <section id="match-history" className="scroll-mt-24">
         <SectionHeading
           title="Match history"
           description="Completed matches from every competition, newest recorded first. Only results entered by a tournament admin appear here."
