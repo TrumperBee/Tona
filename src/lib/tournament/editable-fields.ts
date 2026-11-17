@@ -34,6 +34,7 @@ export const TOURNAMENT_FIELD_IDS = [
   "allowedPlatforms",
   "allowedCountries",
   "tiebreakerProfile",
+  "contactNote",
 ] as const;
 export type TournamentFieldId = (typeof TOURNAMENT_FIELD_IDS)[number];
 
@@ -71,6 +72,7 @@ export function getEditableTournamentFields(
     "logoUrl",
     "registrationClosesAt",
     "startsAt",
+    "contactNote",
   ]);
 
   // The tie-break profile is part of the published table contract: changing it

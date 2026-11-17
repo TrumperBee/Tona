@@ -3,9 +3,10 @@
 // GCC - organiser registrations management actions.
 //
 // The page renders the real rows on the server; this file owns the three
-// interactive pieces: issuing a WhatsApp contact link (the number stays on the
-// server, only the wa.me link is returned), removing a player with a required
-// reason, and adding a player through the public gamer-tag search.
+// interactive pieces: issuing a WhatsApp contact link (a wa.me link necessarily
+// embeds the number, so it is minted per player, rate limited and audited),
+// removing a player with a required reason, and adding a player through the
+// public gamer-tag search.
 import { MessageCircle, Search, UserPlus, UserRoundX } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -71,8 +72,9 @@ export function RegistrationRowActions({
         return;
       }
 
-      // The wa.me link opens with a generic pre-filled message; the player's
-      // number itself never reaches the browser.
+      // The link opens WhatsApp with the generic organiser message (plus the
+      // tournament's contact note). WhatsApp shows the number; the interface
+      // never does, and the organiser still presses Send.
       window.open(body.link, "_blank", "noopener,noreferrer");
     } catch {
       setContactError("The connection failed. Check your network and try again.");

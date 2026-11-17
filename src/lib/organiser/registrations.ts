@@ -1,15 +1,18 @@
 // GCC - organiser registration management.
 //
 // Read helpers for the registrations tab plus the two privileged read paths:
-// the WhatsApp contact link (issued for one player, audited, the raw number is
-// never returned to the browser) and the CSV export (owner only, display-safe
-// columns only — no phone numbers, no email addresses).
+// the WhatsApp contact link (issued for one player, audited) and the CSV export
+// (owner only, display-safe columns only — no phone numbers, no email
+// addresses). A wa.me link necessarily embeds the recipient's number, so the
+// link is returned only to the owner or Super Admin, for one player, with a
+// rate limit and an audit entry. The number itself is never displayed.
 import "server-only";
 
 import type { Query } from "firebase-admin/firestore";
 
 import { writeAuditLog } from "@/lib/audit/log";
 import { requireTournamentOwnerOrSuperAdmin } from "@/lib/auth/guards";
+import { normaliseContactNote } from "@/lib/contact/message";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 import { parsePageSize } from "@/lib/super-admin/query";
@@ -133,8 +136,10 @@ export async function listTournamentRegistrations(
 
 /**
  * Issues a one-player WhatsApp click-to-chat link. The message is the generic
- * organiser-contact template; the player's phone number is used to build the
- * link and is never returned to the browser. Every issuance is audited.
+ * organiser-contact template plus the tournament's optional contact note. The
+ * returned link embeds the player's number by design: it is issued only to the
+ * owner or Super Admin, for one registered player, under a rate limit, and
+ * every issuance is audited. The number is never rendered as text.
  */
 export async function issueRegistrationContactLink(
   tournamentId: string,
@@ -167,12 +172,11 @@ export async function issueRegistrationContactLink(
     throw new TournamentMutationError("That player is not registered for this competition.", 404);
   }
 
-  const link = buildWhatsAppLink(
-    phone,
-    renderWhatsAppTemplate("organiser-contact", {
-      tournamentName: typeof tournament?.name === "string" ? tournament.name : "this competition",
-    }),
-  );
+  const note = normaliseContactNote(tournament?.contactNote ?? null);
+  const baseMessage = renderWhatsAppTemplate("organiser-contact", {
+    tournamentName: typeof tournament?.name === "string" ? tournament.name : "this competition",
+  });
+  const link = buildWhatsAppLink(phone, note ? `${baseMessage}\n\n${note}` : baseMessage);
 
   await writeAuditLog({
     actorUid: access.user.userId,

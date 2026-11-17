@@ -270,6 +270,13 @@ export async function updateTournament(
       stage("tiebreakerProfile", patch.tiebreakerProfile);
     }
 
+    if (patch.contactNote !== undefined) {
+      // An empty note is stored as null so the UI can show the honest
+      // "no note" state and the message builder never appends a blank line.
+      const note = typeof patch.contactNote === "string" ? patch.contactNote.trim() : "";
+      stage("contactNote", note.length > 0 ? note : null);
+    }
+
     transaction.update(reference, update);
 
     return { before, after, clearedAssets };

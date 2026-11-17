@@ -22,6 +22,7 @@ import { countryFlag, countryName } from "@/lib/config/countries";
 import { getServerEnv } from "@/lib/config/env.server";
 import { getGame, PLATFORMS } from "@/lib/config/games";
 import { maskPhoneNumber } from "@/lib/platform/phone-mask";
+import { listContactEventsForUser } from "@/lib/super-admin/contact-events";
 import { getUserDetail } from "@/lib/super-admin/users";
 import { formatDate, formatDateTime } from "@/lib/utils/dates";
 import { describeAuditAction } from "@/lib/audit/actions";
@@ -55,6 +56,8 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
   if (!detail) {
     notFound();
   }
+
+  const contactEvents = await listContactEventsForUser(uid);
 
   const user = detail.user;
   const env = getServerEnv();
@@ -308,6 +311,50 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
                       {formatDateTime(entry.data.createdAt.toDate())}
                     </p>
                   </div>
+                </li>
+              ))}
+            </ol>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>WhatsApp contact activity</CardTitle>
+          <p className="mt-1 text-sm text-grey-400">
+            Contact links issued by or to this account, newest first. Only the match, direction and
+            time are recorded: no message text and no phone number.
+          </p>
+        </CardHeader>
+        <CardContent>
+          {contactEvents.length === 0 ? (
+            <EmptyState
+              size="sm"
+              icon={Clock}
+              title="No contact links issued"
+              description="Issuances appear here when this player contacts an opponent or an organiser contacts them."
+            />
+          ) : (
+            <ol className="divide-y divide-white/10">
+              {contactEvents.map((event) => (
+                <li
+                  key={event.id}
+                  className="flex flex-wrap items-start justify-between gap-2 py-3 first:pt-0 last:pb-0"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-white">
+                      {event.outgoing ? "Sent by this account" : "Received by this account"}
+                    </p>
+                    <p className="mt-0.5 break-all text-xs text-grey-500">
+                      Match {event.matchId} · tournament {event.tournamentId}
+                    </p>
+                    <p className="text-xs text-grey-500">
+                      {event.templateId ?? "Player-edited message"}
+                    </p>
+                  </div>
+                  <span className="text-xs text-grey-500">
+                    {event.createdAt ? formatDateTime(event.createdAt) : "—"}
+                  </span>
                 </li>
               ))}
             </ol>

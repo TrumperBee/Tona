@@ -82,6 +82,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           allowedPlatforms: tournament.allowedPlatforms,
           allowedCountries: tournament.allowedCountries,
           tiebreakerProfile: tournament.tiebreakerProfile ?? "uefa",
+          contactNote: tournament.contactNote ?? "",
         }}
       />
 

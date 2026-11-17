@@ -1,6 +1,8 @@
 // GCC — click-to-chat link builder (desktop and mobile web).
 // Pure helper: the server can generate links without calling any WhatsApp API.
-// TODO(phase 14): use inside notification and fixture reminder flows.
+// Phase 14 uses it from the player-to-opponent contact route and the organiser
+// registration contact route; the number only ever exists inside the returned
+// link.
 
 import { isValidE164, normalizePhone } from "./phone";
 

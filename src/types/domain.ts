@@ -424,6 +424,13 @@ export interface TournamentDocument {
    * editable only until the first league result is recorded.
    */
   readonly tiebreakerProfile?: TiebreakerProfile;
+  /**
+   * Optional organiser note (max 140 characters) appended to every WhatsApp
+   * message issued for this tournament, for example an agreement deadline.
+   * It never contains a phone number: it is written by the organiser and
+   * shown to players before they send anything.
+   */
+  readonly contactNote?: string | null;
   /** Last successful full rebuild of the 36 standings documents. */
   readonly standingsUpdatedAt?: Timestamp | null;
   /** Set when the whole knockout bracket is generated and the table is frozen. */
@@ -601,6 +608,21 @@ export interface MatchResult {
   readonly lastEditedBy?: string;
   readonly lastEditedAt?: Timestamp;
   readonly editCount: number;
+}
+
+/**
+ * Server-only record of one WhatsApp contact link issued to a player or
+ * organiser. It deliberately stores no phone number and no message text: its
+ * only job is abuse handling (who contacted whom, for which match, when).
+ */
+export interface ContactEventDocument {
+  readonly tournamentId: string;
+  readonly matchId: string;
+  readonly fromUid: string;
+  readonly toUid: string;
+  /** Template used for the suggestion, or null when the player edited it. */
+  readonly templateId: string | null;
+  readonly createdAt: Timestamp;
 }
 
 export interface MatchDocument {

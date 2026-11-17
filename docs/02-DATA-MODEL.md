@@ -19,7 +19,10 @@
 - **Private and public data are separate documents.** `users/{uid}` holds private
   identity and contact data. `publicProfiles/{uid}` holds display data only.
 - **WhatsApp numbers never appear in a public document.** `whatsappE164` exists only
-  in `users/{uid}`. Opponents receive contact links through a later server route.
+  in `users/{uid}`. A `wa.me` link necessarily embeds the recipient's number, so
+  opponents and organisers obtain a link only from a server route that checks a
+  real relationship, rate-limits the request and records the issuance. The number
+  is never rendered as text and never copied into a public document.
 - **Documents are read-optimised.** Firestore has no joins; display snapshots
   (`gamerTag`, `homeTag`, `awayTag`) are refreshed by the server when source data
   changes.
@@ -60,6 +63,7 @@
 | `hallOfFame/{id}`                             | tournamentId, season, championUid/tag, finalistUid/tag, thirdPlace, stats                                                                                                                                                                                    | Anyone                                                                      |
 | `auditLogs/{id}`                              | actorUid, actorRole, action, targetType, targetId, tournamentId, before, after, reason, createdAt                                                                                                                                                            | Super Admin only                                                            |
 | `rateLimits/{key}`                            | key, count, windowStart, expiresAt, updatedAt                                                                                                                                                                                                                | Nobody (server only)                                                        |
+| `contactEvents/{id}`                          | tournamentId, matchId, fromUid, toUid, templateId, createdAt                                                                                                                                                                                                 | Super Admin only                                                            |
 | `platformSettings/main`                       | maintenanceMode, maintenanceMessage, registrationsOpen, maxActiveTournamentsPerOrganiser, applicationCooldownDays, updatedBy, updatedAt                                                                                                                      | Super Admin only (public fields served by a server helper)                  |
 | `platformStats/summary`                       | totalUsers, totalTournaments, totalMatches, activeTournaments plus Phase 5 analytics fields, updatedAt                                                                                                                                                       | Super Admin only                                                            |
 
@@ -220,25 +224,26 @@ Server-only; rules deny every client read and write.
 
 ### 3.5 `tournaments/{id}` — tournament
 
-| Field                                                     | Type               | Notes                                                  |
-| --------------------------------------------------------- | ------------------ | ------------------------------------------------------ |
-| `ownerUid`                                                | string             | Authoritative owner, checked server-side               |
-| `slug`                                                    | string             | Public URL slug, reserved in `tournamentSlugs`         |
-| `name`, `description`, `rules`                            | string             | Display content; `rules` may be empty until publishing |
-| `nameLower`                                               | string             | Normalised search key, never accepted from clients     |
-| `gameId`, `formatId`                                      | IDs                | `formatId` is always `ucl-league-phase-36`             |
-| `coverImageUrl`, `logoUrl`                                | string \| null     | Cloudinary URLs only                                   |
-| `matchDurationMinutes`                                    | number             | One of the configured options                          |
-| `timezone`                                                | string             | IANA identifier, default `Africa/Nairobi`              |
-| `allowedPlatforms`                                        | string[] \| null   | `null` means every platform                            |
-| `allowedCountries`                                        | string[] \| null   | `null` means every country; ≤ 60 codes                 |
-| `registrationOpensAt`, `registrationClosesAt`, `startsAt` | Timestamp          | Ordered by validation; start ≤ 18 months away          |
-| `maxParticipants`                                         | number             | Fixed at 36 (immutable)                                |
-| `registrationCount`                                       | number             | Server-derived from active registrations               |
-| `status`                                                  | `TournamentStatus` | Lifecycle below                                        |
-| `season`                                                  | string             | Display season label                                   |
-| `ratingsAppliedAt`, `ratingSnapshot`                      | Timestamp / map    | Elo idempotence: written once on completion            |
-| `createdAt`, `updatedAt`                                  | Timestamp          | Server-written                                         |
+| Field                                                     | Type               | Notes                                                                                                 |
+| --------------------------------------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------- |
+| `ownerUid`                                                | string             | Authoritative owner, checked server-side                                                              |
+| `slug`                                                    | string             | Public URL slug, reserved in `tournamentSlugs`                                                        |
+| `name`, `description`, `rules`                            | string             | Display content; `rules` may be empty until publishing                                                |
+| `nameLower`                                               | string             | Normalised search key, never accepted from clients                                                    |
+| `gameId`, `formatId`                                      | IDs                | `formatId` is always `ucl-league-phase-36`                                                            |
+| `coverImageUrl`, `logoUrl`                                | string \| null     | Cloudinary URLs only                                                                                  |
+| `matchDurationMinutes`                                    | number             | One of the configured options                                                                         |
+| `timezone`                                                | string             | IANA identifier, default `Africa/Nairobi`                                                             |
+| `allowedPlatforms`                                        | string[] \| null   | `null` means every platform                                                                           |
+| `allowedCountries`                                        | string[] \| null   | `null` means every country; ≤ 60 codes                                                                |
+| `registrationOpensAt`, `registrationClosesAt`, `startsAt` | Timestamp          | Ordered by validation; start ≤ 18 months away                                                         |
+| `maxParticipants`                                         | number             | Fixed at 36 (immutable)                                                                               |
+| `registrationCount`                                       | number             | Server-derived from active registrations                                                              |
+| `status`                                                  | `TournamentStatus` | Lifecycle below                                                                                       |
+| `season`                                                  | string             | Display season label                                                                                  |
+| `contactNote`                                             | string \| null     | Optional organiser note (≤ 140 chars), appended to every WhatsApp contact message for this tournament |
+| `ratingsAppliedAt`, `ratingSnapshot`                      | Timestamp / map    | Elo idempotence: written once on completion                                                           |
+| `createdAt`, `updatedAt`                                  | Timestamp          | Server-written                                                                                        |
 
 **Tournament lifecycle** (`canTransition` in `src/types/domain.ts`):
 
@@ -580,6 +585,22 @@ country and tag prefix.
 
 **Writer:** server only. **Readers:** anyone.
 
+### 3.25 `contactEvents/{id}` — WhatsApp contact issuance log
+
+One document per `wa.me` link issued to a player. Fields: `tournamentId`,
+`matchId`, `fromUid`, `toUid`, `templateId` (the template used for the
+suggestion, or `null` when the player edited the message) and `createdAt`.
+
+The collection deliberately stores **no phone number and no message body**. Its
+only purpose is abuse handling: who asked to contact whom, about which match,
+and when. Issuance requires the caller to be one of the two players of a
+`scheduled` match, the opponent's account to be `active`, and a valid stored
+E.164 number; it is rate-limited to 30 per hour per user. The organiser route
+(`GET /api/organiser/tournaments/[id]/registrations/[uid]/contact`) is audited
+in `auditLogs` instead, because it is a different relationship.
+
+**Writer:** server only. **Readers:** Super Admin only.
+
 ## 4. Relationships
 
 ```text
@@ -613,6 +634,8 @@ organiserProfiles/{uid} ── uid ── users/{uid}
 tournaments/{id} ── ownerUid ── organiserProfiles/{uid}
 auditLogs/{id} ── actorUid ── users/{uid}
 auditLogs/{id} ── targetType/targetId ── users/{uid} or announcements/{id}
+contactEvents/{id} ── fromUid / toUid ── users/{uid}
+contactEvents/{id} ── matchId ── tournaments/{tournamentId}/matches/{matchId}
 announcements/{id} ── authorUid ── users/{uid}
 platformSettings/main ── updatedBy ── users/{uid}
 hallOfFame/{id} ── tournamentId ── tournaments/{id}
@@ -620,7 +643,7 @@ hallOfFame/{id} ── tournamentId ── tournaments/{id}
 
 ## 5. Composite indexes
 
-`firestore.indexes.json` declares 57 composite indexes:
+`firestore.indexes.json` declares 59 composite indexes:
 
 | Collection group    | Fields                                                                                                       | Use                                                             |
 | ------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
@@ -659,6 +682,8 @@ hallOfFame/{id} ── tournamentId ── tournaments/{id}
 | `adminApplications` | `uid` ASC + `createdAt` DESC                                                                                 | Applicant history (Phase 6)                                     |
 | `resultReports`     | `status` ASC + `createdAt` DESC (collection scope)                                                           | Organiser report inbox filtered by status (Phase 11)            |
 | `resultReports`     | `status` ASC + `createdAt` DESC (collection group)                                                           | Super Admin cross-tournament oversight, filtered (Phase 11)     |
+| `contactEvents`     | `fromUid` ASC + `createdAt` DESC                                                                             | Super Admin view of links a player sent (Phase 14)              |
+| `contactEvents`     | `toUid` ASC + `createdAt` DESC                                                                               | Super Admin view of links a player received (Phase 14)          |
 
 The user-filter queries must include equality fields in canonical order
 (`role`, `status`, `country`, `preferredGame`) followed by `createdAt DESC`;
@@ -681,7 +706,8 @@ Add an index only with the query that needs it. Deploy rules and indexes with
   (owner), `adminApplications` (applicant/Super Admin), `auditLogs`,
   `platformStats` and `platformSettings` (Super Admin).
 - `gamerTags`, `rateLimits`, `applicationState` and `tournamentSlugs` have no
-  client read at all.
+  client read at all. `contactEvents` is server-written and readable only by the
+  Super Admin.
 - Tournaments and their subcollections are hidden while `draft`, `suspended` or
   `cancelled` (ADR-044). Memberships are owner-read only.
 - Fixture drafts are owner/Super Admin only.

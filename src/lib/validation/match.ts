@@ -56,6 +56,30 @@ export const resultReportResolveSchema = z.strictObject({
     .max(300, "That note is too long."),
 });
 
+/**
+ * A player may send the suggested message unchanged or their own text. The
+ * body is optional so a plain "{}" request still works; when present it
+ * replaces the template suggestion entirely. `variant` optionally picks one of
+ * the five supplied messages instead of the one the stored match selects.
+ */
+export const matchContactSchema = z.strictObject({
+  variant: z
+    .enum([
+      "match-contact-league",
+      "match-contact-knockout-leg-1",
+      "match-contact-knockout-leg-2",
+      "match-contact-knockout-single",
+      "match-contact-final",
+    ])
+    .optional(),
+  message: z
+    .string()
+    .trim()
+    .min(1, "Write a message before opening WhatsApp.")
+    .max(500, "Keep the message under 500 characters.")
+    .optional(),
+});
+
 export type MatchResultEntryInput = z.infer<typeof matchResultEntrySchema>;
 export type MatchResultBulkInput = z.infer<typeof matchResultBulkSchema>;
 export type MatchResultCorrectionInput = z.infer<typeof matchResultCorrectionSchema>;

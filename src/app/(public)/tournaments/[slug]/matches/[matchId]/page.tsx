@@ -8,9 +8,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/shared/page-header";
+import { ContactWhatsAppButton } from "@/components/contact/contact-whatsapp-button";
 import { buttonStyles } from "@/components/ui/button-styles";
 import { Badge, Card, CardContent } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/data-display";
+import { getCurrentUser } from "@/lib/auth/guards";
 import { countryFlag, countryName } from "@/lib/config/countries";
 import { getPublicMatch } from "@/lib/data/public-match";
 import { formatDate, formatDateTime } from "@/lib/utils/dates";
@@ -58,6 +60,11 @@ export default async function MatchPage({ params }: MatchPageProps) {
     match.status === "completed" && match.homeGoals !== null && match.awayGoals !== null;
   const homeLabel = match.home.gamerTag;
   const awayLabel = match.away.gamerTag;
+  const viewer = await getCurrentUser();
+  const canContact =
+    !completed &&
+    Boolean(viewer) &&
+    (viewer?.userId === match.home.uid || viewer?.userId === match.away.uid);
 
   return (
     <>
@@ -73,13 +80,22 @@ export default async function MatchPage({ params }: MatchPageProps) {
               { label: "Match" },
             ]}
             actions={
-              <Link
-                href={`/tournaments/${match.tournamentSlug}`}
-                className={buttonStyles({ variant: "secondary", size: "sm" })}
-              >
-                <ArrowLeft aria-hidden="true" className="h-4 w-4" />
-                Back to tournament
-              </Link>
+              <div className="flex flex-wrap items-center gap-2">
+                {canContact ? (
+                  <ContactWhatsAppButton
+                    tournamentId={match.tournamentId}
+                    matchId={match.matchId}
+                    size="sm"
+                  />
+                ) : null}
+                <Link
+                  href={`/tournaments/${match.tournamentSlug}`}
+                  className={buttonStyles({ variant: "secondary", size: "sm" })}
+                >
+                  <ArrowLeft aria-hidden="true" className="h-4 w-4" />
+                  Back to tournament
+                </Link>
+              </div>
             }
           />
         </div>

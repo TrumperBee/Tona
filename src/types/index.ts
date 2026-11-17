@@ -12,6 +12,7 @@ export type {
   ApplicationStatus,
   AuditLogDocument,
   CommunityType,
+  ContactEventDocument,
   ExpectedPlayerRange,
   DrawDocument,
   FixtureDraftDocument,

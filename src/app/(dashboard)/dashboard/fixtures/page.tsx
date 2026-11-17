@@ -7,6 +7,7 @@ import { CalendarDays, Swords, Trophy } from "lucide-react";
 import Link from "next/link";
 
 import { PageHeader, SectionHeading } from "@/components/shared/page-header";
+import { ContactWhatsAppButton } from "@/components/contact/contact-whatsapp-button";
 import { ReportProblemButton } from "@/components/player/report-problem-button";
 import { buttonStyles } from "@/components/ui/button-styles";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -170,9 +171,10 @@ export default async function FixturesPage() {
                               matchLabel={`${fixture.homeTag} ${score ?? ""} ${fixture.awayTag}`}
                             />
                           ) : (
-                            <p className="text-xs text-grey-500">
-                              A problem can be reported after a result is recorded.
-                            </p>
+                            <ContactWhatsAppButton
+                              tournamentId={fixture.tournamentId}
+                              matchId={fixture.matchId}
+                            />
                           )}
                         </div>
                       </CardContent>

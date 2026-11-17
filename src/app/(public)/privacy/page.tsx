@@ -98,6 +98,15 @@ const sections: readonly LegalSection[] = [
           tournament document. Organisers receive only the contact details needed to run their
           competition, and those details are not published.
         </p>
+        <p>
+          If you add a WhatsApp number, the other player in one of your scheduled matches can ask
+          the platform for a WhatsApp link to you, and an organiser of a competition you entered can
+          do the same. A WhatsApp link necessarily contains your number, so the number leaves our
+          servers only inside that link: it is never displayed as text, it is issued only to a
+          signed-in account with a real relationship to you, it is rate limited, and every issuance
+          is recorded. You can remove your number at any time from your profile, which stops new
+          links immediately.
+        </p>
       </>
     ),
   },

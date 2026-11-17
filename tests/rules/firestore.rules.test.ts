@@ -558,6 +558,14 @@ async function seed(): Promise<void> {
         expiresAt: 1,
         updatedAt: 0,
       }),
+      setDoc(doc(db, "contactEvents/evt1"), {
+        tournamentId: "public",
+        matchId: "m1",
+        fromUid: "alice",
+        toUid: "bob",
+        templateId: "match-contact-league",
+        createdAt: now,
+      }),
       setDoc(doc(db, "platformStats/summary"), {
         totalUsers: 2,
         totalTournaments: 2,
@@ -598,6 +606,7 @@ describe("private collections", () => {
       "gamerTags/alice",
       "auditLogs/log1",
       "rateLimits/key",
+      "contactEvents/evt1",
       "adminApplications/app1",
       "applicationState/alice",
     ]) {
@@ -902,6 +911,16 @@ describe("audit and platform operations", () => {
     await assertFails(getDoc(doc(user("organiser-a", "organiser"), "platformSettings/main")));
     await assertFails(getDoc(doc(anonymous(), "platformSettings/main")));
   });
+
+  it("keeps contact events server-only but readable by the Super Admin", async () => {
+    await assertSucceeds(getDoc(doc(user("root", "super_admin"), "contactEvents/evt1")));
+    await assertFails(getDoc(doc(user("alice"), "contactEvents/evt1")));
+    await assertFails(getDoc(doc(user("organiser-a", "organiser"), "contactEvents/evt1")));
+    await assertFails(getDoc(doc(anonymous(), "contactEvents/evt1")));
+
+    // A player cannot enumerate every issuance either.
+    await assertFails(getDocs(collection(user("alice"), "contactEvents")));
+  });
 });
 
 describe("client writes", () => {
@@ -936,6 +955,7 @@ describe("client writes", () => {
       "rankings/efootball/players/alice",
       "auditLogs/log1",
       "rateLimits/key",
+      "contactEvents/evt1",
       "platformStats/summary",
       "platformSettings/main",
     ];

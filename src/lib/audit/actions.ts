@@ -47,6 +47,7 @@ export const AUDIT_ACTIONS: readonly AuditActionDefinition[] = [
   { action: "result_report.created", label: "Result report opened" },
   { action: "result_report.resolved", label: "Result report resolved" },
   { action: "result_report.dismissed", label: "Result report dismissed" },
+  { action: "match.contact_link_issued", label: "Opponent contact link issued" },
   { action: "hall_of_fame.inducted", label: "Hall of Fame induction" },
   { action: "stats.recomputed", label: "Player statistics recomputed" },
 ] as const;

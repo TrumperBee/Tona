@@ -149,6 +149,7 @@ No component writes data. Read hooks are added later.
 | `auth/`          | Roles, session cookie, guards, role/status administration |
 | `validation/`    | Zod schemas                                               |
 | `whatsapp/`      | E.164 helpers, templates, click-to-chat links             |
+| `contact/`       | Opponent/organiser contact rules, message builder         |
 | `graphics/`      | PNG export helpers                                        |
 | `audit/`         | Audit log writer                                          |
 | `notifications/` | Notification domain                                       |

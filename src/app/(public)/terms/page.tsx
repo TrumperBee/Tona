@@ -132,6 +132,33 @@ const sections: readonly LegalSection[] = [
     ),
   },
   {
+    id: "whatsapp-contact",
+    heading: "WhatsApp contact with opponents",
+    body: (
+      <>
+        <p>
+          When you enter a competition, the other player in each of your scheduled matches can ask
+          GCC for a WhatsApp link to you, and the organiser of that competition can do the same.
+          This is how match times are agreed. Your number is never published, never shown as text
+          and never included in a public tournament or profile document.
+        </p>
+        <p>
+          A WhatsApp link necessarily contains the recipient&apos;s number. GCC therefore issues
+          links only to a signed-in account with a real relationship to you, only for a match that
+          has not yet been played, only while your account is active, under a rate limit, and
+          records every issuance for abuse handling. You always choose whether to reply, and the
+          person contacting you must press Send in WhatsApp themselves.
+        </p>
+        <p>
+          Contacting an opponent is for arranging a match. Using the number you receive for
+          harassment, marketing or anything unrelated to the competition is a breach of these terms.
+          You can remove your WhatsApp number from your profile at any time, which stops new links
+          immediately.
+        </p>
+      </>
+    ),
+  },
+  {
     id: "organisers",
     heading: "Organisers",
     body: (

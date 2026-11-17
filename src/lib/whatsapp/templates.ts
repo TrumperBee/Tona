@@ -3,16 +3,24 @@
 // Typed templates with `{{variable}}` placeholders, rendered server-side into
 // the pre-filled text of a wa.me click-to-chat link. The organiser contact
 // message is deliberately generic: it never includes phone numbers, emails
-// or anything the player has not already made public. Phase 14 reuses this
-// registry for registration confirmations, fixture reminders and result
-// notifications.
+// or anything the player has not already made public. The match-contact
+// templates (Phase 14) never carry the number either — the number exists only
+// inside the link the server returns for one authorised request.
+//
+// Every message is a suggestion: the player may edit it before sending, and
+// WhatsApp is opened by the player, who presses Send themselves.
 
 export type WhatsAppTemplateId =
   | "organiser-contact"
   | "registration-confirmed"
   | "fixture-reminder"
   | "result-confirmed"
-  | "result-report-opened";
+  | "result-report-opened"
+  | "match-contact-league"
+  | "match-contact-knockout-leg-1"
+  | "match-contact-knockout-leg-2"
+  | "match-contact-knockout-single"
+  | "match-contact-final";
 
 export interface WhatsAppTemplate {
   readonly id: WhatsAppTemplateId;
@@ -53,6 +61,36 @@ export const WHATSAPP_TEMPLATES: Readonly<Record<WhatsAppTemplateId, WhatsAppTem
     label: "Result report opened",
     variables: ["tournamentName", "matchLabel"],
     body: "{{tournamentName}}: a report was opened about {{matchLabel}}. An admin will review it shortly.",
+  },
+  "match-contact-league": {
+    id: "match-contact-league",
+    label: "Player contacting an opponent (league)",
+    variables: ["opponentTag", "senderTag", "tournamentName", "matchLabel"],
+    body: "Hey {{opponentTag}}! 👋 I'm {{senderTag}}. We play each other in {{tournamentName}} ({{matchLabel}}). Let me know a time that works for you so we can arrange our match.",
+  },
+  "match-contact-knockout-leg-1": {
+    id: "match-contact-knockout-leg-1",
+    label: "Player contacting an opponent (knockout, first leg)",
+    variables: ["opponentTag", "senderTag", "tournamentName", "matchLabel"],
+    body: "Hey {{opponentTag}}! 👋 I'm {{senderTag}}. We play the first leg of our {{matchLabel}} tie in {{tournamentName}}. Let me know a time that works for you so we can arrange it.",
+  },
+  "match-contact-knockout-leg-2": {
+    id: "match-contact-knockout-leg-2",
+    label: "Player contacting an opponent (knockout, second leg)",
+    variables: ["opponentTag", "senderTag", "tournamentName", "matchLabel"],
+    body: "Hey {{opponentTag}}! 👋 I'm {{senderTag}}. We play the second leg of our {{matchLabel}} tie in {{tournamentName}}. Let me know a time that works for you so we can settle it.",
+  },
+  "match-contact-knockout-single": {
+    id: "match-contact-knockout-single",
+    label: "Player contacting an opponent (single-leg knockout)",
+    variables: ["opponentTag", "senderTag", "tournamentName", "matchLabel"],
+    body: "Hey {{opponentTag}}! 👋 I'm {{senderTag}}. We meet in {{tournamentName}} ({{matchLabel}}). One match decides who goes through, so let me know a time that works for you.",
+  },
+  "match-contact-final": {
+    id: "match-contact-final",
+    label: "Player contacting an opponent (final)",
+    variables: ["opponentTag", "senderTag", "tournamentName", "matchLabel"],
+    body: "Hey {{opponentTag}}! 👋 I'm {{senderTag}}. We meet in the {{matchLabel}} of {{tournamentName}}. Let me know a time that works for you so we can play.",
   },
 };
 

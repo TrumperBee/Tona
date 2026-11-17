@@ -50,6 +50,7 @@ export interface TournamentSettingsInitial {
   readonly allowedPlatforms: readonly PlatformId[] | null;
   readonly allowedCountries: readonly string[] | null;
   readonly tiebreakerProfile: TiebreakerProfile;
+  readonly contactNote: string;
 }
 
 export interface TournamentSettingsFormProps {
@@ -98,6 +99,7 @@ export function TournamentSettingsForm({
     allowedPlatforms: initial.allowedPlatforms ?? getGamePlatforms(initial.gameId),
     allowedCountries: initial.allowedCountries ?? [],
     tiebreakerProfile: initial.tiebreakerProfile,
+    contactNote: initial.contactNote,
   });
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -174,6 +176,10 @@ export function TournamentSettingsForm({
 
     if (values.tiebreakerProfile !== initial.tiebreakerProfile) {
       patch.tiebreakerProfile = values.tiebreakerProfile;
+    }
+
+    if (values.contactNote.trim() !== initial.contactNote.trim()) {
+      patch.contactNote = values.contactNote.trim();
     }
 
     if (Object.keys(patch).length === 0) {
@@ -582,6 +588,25 @@ export function TournamentSettingsForm({
               Insert the starter template
             </Button>
           ) : null}
+
+          <FormField
+            htmlFor="settings-contact-note"
+            label="WhatsApp contact note"
+            hint="Optional, up to 140 characters. Appended to every WhatsApp message issued for this tournament, for example an agreement deadline. Never include a phone number."
+            error={fieldErrors.contactNote}
+          >
+            <Input
+              id="settings-contact-note"
+              value={values.contactNote}
+              onChange={(event) => set("contactNote", event.target.value)}
+              maxLength={141}
+              disabled={!can("contactNote")}
+              placeholder="Please agree a time before Sunday"
+            />
+            <p className="mt-1 text-right text-xs tabular-nums text-grey-500">
+              {values.contactNote.length} / 140
+            </p>
+          </FormField>
 
           <FormField
             htmlFor="settings-duration"

@@ -1969,3 +1969,50 @@ dependencies; they have no transitive native code and no network calls.
 - No second QR render happens during export.
 - The QR is part of the payload, so the export file name hash changes when the target URL
   changes.
+
+## ADR-076 - WhatsApp contact issues a link on demand and logs the issuance, never the number
+
+**Date:** 2026-11-17
+**Status:** Accepted
+
+**Context.** Players need to arrange match times with their opponents, and organisers
+need to reach their registrants. A `wa.me` click-to-chat link necessarily embeds the
+recipient's phone number in the URL, so any promise that "the number is never returned
+to the browser" is false. Earlier comments and documentation made that promise. The
+real requirements are narrower and testable: no number in a public document, no number
+rendered as text, a legitimate relationship for every issuance, a rate limit, and a
+record that survives for abuse handling.
+
+**Decision.**
+
+- `GET /api/tournaments/[id]/matches/[matchId]/contact` returns only the suggested
+  message. It mints no link, returns no number and writes nothing.
+- `POST` to the same route mints the `wa.me` link. It requires a signed-in active
+  account that is one of the two participants, a `scheduled` match, both participants
+  known, and an opponent whose account is `active` with a valid E.164 number.
+  It is same-origin protected and rate-limited to 30 per hour per user.
+- Each `POST` writes one `contactEvents` document (`tournamentId`, `matchId`,
+  `fromUid`, `toUid`, `templateId | null`, `createdAt`) and one
+  `match.contact_link_issued` audit entry. Neither contains the number or the message.
+- Message bodies come from five typed templates (league, knockout leg 1, leg 2,
+  single-leg, final) and may be edited by the player up to 500 characters. An edited
+  message sets `templateId` to `null` in the event.
+- The tournament's optional `contactNote` (≤ 140 characters, editable in Settings) is
+  appended as a second paragraph so the organiser's words are visibly separate.
+- The organiser route from Phase 8 remains the organiser path: owner or Super Admin,
+  per registrant, rate-limited and audited (`tournament.contact_link_issued`). It is
+  not written to `contactEvents` because the relationship is different.
+- The number leaves the server only inside the link, at the moment the player commits.
+  WhatsApp is opened by the player, who presses Send. There is no WhatsApp Business
+  API and no paid delivery service.
+
+**Consequences.**
+
+- `contactEvents` needs two composite indexes (`fromUid + createdAt DESC`,
+  `toUid + createdAt DESC`) because Firestore cannot OR two equality filters.
+- The super-admin user detail reads contact activity as two bounded queries merged in
+  memory.
+- Any future feature that needs a number must return a link through a relationship-
+  checked, rate-limited, audited route, not a bare field.
+- `docs/04-SECURITY.md` §2.3, Terms, Privacy and the registration consent state this
+  model explicitly, so the promise matches the implementation.

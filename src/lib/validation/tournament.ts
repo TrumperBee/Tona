@@ -97,6 +97,12 @@ export const tournamentUpdateSchema = z
       .refine((value) => new Set(value).size === value.length, "Each country may appear once.")
       .optional(),
     tiebreakerProfile: z.enum(TIEBREAKER_PROFILES).optional(),
+    contactNote: z
+      .string()
+      .trim()
+      .max(140, "Keep the contact note under 140 characters.")
+      .nullable()
+      .optional(),
   })
   .refine((value) => Object.keys(value).length > 0, "Provide at least one tournament field.");
 

@@ -77,18 +77,48 @@ registrations, announcements or client-readable collections.
 **Controls:**
 
 - `whatsappE164` exists only in `users/{uid}`, readable by the owner and Super
-  Admin.
-- `publicProfiles`, `registrations` and match display snapshots contain gamer
-  tags and countries only, never phone numbers or emails.
+  Admin. `publicProfiles`, `registrations` and match display snapshots contain
+  gamer tags and countries only, never phone numbers or emails.
 - The Super Admin user detail shows a masked number (`maskPhoneNumber`, e.g.
   `+254 7•• ••• 678`). The full number is returned only by
   `POST /api/super-admin/users/[uid]/contact`, which is rate-limited, restricted
   to the Super Admin and writes a `user.contact_revealed` audit entry that does
   **not** contain the number.
-- Opponent contact is exposed later through a server route that authorises the
-  request and returns only the necessary link/number.
+- **A `wa.me` link necessarily contains the recipient's number.** The platform
+  therefore does not promise that the number never leaves the server. It
+  promises that the number is never stored in a public document, never rendered
+  as text, and leaves the server only inside a link issued for one authorised
+  request. Any earlier wording that claimed "the number is never returned" is
+  superseded by this model.
+- Player-to-opponent contact
+  (`GET`/`POST /api/tournaments/[id]/matches/[matchId]/contact`):
+  - `GET` returns only the suggested message. It carries no link, no number and
+    writes nothing.
+  - `POST` mints the link. It requires a signed-in, active account that is one
+    of the two participants, a `scheduled` match, both participants known (an
+    undecided knockout side is stored as an empty uid and is refused), and an
+    opponent whose account is `active` and whose stored number is valid E.164.
+  - The route is same-origin protected, rate-limited to 30 issuances per hour
+    per user, and writes one `contactEvents` document plus a
+    `match.contact_link_issued` audit entry. Neither record contains the number
+    or the message text.
+  - The bottom sheet shows the message for editing (max 500 characters) and
+    opens the link in a new tab. WhatsApp asks the player to press Send; there
+    is no WhatsApp Business API and no server-side delivery.
+- Organiser contact
+  (`GET /api/organiser/tournaments/[id]/registrations/[uid]/contact`): owner or
+  Super Admin only, one registered player per request, same-origin protected,
+  rate-limited, audited with `tournament.contact_link_issued`. The tournament's
+  optional `contactNote` is appended to the generic message. The registration
+  snapshot never holds the number.
+- Suspended or banned opponents, completed matches, non-participants and
+  signed-out viewers are refused. The player-facing surface shows a neutral
+  "Contact unavailable" rather than revealing which condition failed.
+- Terms, Privacy and the registration consent state that the other player in a
+  match can contact the player on WhatsApp.
 - Rules tests assert public documents are readable without exposing the private
-  user document.
+  user document; integration tests scan every public-read collection written by
+  a contact flow for E.164 patterns.
 
 ### 2.4 Result tampering
 
@@ -553,7 +583,9 @@ contact details.
   application submission (5 per hour) and withdrawal, notification read marking,
   tournament create (10 per hour), update (30 per minute), delete/publish/
   close/reopen/cancel (10 per hour), organiser participant add (20 per hour),
-  participant register/withdraw (10 per hour each), every Super Admin mutation,
+  participant register/withdraw (10 per hour each), player-to-opponent contact
+  links (30 per hour) and organiser registration contact links (30 per hour),
+  every Super Admin mutation,
   settings saves, contact reveal and analytics refresh, admin result entry
   (30 per minute), bulk entry (10 per minute), corrections and clears (20 per
   minute each), result-report creation (5 per minute) and resolution (30 per
@@ -570,7 +602,8 @@ contact details.
   rejected, revoked), organiser profile updates, tournament changes, pot
   draws/shuffles, fixture generation, fixture publication, reset and matchday
   window changes, admin result entry/correction/clearing, result-report creation
-  and decisions, platform settings updates, contact reveals and announcement
+  and decisions, WhatsApp contact link issuance (player and organiser), platform
+  settings updates, contact reveals and announcement
   transitions.
 - Each entry records actor UID, actor role, action, target type/id, optional
   tournament id, before/after values, reason and server timestamp.

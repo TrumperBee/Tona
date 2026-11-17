@@ -19,6 +19,7 @@ export const COLLECTIONS = {
   rankings: "rankings",
   auditLogs: "auditLogs",
   rateLimits: "rateLimits",
+  contactEvents: "contactEvents",
   platformStats: "platformStats",
   platformSettings: "platformSettings",
 } as const;
@@ -169,6 +170,9 @@ export const paths = {
 
   rateLimits: () => COLLECTIONS.rateLimits,
   rateLimit: (key: string) => documentPath(COLLECTIONS.rateLimits, key),
+
+  contactEvents: () => COLLECTIONS.contactEvents,
+  contactEvent: (eventId: string) => documentPath(COLLECTIONS.contactEvents, eventId),
 
   platformStats: () => COLLECTIONS.platformStats,
   platformStatsSummary: () => documentPath(COLLECTIONS.platformStats, DOCUMENTS.summary),

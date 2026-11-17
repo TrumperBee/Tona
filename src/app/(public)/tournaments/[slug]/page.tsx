@@ -292,6 +292,7 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
               matches={leagueMatches}
               matchdays={publicFixtures.matchdays}
               viewerUid={user?.userId ?? null}
+              tournamentId={tournament.id}
               tournamentSlug={tournament.slug}
               timezone={timezone}
               graphicBranding={branding}

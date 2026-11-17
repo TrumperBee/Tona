@@ -238,6 +238,13 @@ service cloud.firestore {
       allow read: if false;
     }
 
+    // WhatsApp contact issuances, for abuse handling. Server-only writes; a
+    // Super Admin may read them while reviewing one player. They never contain
+    // a phone number or a message body.
+    match /contactEvents/{eventId} {
+      allow read: if isSuperAdmin();
+    }
+
     // Collection-group reads for player history. Every query must constrain
     // tournamentId so the rules engine can prove that draft, suspended and
     // otherwise hidden tournaments are excluded. A broad cross-tournament

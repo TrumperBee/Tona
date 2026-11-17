@@ -11,6 +11,7 @@ import { useState } from "react";
 
 import { Badge } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/data-display";
+import { ContactWhatsAppButton } from "@/components/contact/contact-whatsapp-button";
 import { ExportButton } from "@/components/graphics/export-button";
 import { Tabs } from "@/components/ui/tabs";
 import { fixturesGraphicData } from "@/lib/graphics/data";
@@ -22,6 +23,7 @@ export interface PublicFixturesPanelProps {
   readonly matches: readonly PublicFixtureRow[];
   readonly matchdays: readonly PublicMatchdayWindow[];
   readonly viewerUid: string | null;
+  readonly tournamentId: string;
   readonly tournamentSlug: string;
   readonly timezone: string;
   readonly graphicBranding: GraphicBranding;
@@ -45,11 +47,13 @@ function scoreLabel(row: PublicFixtureRow): string {
 function FixtureCard({
   row,
   viewerUid,
+  tournamentId,
   tournamentSlug,
   timezone,
 }: {
   readonly row: PublicFixtureRow;
   readonly viewerUid: string | null;
+  readonly tournamentId: string;
   readonly tournamentSlug: string;
   readonly timezone: string;
 }) {
@@ -58,7 +62,7 @@ function FixtureCard({
   const mine = viewerHome || viewerAway;
 
   return (
-    <li>
+    <li className="space-y-2">
       <Link
         href={`/tournaments/${tournamentSlug}/matches/${row.id}`}
         className={`block rounded-lg border p-3 transition-colors hover:border-electric-400/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-400 ${
@@ -93,6 +97,11 @@ function FixtureCard({
           </span>
         </div>
       </Link>
+      {mine && row.status === "scheduled" ? (
+        <div className="flex justify-end">
+          <ContactWhatsAppButton tournamentId={tournamentId} matchId={row.id} size="sm" />
+        </div>
+      ) : null}
     </li>
   );
 }
@@ -101,6 +110,7 @@ export function PublicFixturesPanel({
   matches,
   matchdays,
   viewerUid,
+  tournamentId,
   tournamentSlug,
   timezone,
   graphicBranding,
@@ -157,6 +167,7 @@ export function PublicFixturesPanel({
                   key={match.id}
                   row={match}
                   viewerUid={viewerUid}
+                  tournamentId={tournamentId}
                   tournamentSlug={tournamentSlug}
                   timezone={timezone}
                 />
@@ -188,6 +199,7 @@ export function PublicFixturesPanel({
                 key={match.id}
                 row={match}
                 viewerUid={viewerUid}
+                tournamentId={tournamentId}
                 tournamentSlug={tournamentSlug}
                 timezone={timezone}
               />

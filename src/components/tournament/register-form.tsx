@@ -95,8 +95,16 @@ export function RegisterForm({ tournamentId, slug }: RegisterFormProps) {
             className="rounded font-medium text-electric-300 underline-offset-4 hover:underline"
           >
             terms
+          </Link>{" "}
+          and{" "}
+          <Link
+            href="/privacy"
+            className="rounded font-medium text-electric-300 underline-offset-4 hover:underline"
+          >
+            privacy policy
           </Link>
-          , and I commit to the schedule, the match length and the entry restrictions of this
+          , including that the other player in each of my matches can contact me on WhatsApp to
+          arrange it. I commit to the schedule, the match length and the entry restrictions of this
           competition.
         </span>
       </label>

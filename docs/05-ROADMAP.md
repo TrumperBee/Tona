@@ -26,10 +26,10 @@
 | 11  | Admin result entry, corrections and result reports | Admin-only score entry, corrections with reason and audit, player "Report a problem" channel                             | Done        |
 | 12  | Standings                                          | Pure standings calculation, tiebreakers, snapshots, qualification bands                                                  | Done        |
 | 13  | Knockout stages                                    | One-action bracket generation, seeded play-offs, automatic progression, visual bracket                                   | Done        |
-| 14  | WhatsApp contact                                   | E.164 handling, templates, click-to-chat links, reminders                                                                | Not started |
-| 15  | Graphics                                           | HTML/SVG templates for fixtures, results, standings, shareable profile card; PNG export                                  | Not started |
+| 14  | WhatsApp contact                                   | E.164 handling, templates, click-to-chat links, reminders                                                                | Done        |
+| 15  | Graphics                                           | HTML/SVG templates for fixtures, results, standings, shareable profile card; PNG export                                  | Done        |
 | 16  | Email notifications                                | Email delivery and preferences; the in-app inbox and bell shipped with Phase 6                                           | Not started |
-| 17  | Stats, ratings, rankings, Hall of Fame             | Career stats, ratings, rankings, archives, champions, Hall of Fame                                                       | Not started |
+| 17  | Stats, ratings, rankings, Hall of Fame             | Career stats, ratings, rankings, archives, champions, Hall of Fame                                                       | Done        |
 | 18  | Security audit, CSP, App Check, deployment         | Security review, CSP, App Check, rules and E2E tests, performance, backups, production deployment                        | Not started |
 
 ## Milestones
