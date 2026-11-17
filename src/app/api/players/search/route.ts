@@ -43,17 +43,29 @@ export async function GET(request: NextRequest): Promise<Response> {
     .limit(MAX_RESULTS)
     .get();
 
-  const players = snapshot.docs.map((document) => {
-    const data = document.data() as PublicProfileDocument;
+  const players = snapshot.docs
+    .map((document) => {
+      const data = document.data() as PublicProfileDocument;
 
-    return {
-      uid: document.id,
-      gamerTag: data.gamerTag,
-      country: data.country,
-      preferredGame: data.preferredGame,
-      avatarUrl: data.avatarUrl ?? null,
-    };
-  });
+      return {
+        uid: document.id,
+        gamerTag: data.gamerTag,
+        country: data.country,
+        preferredGame: data.preferredGame,
+        avatarUrl: data.avatarUrl ?? null,
+        titles: data.stats?.overall?.titles ?? 0,
+        status: data.status,
+      };
+    })
+    .filter((player) => player.status === "active")
+    .map((player) => ({
+      uid: player.uid,
+      gamerTag: player.gamerTag,
+      country: player.country,
+      preferredGame: player.preferredGame,
+      avatarUrl: player.avatarUrl,
+      titles: player.titles,
+    }));
 
   return Response.json({ players });
 }

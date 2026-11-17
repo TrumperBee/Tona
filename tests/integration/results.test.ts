@@ -84,6 +84,7 @@ async function clearEmulator(): Promise<void> {
     paths.platformSettings(),
     paths.rateLimits(),
     paths.platformStats(),
+    paths.hallOfFame(),
   ]) {
     const snapshot = await firestore.collection(collection).get();
 
@@ -148,6 +149,7 @@ async function createUser(options: {
           goalsFor: 0,
           goalsAgainst: 0,
           titles: 0,
+          winRate: 0,
         },
         byGame: {},
       },
@@ -348,6 +350,17 @@ async function notificationTitles(uid: string): Promise<string[]> {
   return snapshot.docs.map((document) => String(document.data().title));
 }
 
+interface StoredStats {
+  readonly overall?: Record<string, unknown>;
+  readonly byGame?: Record<string, Record<string, unknown>>;
+}
+
+async function profileStats(uid: string): Promise<StoredStats> {
+  const snapshot = await getFirebaseAdminFirestore().doc(paths.publicProfile(uid)).get();
+
+  return (snapshot.data()?.stats ?? {}) as StoredStats;
+}
+
 beforeEach(async () => {
   sessionCookie.value = undefined;
   await clearEmulator();
@@ -537,6 +550,104 @@ describe("result correction and clearing", () => {
     expect(tournament.leagueMatchesCompleted).toBe(0);
     expect(tournament.status).toBe("fixtures_published");
     expect(await auditCount("match.result_cleared")).toBe(1);
+  });
+});
+
+describe("player statistics refresh", () => {
+  it("refreshes exactly the two players when a result is entered", async () => {
+    expect((await enter()).status).toBe(200);
+
+    expect((await profileStats(playerA.uid)).overall).toMatchObject({
+      tournaments: 1,
+      played: 1,
+      wins: 1,
+      draws: 0,
+      losses: 0,
+      goalsFor: 3,
+      goalsAgainst: 1,
+      winRate: 1,
+    });
+    expect((await profileStats(playerB.uid)).overall).toMatchObject({
+      tournaments: 1,
+      played: 1,
+      wins: 0,
+      draws: 0,
+      losses: 1,
+      goalsFor: 1,
+      goalsAgainst: 3,
+      winRate: 0,
+    });
+    expect((await profileStats(playerC.uid)).overall).toMatchObject({
+      tournaments: 0,
+      played: 0,
+      wins: 0,
+      draws: 0,
+      losses: 0,
+      goalsFor: 0,
+      goalsAgainst: 0,
+      winRate: 0,
+    });
+  });
+
+  it("recomputes both players after a correction", async () => {
+    expect((await enter()).status).toBe(200);
+
+    const response = await correctRoute(
+      request("POST", `/api/organiser/tournaments/${TOURNAMENT_ID}/results/correct`, {
+        matchId: MATCH_A,
+        homeGoals: 2,
+        awayGoals: 2,
+        reason: "The score was recorded the wrong way round.",
+      }),
+      enterContext(),
+    );
+    expect(response.status).toBe(200);
+
+    expect((await profileStats(playerA.uid)).overall).toMatchObject({
+      played: 1,
+      wins: 0,
+      draws: 1,
+      losses: 0,
+      goalsFor: 2,
+      goalsAgainst: 2,
+      winRate: 0,
+    });
+    expect((await profileStats(playerB.uid)).overall).toMatchObject({
+      played: 1,
+      wins: 0,
+      draws: 1,
+      losses: 0,
+      goalsFor: 2,
+      goalsAgainst: 2,
+      winRate: 0,
+    });
+  });
+
+  it("returns both players to zero after a clear", async () => {
+    expect((await enter()).status).toBe(200);
+
+    const response = await clearRoute(
+      request("POST", `/api/organiser/tournaments/${TOURNAMENT_ID}/results/clear`, {
+        matchId: MATCH_A,
+        reason: "The match was never played.",
+      }),
+      enterContext(),
+    );
+    expect(response.status).toBe(200);
+
+    for (const player of [playerA, playerB]) {
+      expect((await profileStats(player.uid)).overall).toMatchObject({
+        tournaments: 0,
+        played: 0,
+        wins: 0,
+        draws: 0,
+        losses: 0,
+        goalsFor: 0,
+        goalsAgainst: 0,
+        winRate: 0,
+      });
+      expect((await profileStats(player.uid)).byGame).toEqual({});
+    }
   });
 });
 

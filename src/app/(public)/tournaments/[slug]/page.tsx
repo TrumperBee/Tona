@@ -26,6 +26,7 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 
 import { OrganisedBy } from "@/components/tournament/organised-by";
+import { ExportButton } from "@/components/graphics/export-button";
 import { PublicFixturesPanel } from "@/components/tournament/public-fixtures-panel";
 import { PublicKnockoutPanel } from "@/components/tournament/public-knockout-panel";
 import { PublicPotsPanel } from "@/components/tournament/public-pots-panel";
@@ -53,6 +54,13 @@ import {
 import { getPublicFixtures } from "@/lib/data/public-fixtures";
 import { getPublicKnockout } from "@/lib/data/public-knockout";
 import { getPublicStandings, readTiebreakerProfile } from "@/lib/data/public-standings";
+import {
+  avatarLookup,
+  championGraphicData,
+  graphicBranding,
+  leagueTableGraphicData,
+  potsGraphicData,
+} from "@/lib/graphics/data";
 import { formatDate } from "@/lib/utils/dates";
 import { getRegistrationState } from "@/lib/tournament/registration-state";
 
@@ -167,6 +175,21 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
   const publicStandings = await getPublicStandings(tournament.id, tournament.status);
   const publicKnockout = await getPublicKnockout(tournament.id, tournament.status);
   const leagueMatches = publicFixtures?.matches.filter((match) => match.matchday > 0) ?? [];
+  const branding = graphicBranding({
+    tournamentName: tournament.name,
+    tournamentSlug: tournament.slug,
+    season: tournament.season,
+    gameName: game.name,
+    logoSrc: tournament.logoUrl,
+    coverSrc: tournament.coverImageUrl,
+    organiserName: tournament.organisationName,
+  });
+  const avatars = avatarLookup([...participants, ...(publicStandings?.rows ?? [])]);
+  const championGraphic = publicKnockout ? championGraphicData(publicKnockout) : null;
+  const completedMatchdays = leagueMatches
+    .filter((match) => match.status === "completed")
+    .map((match) => match.matchday);
+  const latestMatchday = completedMatchdays.length > 0 ? Math.max(...completedMatchdays) : null;
 
   const facts = [
     { label: "Game", value: game.name, icon: Gamepad2 },
@@ -251,7 +274,18 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
       </section>
 
       <PublicSectionTabs
-        pots={publicDraw ? <PublicPotsPanel draw={publicDraw} timezone={timezone} /> : null}
+        pots={
+          publicDraw ? (
+            <PublicPotsPanel
+              draw={publicDraw}
+              timezone={timezone}
+              graphic={{
+                payload: { template: "pots", data: potsGraphicData(publicDraw) },
+                branding,
+              }}
+            />
+          ) : null
+        }
         fixtures={
           publicFixtures ? (
             <PublicFixturesPanel
@@ -260,6 +294,8 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
               viewerUid={user?.userId ?? null}
               tournamentSlug={tournament.slug}
               timezone={timezone}
+              graphicBranding={branding}
+              avatars={avatars}
             />
           ) : null
         }
@@ -270,15 +306,39 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
               profile={readTiebreakerProfile(tournament.tiebreakerProfile)}
               provisional={publicStandings.provisional}
               updatedAt={tournament.standingsUpdatedAt}
+              graphic={{
+                payload: {
+                  template: "league-table",
+                  data: leagueTableGraphicData(publicStandings.rows, {
+                    provisional: publicStandings.provisional,
+                    title: publicStandings.provisional
+                      ? latestMatchday
+                        ? `Matchday ${latestMatchday}`
+                        : "League table"
+                      : "Final table",
+                    subtitle: `${publicStandings.rows.length} players · ${publicStandings.provisional ? "Provisional positions" : "Final positions"}`,
+                  }),
+                },
+                branding,
+              }}
             />
           ) : null
         }
         results={
           publicFixtures ? (
-            <PublicResultsPanel matches={leagueMatches} tournamentSlug={tournament.slug} />
+            <PublicResultsPanel
+              matches={leagueMatches}
+              tournamentSlug={tournament.slug}
+              graphicBranding={branding}
+              avatars={avatars}
+            />
           ) : null
         }
-        knockout={publicKnockout ? <PublicKnockoutPanel knockout={publicKnockout} /> : null}
+        knockout={
+          publicKnockout ? (
+            <PublicKnockoutPanel knockout={publicKnockout} graphicBranding={branding} />
+          ) : null
+        }
       >
         <section className="border-b border-white/10">
           <div className="container grid gap-6 py-10 lg:grid-cols-[1.4fr_0.6fr] lg:items-start">
@@ -460,6 +520,15 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
                         <p className="mt-1 text-xs text-grey-500">
                           Open the Knockout tab for every published round.
                         </p>
+                        {championGraphic ? (
+                          <div className="mt-2">
+                            <ExportButton
+                              payload={{ template: "champion", data: championGraphic }}
+                              branding={branding}
+                              label="Champion graphic"
+                            />
+                          </div>
+                        ) : null}
                       </div>
                     </CardContent>
                   </Card>

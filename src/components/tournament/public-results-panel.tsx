@@ -6,16 +6,26 @@
 import { Swords, Trophy } from "lucide-react";
 import Link from "next/link";
 
+import { ExportButton } from "@/components/graphics/export-button";
 import { Badge } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/data-display";
 import type { PublicFixtureRow } from "@/lib/data/public-fixtures";
+import { fixturesGraphicData } from "@/lib/graphics/data";
+import type { GraphicBranding } from "@/lib/graphics/types";
 
 export interface PublicResultsPanelProps {
   readonly matches: readonly PublicFixtureRow[];
   readonly tournamentSlug: string;
+  readonly graphicBranding: GraphicBranding;
+  readonly avatars: Readonly<Record<string, string | null>>;
 }
 
-export function PublicResultsPanel({ matches, tournamentSlug }: PublicResultsPanelProps) {
+export function PublicResultsPanel({
+  matches,
+  tournamentSlug,
+  graphicBranding,
+  avatars,
+}: PublicResultsPanelProps) {
   const completed = matches.filter(
     (match) => match.status === "completed" && match.homeGoals !== null && match.awayGoals !== null,
   );
@@ -52,6 +62,16 @@ export function PublicResultsPanel({ matches, tournamentSlug }: PublicResultsPan
                     </h3>
                     <span className="text-xs text-grey-500">
                       {rows.length} result{rows.length === 1 ? "" : "s"}
+                    </span>
+                    <span className="ml-auto">
+                      <ExportButton
+                        payload={{
+                          template: "results",
+                          data: fixturesGraphicData(rows, day, avatars, { showScores: true }),
+                        }}
+                        branding={graphicBranding}
+                        label="Download image"
+                      />
                     </span>
                   </div>
                   <ul className="grid gap-2 md:grid-cols-2">

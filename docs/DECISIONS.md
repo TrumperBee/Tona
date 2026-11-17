@@ -1771,3 +1771,201 @@ refused once any knockout result exists, because the bracket is the record of th
   stays correct even when a later-round top slot holds the worse-ranked player.
 - Tests can drive one generate call and then only the ordinary result routes, which is
   what `npm run simulate` and the integration suite do for one- and two-legged brackets.
+
+---
+
+## ADR-070 - Player statistics are rebuilt from completed matches, never incremented
+
+**Date:** 2026-11-16
+**Status:** Accepted
+
+**Context.** Profile counters are displayed on the owner's profile, the public profile and
+player search. A counter incremented on every result entry would drift on a correction, a
+clear, a failed write or a replay, and there was no way to prove a displayed number.
+
+**Decision.** `computePlayerStats` in `src/lib/stats/player-stats.ts` aggregates every
+completed match a player actually appeared in. It produces `overall`, `byGame` and
+`byTournament` totals of `tournaments`, `played`, `wins`, `draws`, `losses`, `goalsFor`,
+`goalsAgainst`, `titles` and a stored 0–1 `winRate`. Titles come from Hall of Fame
+inductions, not from a counter. The server re-reads the player's matches and replaces
+`publicProfiles/{uid}.stats` after every enter, correct or clear (two players) and after a
+bulk batch or completion (every participant). A failure is logged but never rolls back the
+committed result: the Super Admin repair tool can rebuild the derived documents later.
+
+**Consequences.**
+
+- The same matches always produce the same numbers; corrections and clears self-heal.
+- Profile reads never compute statistics in the browser. Ratings are read from
+  `rankings/{gameId}/players/{uid}`, so `stats.byGame` stays a pure record.
+- `POST /api/super-admin/stats/recompute` repairs one player, one tournament or every
+  player with a cursor, and writes `stats.recomputed` to the audit log.
+- Unit tests cover hand-computed totals and the emulator suite asserts that every stored
+  profile equals a brute-force recompute of the completed matches.
+
+---
+
+## ADR-071 - Elo is replayed once per completed tournament in a fixed order
+
+**Date:** 2026-11-16
+**Status:** Accepted
+
+**Context.** A live rating updated per result would make a corrected result impossible to
+unwind and would let a player's rating depend on the order an organiser happened to enter
+matches. Ratings must be explainable and reproducible.
+
+**Decision.** Each game has its own ladder. A player starts at 1000; every completed match
+uses the standard Elo expected score with `K = 32`, a win is 1, a draw 0.5 and a loss 0,
+and goal margin is ignored (a 3–0 walkover equals a 1–0 win). Ratings are applied only when
+a tournament completes, inside one transaction. The replay order is deterministic: league
+matchday, then knockout round (playoff, r16, qf, sf, final), then leg, then match id. Each
+side is rounded independently, and the updated rating is stored in
+`rankings/{gameId}/players/{uid}`. `publicProfiles/{uid}/history/{tournamentId}` stores
+`ratingAfter` and `ratingChange`.
+
+The tournament document stores `ratingsAppliedAt` and `ratingSnapshot` (the pre-tournament
+ratings). The transaction returns early when `ratingsAppliedAt` exists, so a retried
+completion or a later decider cannot apply the same tournament twice. Reopening a completed
+tournament does not reverse ratings; the repair tool re-derives history and stats instead.
+
+**Consequences.**
+
+- The ladder shows a rating after the first completed tournament but hides the player until
+  `RATED_MATCH_THRESHOLD = 5` rated matches; profiles say "Unranked" with the remaining
+  count. The threshold lives in `src/lib/stats/constants.ts`.
+- `/rankings` explains the rules in plain language, and the public read is a bounded
+  500-document scan ordered by rating, filtered in memory for eligibility, country and tag
+  prefix.
+- Unit tests cover hand-computed Elo, draws, upsets, walkovers, order determinism and the
+  idempotence snapshot. The emulator suite asserts ratings are written once and a second
+  completion leaves them unchanged.
+
+---
+
+## ADR-072 - Hall of Fame, archives and rankings are derived records with honest empties
+
+**Date:** 2026-11-16
+**Status:** Accepted
+
+**Context.** Champions, final positions and historical events are the platform's memory.
+They must survive corrections, be readable without a client write path and never show a
+placeholder champion.
+
+**Decision.** Completing a tournament writes one `hallOfFame/{tournamentId}` document with
+the champion, runner-up, semi-finalists, final standings, the champion's record and
+tournament-wide stats (completed matches, goals, goals per match, top league scorer, best
+league defence). The same job merges a history document per participant and refreshes every
+player's statistics. Archives read completed, archived and cancelled tournaments through the
+Admin SDK, merge, sort and paginate them in memory, and only link to a Hall of Fame detail
+when the induction document exists. Cancelled events remain reachable only as read-only
+notices. Every public record page has an explicit empty state; there is no sample or
+honorary entry.
+
+Analytics uses exact `count()` queries for users, tournaments, registrations, matches and
+30 daily completed-match buckets, and names the sample size for goal averages
+(`GOALS_SAMPLE_CAP = 1000`). The cached `platformStats/summary` document is refreshed on
+demand and treated as stale after five minutes.
+
+**Consequences.**
+
+- Hall of Fame, history and archive documents are idempotent: the Hall of Fame id is the
+  tournament id, history is keyed by tournament and merged, and profiles are replaced.
+- Title counts on profiles and player search come from these documents, so a trophy is
+  never typed in by hand.
+- Archives and Hall of Fame join on `tournamentId`; a completed tournament without an
+  induction is shown honestly rather than with a dead link.
+
+---
+
+## ADR-073 - Graphics are fixed-pixel React templates, not server-rendered images
+
+**Date:** 2026-11-16
+**Status:** Accepted
+
+**Context.** Organisers and players need shareable images for a league table, draw,
+fixtures, results, bracket, champion, announcement and profile card. A server-side image
+renderer would duplicate the design system, add a native dependency and make every change
+a deployment concern. An external graphics API would export competition data to a third
+party.
+
+**Decision.** Each graphic is an ordinary React component in
+`src/components/graphics/templates/` rendered at declared export pixels: story
+1080x1920, portrait 1080x1350, square 1080x1080. Templates never use responsive
+breakpoints: the same tree is rendered in the preview, in jsdom and in the exported PNG.
+The visible preview is the full-size node scaled with a CSS transform inside an
+overflow-hidden frame; the export target is a second copy positioned off-screen at
+100% scale, so the dialog width and scroll position cannot affect the capture. The
+payload is a serialisable discriminated union (`GraphicPayload`) built on the server by
+pure mappers in `src/lib/graphics/data.ts`; no Firestore value is recalculated in the
+browser.
+
+Every template shares `GraphicFrame`: GCC logo or tournament logo, tournament name,
+season and game, optional organiser name, a brand footer with the tagline and domain,
+and the navy/electric/gold palette. The champion motif is an original geometric cup in
+`GraphicTrophy`; no competition trophy, logo, starball, typography or name is copied.
+
+**Consequences.**
+
+- Adding a template means a payload variant, a mapper, a template component and a
+  registry entry; the export pipeline does not change.
+- A template declares only the sizes it lays out without cramping, and the dialog shows
+  only those sizes.
+- Templates are unit-tested in jsdom: 36 rows, long tags, missing avatars, zero and
+  partial results, ties and honest empty states.
+
+---
+
+## ADR-074 - PNG export is client-side, 2x, font-embedded and deterministically named
+
+**Date:** 2026-11-16
+**Status:** Accepted
+
+**Context.** The exported file must look identical to the preview, include webfonts and
+remote avatars, work on phones, and be traceable to the data that produced it.
+
+**Decision.** `src/lib/graphics/export.ts` captures the off-screen node with
+`html-to-image` at `pixelRatio: 2`. Before capture it waits for `document.fonts.ready`
+and embeds the document font CSS once per session. Every remote image in a payload is
+preloaded with a 4-second timeout and `crossOrigin="anonymous"`; a URL that fails or
+times out is added to a blocked set, and `GraphicAvatar` renders initials instead of a
+broken image. Safari-like user agents render twice because the first pass can run before
+fonts and images paint; the second result is kept.
+
+The file name is
+`gcc-{tournament-slug}-{template-token}-{hash}.png`, where the hash is a stable FNV-1a
+over `{ template, size, data }`. The name never contains a timestamp, so the same payload
+produces the same file and two different payloads cannot collide by accident.
+
+Share uses the Web Share API with an image `File` when `navigator.canShare` accepts it,
+falls back to a download when it does not, and never downloads after the user cancels
+the share sheet.
+
+**Consequences.**
+
+- Export work stays on the device; no graphic or player photo is uploaded to a service.
+- A Cloudinary avatar that blocks CORS still yields a clean initials badge rather than a
+  failed export.
+- The visible preview and the captured node share one renderer, so they cannot drift.
+
+---
+
+## ADR-075 - QR codes are server-generated SVG data URLs
+
+**Date:** 2026-11-16
+**Status:** Accepted
+
+**Context.** Announcement and profile graphics need a QR code that survives PNG export.
+Generating it in the browser during capture would race the image loader and could render
+an empty square.
+
+**Decision.** `src/lib/graphics/qr.ts` encodes the registration or profile URL with the
+`qrcode` package on the server and returns an inline SVG data URL. The template renders
+that URL as an ordinary image, so the existing image preload and export path handles it.
+A failed encode returns an empty string and the template shows "QR unavailable" instead
+of failing the whole graphic. `qrcode` and `@types/qrcode` are the only added
+dependencies; they have no transitive native code and no network calls.
+
+**Consequences.**
+
+- No second QR render happens during export.
+- The QR is part of the payload, so the export file name hash changes when the target URL
+  changes.

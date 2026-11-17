@@ -7,8 +7,9 @@
 // the stored bracket documents: no placeholder is invented, and an empty
 // knockout shows an honest "not generated yet" state instead of sample ties.
 import { ShieldCheck, Swords, Trophy } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
+import { ExportButton } from "@/components/graphics/export-button";
 import {
   KnockoutBracket,
   toBracketRounds,
@@ -19,6 +20,8 @@ import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui
 import { Avatar } from "@/components/ui/data-display";
 import { KNOCKOUT_ROUND_LABELS, KNOCKOUT_ROUNDS, type KnockoutRound } from "@/lib/engine/knockout";
 import type { PublicKnockout, PublicKnockoutTie } from "@/lib/data/public-knockout";
+import { knockoutGraphicData } from "@/lib/graphics/data";
+import type { GraphicBranding } from "@/lib/graphics/types";
 import type { StandingBand } from "@/lib/engine/standings/types";
 
 const BAND_LABELS: Record<StandingBand, string> = {
@@ -204,12 +207,17 @@ function TieSheet({
 
 export interface PublicKnockoutPanelProps {
   readonly knockout: PublicKnockout;
+  readonly graphicBranding: GraphicBranding;
 }
 
-export function PublicKnockoutPanel({ knockout }: PublicKnockoutPanelProps) {
+export function PublicKnockoutPanel({ knockout, graphicBranding }: PublicKnockoutPanelProps) {
   const [selected, setSelected] = useState<BracketTieView | null>(null);
   const ties = knockout.ties.map(toBracketTie);
   const rounds = toBracketRounds(ties, KNOCKOUT_ROUNDS as readonly KnockoutRound[]);
+  const graphicPayload = useMemo(
+    () => ({ template: "knockout" as const, data: knockoutGraphicData(knockout) }),
+    [knockout],
+  );
   const qualification = (["direct", "playoff_seeded", "playoff_unseeded", "eliminated"] as const)
     .map((band) => ({
       band,
@@ -268,9 +276,16 @@ export function PublicKnockoutPanel({ knockout }: PublicKnockoutPanelProps) {
               rule and a level tie is settled by extra time or penalties.
             </p>
           </div>
-          <div className="flex items-center gap-2 text-xs text-grey-500">
-            <ShieldCheck aria-hidden="true" className="h-3.5 w-3.5" />
-            Written by the server, one recorded result at a time
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 text-xs text-grey-500">
+              <ShieldCheck aria-hidden="true" className="h-3.5 w-3.5" />
+              Written by the server, one recorded result at a time
+            </div>
+            <ExportButton
+              payload={graphicPayload}
+              branding={graphicBranding}
+              label="Download bracket"
+            />
           </div>
         </div>
 

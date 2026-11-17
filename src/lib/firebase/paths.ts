@@ -16,6 +16,7 @@ export const COLLECTIONS = {
   tournamentSlugs: "tournamentSlugs",
   announcements: "announcements",
   hallOfFame: "hallOfFame",
+  rankings: "rankings",
   auditLogs: "auditLogs",
   rateLimits: "rateLimits",
   platformStats: "platformStats",
@@ -35,6 +36,7 @@ export const SUBCOLLECTIONS = {
   standings: "standings",
   knockoutTies: "knockoutTies",
   announcements: "announcements",
+  players: "players",
 } as const;
 
 export const DOCUMENTS = {
@@ -155,6 +157,12 @@ export const paths = {
 
   hallOfFame: () => COLLECTIONS.hallOfFame,
   hallOfFameEntry: (entryId: string) => documentPath(COLLECTIONS.hallOfFame, entryId),
+
+  rankings: () => COLLECTIONS.rankings,
+  rankingsPlayers: (gameId: string) =>
+    collectionPath(COLLECTIONS.rankings, gameId, SUBCOLLECTIONS.players),
+  ranking: (gameId: string, uid: string) =>
+    documentPath(COLLECTIONS.rankings, gameId, SUBCOLLECTIONS.players, uid),
 
   auditLogs: () => COLLECTIONS.auditLogs,
   auditLog: (logId: string) => documentPath(COLLECTIONS.auditLogs, logId),

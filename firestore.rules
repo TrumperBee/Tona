@@ -219,6 +219,11 @@ service cloud.firestore {
       allow read: if true;
     }
 
+    // Per-game Elo ladders are public read, server write only.
+    match /rankings/{gameId}/players/{uid} {
+      allow read: if true;
+    }
+
     // Super Admin-only operational records.
     match /auditLogs/{logId} {
       allow read: if isSuperAdmin();

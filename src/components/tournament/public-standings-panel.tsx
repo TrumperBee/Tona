@@ -5,16 +5,22 @@
 // spectator sees a recent table without any client-side computation.
 import { ListOrdered } from "lucide-react";
 
+import { ExportButton } from "@/components/graphics/export-button";
 import { StandingsTable, type StandingsTableRow } from "@/components/tournament/standings-table";
 import { EmptyState } from "@/components/ui/data-display";
 import { TIEBREAKER_PROFILE_LABELS } from "@/lib/engine/standings/types";
 import type { TiebreakerProfile } from "@/lib/engine/standings/types";
+import type { GraphicBranding, GraphicPayload } from "@/lib/graphics/types";
 
 export interface PublicStandingsPanelProps {
   readonly rows: readonly StandingsTableRow[];
   readonly profile: TiebreakerProfile;
   readonly provisional: boolean;
   readonly updatedAt: string | null;
+  readonly graphic?: {
+    readonly payload: GraphicPayload;
+    readonly branding: GraphicBranding;
+  };
 }
 
 export function PublicStandingsPanel({
@@ -22,6 +28,7 @@ export function PublicStandingsPanel({
   profile,
   provisional,
   updatedAt,
+  graphic,
 }: PublicStandingsPanelProps) {
   return (
     <section className="border-b border-white/10">
@@ -33,9 +40,18 @@ export function PublicStandingsPanel({
               League table
             </h2>
           </div>
-          <p className="text-xs uppercase tracking-eyebrow text-grey-500">
-            Tie-break: {TIEBREAKER_PROFILE_LABELS[profile]}
-          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-xs uppercase tracking-eyebrow text-grey-500">
+              Tie-break: {TIEBREAKER_PROFILE_LABELS[profile]}
+            </p>
+            {graphic ? (
+              <ExportButton
+                payload={graphic.payload}
+                branding={graphic.branding}
+                label="Download image"
+              />
+            ) : null}
+          </div>
         </div>
 
         {rows.length === 0 ? (

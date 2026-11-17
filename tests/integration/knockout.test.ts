@@ -22,6 +22,10 @@ vi.mock("next/headers", () => ({
 import { GET as verifyStandingsRoute } from "@/app/api/organiser/tournaments/[id]/standings/verify/route";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
+import { finaliseTournamentCompletion } from "@/lib/stats/completion";
+import { computePlayerStats } from "@/lib/stats/player-stats";
+import { getHeadToHead, getRankings } from "@/lib/stats/server";
+import type { StatsMatch } from "@/lib/stats/types";
 
 import {
   buildRequest,
@@ -180,6 +184,152 @@ describe("full tournament simulation", () => {
     );
     expect(verified.status).toBe(200);
     expect((await bodyOf(verified)).ok).toBe(true);
+
+    const tournamentBefore =
+      (await firestore.doc(paths.tournament(summary.tournamentId)).get()).data() ?? {};
+    expect(tournamentBefore.ratingsAppliedAt).toBeTruthy();
+    expect(Object.keys(tournamentBefore.ratingSnapshot ?? {})).toHaveLength(36);
+
+    const hallSnapshot = await firestore.collection(paths.hallOfFame()).get();
+    expect(hallSnapshot.size).toBe(1);
+    const hall = hallSnapshot.docs[0]?.data() ?? {};
+    expect(hall.tournamentId).toBe(summary.tournamentId);
+    expect(hall.championUid).toBe(summary.championUid);
+    expect(hall.finalistUid).toBe(summary.runnerUpUid);
+    expect(hall.semiFinalists?.length).toBeGreaterThanOrEqual(2);
+    expect(hall.tournamentStats?.matches).toBe(summary.leagueMatches + summary.knockoutMatches);
+    expect(hall.tournamentStats?.goals).toBeGreaterThan(0);
+
+    const registrations = await firestore
+      .collection(paths.tournamentRegistrations(summary.tournamentId))
+      .get();
+    expect(registrations.size).toBe(36);
+
+    for (const registration of registrations.docs) {
+      const history = await firestore
+        .doc(paths.publicProfileHistoryEntry(registration.id, summary.tournamentId))
+        .get();
+      expect(history.exists).toBe(true);
+      expect(history.data()?.tournamentId).toBe(summary.tournamentId);
+      expect(typeof history.data()?.finalStage).toBe("string");
+      expect(history.data()?.played).toBeGreaterThan(0);
+      expect(history.data()?.wonTitle).toBe(registration.id === summary.championUid);
+    }
+
+    const rankings = await firestore.collection(paths.rankingsPlayers("efootball")).get();
+    expect(rankings.size).toBe(36);
+
+    for (const ranking of rankings.docs) {
+      const history = await firestore
+        .doc(paths.publicProfileHistoryEntry(ranking.id, summary.tournamentId))
+        .get();
+      const data = ranking.data();
+
+      expect(data.ratedMatches).toBe(history.data()?.played);
+      expect(data.rating).toBeGreaterThan(0);
+      expect(data.gamerTag).toBeTruthy();
+    }
+
+    // Profile totals must equal a fresh brute-force aggregation of the stored
+    // completed matches, not an incrementally maintained counter.
+    const completedMatches = (
+      await firestore.collection(paths.tournamentMatches(summary.tournamentId)).get()
+    ).docs.filter((document) => document.data().status === "completed");
+    const statsMatches: StatsMatch[] = completedMatches.flatMap((document) => {
+      const data = document.data();
+      const result = data.result as
+        { readonly homeGoals?: number; readonly awayGoals?: number } | null | undefined;
+
+      if (!result || typeof result.homeGoals !== "number" || typeof result.awayGoals !== "number") {
+        return [];
+      }
+
+      return [
+        {
+          id: document.id,
+          tournamentId: summary.tournamentId,
+          gameId: "efootball",
+          stage: data.stage,
+          matchday: typeof data.matchday === "number" ? data.matchday : 0,
+          leg: typeof data.leg === "number" ? data.leg : null,
+          homeUid: String(data.homeUid),
+          awayUid: String(data.awayUid),
+          homeGoals: result.homeGoals,
+          awayGoals: result.awayGoals,
+        },
+      ];
+    });
+    expect(statsMatches).toHaveLength(summary.leagueMatches + summary.knockoutMatches);
+
+    const championHistory = await firestore
+      .doc(paths.publicProfileHistoryEntry(summary.championUid, summary.tournamentId))
+      .get();
+    expect(championHistory.data()?.finalPosition).toBe(1);
+    expect(championHistory.data()?.finalStage).toBe("champion");
+
+    for (const registration of registrations.docs) {
+      const titleIds = registration.id === summary.championUid ? [summary.tournamentId] : [];
+      const expected = computePlayerStats(statsMatches, registration.id, {
+        titleTournamentIds: titleIds,
+      });
+      const profile = await firestore.doc(paths.publicProfile(registration.id)).get();
+      const stored = profile.data()?.stats ?? {};
+
+      expect(stored.overall).toEqual(expected.overall);
+      expect(stored.byGame?.efootball).toEqual(expected.byGame.efootball);
+    }
+
+    const championRanking = rankings.docs.find((document) => document.id === summary.championUid);
+    expect(championRanking?.data().ratedMatches).toBeGreaterThan(0);
+
+    const ladder = await getRankings({ gameId: "efootball", page: 1, pageSize: 50 });
+    expect(ladder.total).toBe(36);
+
+    const belowThreshold = registrations.docs.find(
+      (document) => document.id !== summary.championUid,
+    );
+    expect(belowThreshold).toBeTruthy();
+    await firestore.doc(paths.ranking("efootball", belowThreshold!.id)).update({ ratedMatches: 4 });
+    const filteredLadder = await getRankings({ gameId: "efootball", page: 1, pageSize: 50 });
+    expect(filteredLadder.total).toBe(35);
+    expect(filteredLadder.rows.some((row) => row.uid === belowThreshold!.id)).toBe(false);
+    await firestore.doc(paths.ranking("efootball", belowThreshold!.id)).update({
+      ratedMatches: championRanking?.data().ratedMatches ?? 5,
+    });
+
+    const headToHead = await getHeadToHead(summary.championUid, summary.runnerUpUid);
+    expect(headToHead.total).toBeGreaterThan(0);
+    expect(headToHead.totals.aWins + headToHead.totals.bWins + headToHead.totals.draws).toBe(
+      headToHead.total,
+    );
+    expect(headToHead.mostRecent).not.toBeNull();
+
+    // Completion is idempotent: the ratings transaction sees ratingsAppliedAt,
+    // the Hall of Fame document id is the tournament id and history is keyed by
+    // tournament, so a retry cannot double-apply anything.
+    const ratingsBefore = new Map(
+      rankings.docs.map((document) => [document.id, document.data().rating]),
+    );
+    const rerun = await finaliseTournamentCompletion(summary.tournamentId);
+    expect(rerun?.ratingsApplied).toBe(false);
+
+    const tournamentAfter =
+      (await firestore.doc(paths.tournament(summary.tournamentId)).get()).data() ?? {};
+    expect(tournamentAfter.ratingsAppliedAt.toMillis()).toBe(
+      tournamentBefore.ratingsAppliedAt.toMillis(),
+    );
+    expect((await firestore.collection(paths.hallOfFame()).get()).size).toBe(1);
+
+    const rankingsAfter = await firestore.collection(paths.rankingsPlayers("efootball")).get();
+    expect(rankingsAfter.size).toBe(36);
+    for (const document of rankingsAfter.docs) {
+      expect(document.data().rating).toBe(ratingsBefore.get(document.id));
+    }
+
+    const historyCount = await firestore
+      .collection(paths.publicProfileHistory(summary.championUid))
+      .get();
+    expect(historyCount.size).toBe(1);
   }, 180_000);
 
   it("runs the same bracket with single-match rounds", async () => {

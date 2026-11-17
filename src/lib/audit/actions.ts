@@ -48,6 +48,7 @@ export const AUDIT_ACTIONS: readonly AuditActionDefinition[] = [
   { action: "result_report.resolved", label: "Result report resolved" },
   { action: "result_report.dismissed", label: "Result report dismissed" },
   { action: "hall_of_fame.inducted", label: "Hall of Fame induction" },
+  { action: "stats.recomputed", label: "Player statistics recomputed" },
 ] as const;
 
 const actionLabels = new Map(AUDIT_ACTIONS.map((item) => [item.action, item.label]));

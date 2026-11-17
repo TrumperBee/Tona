@@ -46,6 +46,11 @@ export default async function AnalyticsPage() {
       label: item.key.replaceAll("_", " "),
       value: item.count,
     }));
+  const matchData = summary.matchesByDay.map((day) => ({
+    label: day.date.slice(5).replace("-", "/"),
+    value: day.count,
+  }));
+  const matchesInWindow = summary.matchesByDay.reduce((sum, day) => sum + day.count, 0);
   const last30 = summary.signupsByDay.reduce((sum, day) => sum + day.count, 0);
 
   return (
@@ -70,8 +75,18 @@ export default async function AnalyticsPage() {
         <StatCard
           label="Recorded matches"
           value={summary.totalMatches}
-          hint={summary.totalMatches === 0 ? "No data yet — matches arrive in Phase 8." : undefined}
+          hint={`${matchesInWindow} completed in the last 30 days.`}
           icon={Ticket}
+        />
+        <StatCard
+          label="Goals per match"
+          value={summary.goalsSampled > 0 ? summary.averageGoalsPerMatch.toFixed(2) : "—"}
+          hint={
+            summary.goalsSampled > 0
+              ? `From a sample of ${summary.goalsSampled} completed matches.`
+              : "No completed match has a recorded score yet."
+          }
+          icon={Gamepad2}
         />
       </div>
 
@@ -134,7 +149,17 @@ export default async function AnalyticsPage() {
             description="Every tournament, grouped by its current lifecycle status."
             data={tournamentData}
             valueSuffix=" tournaments"
-            emptyMessage="No tournaments exist yet. Organisers create them in Phase 8."
+            emptyMessage="No tournaments exist yet."
+          />
+        </Card>
+
+        <Card className="p-5">
+          <BarChart
+            title="Completed matches per day"
+            description="Matches whose result was recorded per UTC day over the last 30 days."
+            data={matchData}
+            valueSuffix=" matches"
+            emptyMessage="No completed matches in the last 30 days."
           />
         </Card>
 
@@ -145,12 +170,12 @@ export default async function AnalyticsPage() {
             </span>
             <div>
               <h3 className="font-display text-lg font-semibold uppercase tracking-display text-white">
-                Matches
+                Goals per match
               </h3>
               <p className="mt-1 text-sm leading-6 text-grey-400">
-                {summary.totalMatches === 0
-                  ? "No data yet. Fixtures and match results are created by the tournament flow in Phase 8."
-                  : `${summary.totalMatches} matches recorded across all tournaments.`}
+                {summary.goalsSampled === 0
+                  ? "No completed match has a recorded score yet, so no average is shown."
+                  : `${summary.averageGoalsPerMatch.toFixed(2)} goals per completed match, sampled from ${summary.goalsSampled} recorded results out of ${summary.totalMatches} matches.`}
               </p>
             </div>
           </div>

@@ -20,6 +20,7 @@ import {
   enterKnockoutMatchResult,
 } from "@/lib/tournament/knockout-results";
 import { TournamentMutationError } from "@/lib/tournament/errors";
+import { refreshPlayersStats } from "@/lib/stats/server";
 import {
   isResultEntryTournamentStatus,
   planResultTransition,
@@ -439,6 +440,10 @@ export async function enterMatchResult(
       `Result recorded: you vs ${opponentTag}, ${ownGoals ?? 0}-${otherGoals ?? 0}`.slice(0, 120),
     body: `The tournament admin recorded your match in ${committed.tournament.name}. Open the match to see the score.`,
   });
+
+  await refreshPlayersStats([committed.match.homeUid, committed.match.awayUid]).catch(
+    () => undefined,
+  );
 }
 
 /** Records many results in one all-or-nothing transaction. */
@@ -573,6 +578,11 @@ export async function enterMatchResultsBulk(
     );
   }
 
+  await refreshPlayersStats([
+    ...committed.matches.map((match) => match.homeUid),
+    ...committed.matches.map((match) => match.awayUid),
+  ]).catch(() => undefined);
+
   return { recorded: input.results.length };
 }
 
@@ -669,6 +679,10 @@ export async function correctMatchResult(
       `Result corrected: you vs ${opponentTag}, ${ownGoals ?? 0}-${otherGoals ?? 0}`.slice(0, 120),
     body: `The tournament admin corrected your match in ${committed.tournament.name}. Open the match to see the updated score.`,
   });
+
+  await refreshPlayersStats([committed.match.homeUid, committed.match.awayUid]).catch(
+    () => undefined,
+  );
 }
 
 /** Clears a recorded result and returns the match to `scheduled`. */
@@ -757,4 +771,8 @@ export async function clearMatchResult(
     title: (opponentTag) => `Result cleared: you vs ${opponentTag}`.slice(0, 120),
     body: `The tournament admin cleared the recorded result for your match in ${committed.tournament.name}. The fixture is awaiting a new result.`,
   });
+
+  await refreshPlayersStats([committed.match.homeUid, committed.match.awayUid]).catch(
+    () => undefined,
+  );
 }

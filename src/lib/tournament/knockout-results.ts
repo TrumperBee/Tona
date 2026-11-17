@@ -20,6 +20,8 @@ import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 import { createNotification } from "@/lib/notifications";
 import { TournamentMutationError } from "@/lib/tournament/errors";
+import { finaliseTournamentCompletion } from "@/lib/stats/completion";
+import { refreshPlayersStats } from "@/lib/stats/server";
 import {
   announceCompletion,
   betterAndWorse,
@@ -360,6 +362,11 @@ async function applyKnockoutMatchChange(
 
   if (committed.completion) {
     await announceCompletion(access, tournamentId, committed.tournament, committed.completion);
+    await finaliseTournamentCompletion(tournamentId).catch((error) => {
+      console.error("finaliseTournamentCompletion failed", error);
+    });
+  } else {
+    await refreshPlayersStats([committed.homeUid, committed.awayUid]).catch(() => undefined);
   }
 }
 

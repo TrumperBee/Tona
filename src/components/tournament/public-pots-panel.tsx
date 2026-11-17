@@ -4,9 +4,11 @@
 // shuffle seed. Rendered only when `getPublicDraw` returns a confirmed draw.
 import { ShieldCheck } from "lucide-react";
 
+import { ExportButton } from "@/components/graphics/export-button";
 import { PotSummary, type PotsBoardPlayer } from "@/components/organiser/pots-board";
 import { Card } from "@/components/ui/card";
 import type { PublicDraw } from "@/lib/data/public-tournaments";
+import type { GraphicBranding, GraphicPayload } from "@/lib/graphics/types";
 import { formatDateTime } from "@/lib/utils/dates";
 import type { DrawMethod, PotNumber } from "@/types/domain";
 
@@ -19,9 +21,14 @@ const METHOD_LABELS: Readonly<Record<DrawMethod, string>> = {
 export function PublicPotsPanel({
   draw,
   timezone,
+  graphic,
 }: {
   readonly draw: PublicDraw;
   readonly timezone: string;
+  readonly graphic?: {
+    readonly payload: GraphicPayload;
+    readonly branding: GraphicBranding;
+  };
 }) {
   const pots = Object.fromEntries(
     draw.pots.map((entry) => [entry.pot, entry.players as readonly PotsBoardPlayer[]]),
@@ -30,15 +37,24 @@ export function PublicPotsPanel({
   return (
     <section className="border-b border-white/10">
       <div className="container space-y-6 py-10">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-eyebrow text-gold-300">
-            Confirmed draw
-          </p>
-          <h2 className="mt-1 font-display text-2xl font-semibold text-white">The pots</h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-grey-400">
-            Four pots of nine. Every registered player appears in exactly one pot. Pots carry no
-            country or association restrictions.
-          </p>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-eyebrow text-gold-300">
+              Confirmed draw
+            </p>
+            <h2 className="mt-1 font-display text-2xl font-semibold text-white">The pots</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-grey-400">
+              Four pots of nine. Every registered player appears in exactly one pot. Pots carry no
+              country or association restrictions.
+            </p>
+          </div>
+          {graphic ? (
+            <ExportButton
+              payload={graphic.payload}
+              branding={graphic.branding}
+              label="Download image"
+            />
+          ) : null}
         </div>
 
         <PotSummary pots={pots} />

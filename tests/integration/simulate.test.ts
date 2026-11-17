@@ -18,6 +18,9 @@ vi.mock("next/headers", () => ({
   }),
 }));
 
+import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
+import { paths } from "@/lib/firebase/paths";
+
 import { clearEmulatorData, runFullTournamentSimulation } from "./full-tournament";
 
 function line(message: string): void {
@@ -67,6 +70,19 @@ describe("tournament simulation", () => {
     line(`Champion: ${summary.championTag}`);
     line(`Runner-up: ${summary.runnerUpTag}`);
     line(`League table frozen: ${summary.standingsFrozen ? "yes" : "no"}`);
+
+    const firestore = getFirebaseAdminFirestore();
+    const [hall, ladders] = await Promise.all([
+      firestore.collection(paths.hallOfFame()).get(),
+      firestore.collection(paths.rankingsPlayers("efootball")).get(),
+    ]);
+    const inducted = hall.docs.find((document) => document.id === summary.tournamentId);
+    line(`Hall of Fame entries: ${hall.size}`);
+    line(`Rated players: ${ladders.size}`);
+    line(
+      `Champion record: ${inducted?.data().stats?.wins ?? 0}W ${inducted?.data().stats?.draws ?? 0}D ${inducted?.data().stats?.losses ?? 0}L`,
+    );
+
     line(`Duration: ${(summary.durationMs / 1000).toFixed(1)}s`);
     line("-------------------------");
     console.log("");
@@ -77,5 +93,7 @@ describe("tournament simulation", () => {
     expect(summary.knockoutMatches).toBe(45);
     expect(summary.standingsFrozen).toBe(true);
     expect(summary.championUid).not.toBe(summary.runnerUpUid);
+    expect(hall.size).toBe(1);
+    expect(ladders.size).toBe(36);
   }, 240_000);
 });

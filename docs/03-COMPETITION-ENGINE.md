@@ -454,6 +454,31 @@ tie-break explanations remain exactly as they were at generation, and tournament
 completion only writes the champion, runner-up, `completedAt`, status and membership
 status.
 
+### 5.4.1 Records committed with the final (Phase 17)
+
+The final result transaction commits the competition state. A post-transaction job
+then derives everything else from the stored results; it never changes the final
+score and cannot roll the completion back:
+
+- `finaliseTournamentCompletion` reads the tournament, registrations, matches, ties
+  and frozen standings once. It resolves each participant's final stage and
+  position, then writes one `hallOfFame/{tournamentId}` document and one
+  `publicProfiles/{uid}/history/{tournamentId}` per registered player.
+- The ratings transaction replays every completed match in a fixed order (league
+  matchday, then playoff/r16/qf/sf/final, then leg, then match id) with the standard
+  Elo formula, `K = 32`, draw 0.5 and no margin bonus. It writes
+  `rankings/{gameId}/players/{uid}` and stores `ratingsAppliedAt` plus the
+  pre-tournament `ratingSnapshot` on the tournament so a retry is a no-op. Reopening
+  a completed tournament never reverses ratings.
+- Every participant's `publicProfiles/{uid}.stats` is replaced by a fresh
+  `computePlayerStats` aggregation, with titles read back from Hall of Fame entries.
+  A player without a public profile is skipped; the rest still refresh.
+
+If the job fails after the final is committed, the result stands and a Super Admin
+can rebuild the derived documents with `POST /api/super-admin/stats/recompute`
+(one player, one tournament, or every player with a cursor). Failures are logged and
+audited as `stats.recomputed`; nothing is inferred or backfilled by hand.
+
 ### 5.5 UI
 
 - **Organiser Knockout tab** - before generation it shows the progress

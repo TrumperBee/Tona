@@ -1,7 +1,7 @@
 "use client";
 
 // GCC - public player search by gamer-tag prefix.
-import { Search, UserRound } from "lucide-react";
+import { Search, Trophy, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -16,6 +16,7 @@ interface PlayerResult {
   readonly country: string;
   readonly preferredGame: GameId;
   readonly avatarUrl: string | null;
+  readonly titles: number;
 }
 
 type SearchState = "idle" | "loading" | "done" | "error" | "rate-limited";
@@ -174,8 +175,16 @@ export function PlayerSearch() {
                   crossOrigin="anonymous"
                 />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate font-display text-lg font-semibold uppercase tracking-display text-white">
-                    @{player.gamerTag}
+                  <span className="flex items-center gap-2">
+                    <span className="truncate font-display text-lg font-semibold uppercase tracking-display text-white">
+                      @{player.gamerTag}
+                    </span>
+                    {player.titles > 0 ? (
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-gold-400/30 bg-gold-400/10 px-2 py-0.5 text-[11px] font-semibold text-gold-200">
+                        <Trophy aria-hidden="true" className="h-3 w-3" />
+                        {player.titles}
+                      </span>
+                    ) : null}
                   </span>
                   <span className="mt-0.5 block truncate text-xs text-grey-400">
                     <span aria-hidden="true">{countryFlag(player.country)}</span>{" "}

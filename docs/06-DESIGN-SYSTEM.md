@@ -787,3 +787,41 @@ Role checks happen on the server. A hidden link is never treated as access contr
 
 When adding a primitive or variant, add it to the showcase in the same change. Keep demo
 content clearly labelled so it cannot be mistaken for production data.
+
+---
+
+## 13. Tournament graphics exports
+
+Graphics reuse the same tokens and type scale, but they are laid out in fixed export
+pixels rather than responsive breakpoints. Three sizes are declared in
+`src/lib/graphics/types.ts`:
+
+| Size     | Pixels      | Typical use                        |
+| -------- | ----------- | ---------------------------------- |
+| Story    | 1080 x 1920 | WhatsApp status and social stories |
+| Portrait | 1080 x 1350 | Feed posts                         |
+| Square   | 1080 x 1080 | Square posts and profile shares    |
+
+A template declares only the sizes it can lay out without cramping. The preview dialog
+shows the eligible sizes and states the exact export dimensions. The visible preview is
+scaled with CSS; the captured node is a separate full-size copy rendered off-screen.
+
+Shared rules for every template:
+
+- `GraphicFrame` owns the header (GCC mark or tournament logo, name, season, game,
+  organiser), the brand footer (tagline and domain) and the navy/electric/gold field.
+- `GraphicTag` enforces the 3-16 character gamer-tag range with an ellipsis and CSS
+  truncation as a second defence.
+- `GraphicAvatar` shows the player's Cloudinary photo with `crossOrigin="anonymous"` and
+  falls back to initials when the photo is missing, blocked or fails to load.
+- `GraphicTrophy` is the original GCC cup silhouette. No UEFA logo, trophy, starball,
+  competition name or typography is used.
+- Empty or partial data is shown honestly: "No matches are listed for this matchday",
+  "QR unavailable", or no template card at all. A template is never filled with sample
+  data.
+
+The organiser gallery is at Organiser -> Tournament -> Graphics. Public pages expose a
+"Download image" control beside the league table, pots, each matchday of fixtures and
+results, the bracket and the champion. Hall of Fame detail and both profile pages expose
+the champion and profile cards. Export names follow
+`gcc-{tournament-slug}-{template}-{hash}.png`.

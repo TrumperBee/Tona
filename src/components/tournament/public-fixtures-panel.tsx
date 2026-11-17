@@ -11,7 +11,10 @@ import { useState } from "react";
 
 import { Badge } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/data-display";
+import { ExportButton } from "@/components/graphics/export-button";
 import { Tabs } from "@/components/ui/tabs";
+import { fixturesGraphicData } from "@/lib/graphics/data";
+import type { GraphicBranding } from "@/lib/graphics/types";
 import { formatDate } from "@/lib/utils/dates";
 import type { PublicFixtureRow, PublicMatchdayWindow } from "@/lib/data/public-fixtures";
 
@@ -21,6 +24,8 @@ export interface PublicFixturesPanelProps {
   readonly viewerUid: string | null;
   readonly tournamentSlug: string;
   readonly timezone: string;
+  readonly graphicBranding: GraphicBranding;
+  readonly avatars: Readonly<Record<string, string | null>>;
 }
 
 function opponentName(row: PublicFixtureRow, viewerUid: string | null): string {
@@ -98,6 +103,8 @@ export function PublicFixturesPanel({
   viewerUid,
   tournamentSlug,
   timezone,
+  graphicBranding,
+  avatars,
 }: PublicFixturesPanelProps) {
   const [selected, setSelected] = useState("1");
   const hasMine =
@@ -126,6 +133,18 @@ export function PublicFixturesPanel({
               </span>
             ) : null}
             <span>{dayMatches.length} matches</span>
+            {dayMatches.length > 0 ? (
+              <span className="ml-auto">
+                <ExportButton
+                  payload={{
+                    template: "fixtures",
+                    data: fixturesGraphicData(dayMatches, day, avatars, { showScores: false }),
+                  }}
+                  branding={graphicBranding}
+                  label="Download image"
+                />
+              </span>
+            ) : null}
           </div>
           {dayMatches.length === 0 ? (
             <p className="rounded-lg border border-dashed border-white/15 p-4 text-sm text-grey-400">

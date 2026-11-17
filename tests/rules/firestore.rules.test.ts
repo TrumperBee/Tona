@@ -526,6 +526,19 @@ async function seed(): Promise<void> {
           goalsAgainst: 0,
         },
       }),
+      setDoc(doc(db, "rankings/efootball/players/alice"), {
+        gamerTag: "Alice",
+        gamerTagLower: "alice",
+        avatarUrl: null,
+        country: "KE",
+        rating: 1032,
+        ratedMatches: 5,
+        played: 5,
+        wins: 3,
+        draws: 1,
+        losses: 1,
+        updatedAt: now,
+      }),
       setDoc(doc(db, "auditLogs/log1"), {
         actorUid: "root",
         actorRole: "super_admin",
@@ -629,13 +642,15 @@ describe("private collections", () => {
 });
 
 describe("public reads", () => {
-  it("lets anyone read public profiles, their public history, platform announcements and the Hall of Fame", async () => {
+  it("lets anyone read public profiles, their public history, platform announcements, the Hall of Fame and the rating ladders", async () => {
     const db = anonymous();
 
     await assertSucceeds(getDoc(doc(db, "publicProfiles/alice")));
     await assertSucceeds(getDoc(doc(db, "publicProfiles/alice/history/public")));
     await assertSucceeds(getDoc(doc(db, "announcements/platform-a1")));
     await assertSucceeds(getDoc(doc(db, "hallOfFame/h1")));
+    await assertSucceeds(getDoc(doc(db, "rankings/efootball/players/alice")));
+    await assertSucceeds(getDocs(collection(user("bob"), "rankings/efootball/players")));
   });
 
   it("lets anyone read a public organiser profile, including its links", async () => {
@@ -918,6 +933,7 @@ describe("client writes", () => {
       "announcements/platform-expired",
       "announcements/platform-deleted",
       "hallOfFame/h1",
+      "rankings/efootball/players/alice",
       "auditLogs/log1",
       "rateLimits/key",
       "platformStats/summary",

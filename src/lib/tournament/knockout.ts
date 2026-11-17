@@ -52,6 +52,7 @@ import {
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 import { createNotifications } from "@/lib/notifications";
+import { finaliseTournamentCompletion } from "@/lib/stats/completion";
 import { TournamentMutationError } from "@/lib/tournament/errors";
 import {
   buildStandingsPlan,
@@ -1277,6 +1278,7 @@ export async function decideKnockoutTie(
 
   if (decided.completion) {
     await announceCompletion(access, tournamentId, decided.tournament, decided.completion);
+    await finaliseTournamentCompletion(tournamentId).catch(() => undefined);
   }
 
   return { winnerUid: decided.winnerUid };

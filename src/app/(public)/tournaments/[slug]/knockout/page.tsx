@@ -11,8 +11,10 @@ import { PageHeader } from "@/components/shared/page-header";
 import { PublicKnockoutPanel } from "@/components/tournament/public-knockout-panel";
 import { buttonStyles } from "@/components/ui/button-styles";
 import { EmptyState } from "@/components/ui/data-display";
+import { getGame } from "@/lib/config/games";
 import { getPublicKnockout } from "@/lib/data/public-knockout";
 import { getPublicTournamentBySlug } from "@/lib/data/public-tournaments";
+import { graphicBranding } from "@/lib/graphics/data";
 
 export const revalidate = 30;
 
@@ -114,7 +116,18 @@ export default async function PublicKnockoutPage({ params }: KnockoutPageProps) 
         </div>
       </section>
 
-      <PublicKnockoutPanel knockout={knockout} />
+      <PublicKnockoutPanel
+        knockout={knockout}
+        graphicBranding={graphicBranding({
+          tournamentName: tournament.name,
+          tournamentSlug: tournament.slug,
+          season: tournament.season,
+          gameName: getGame(tournament.gameId).name,
+          logoSrc: tournament.logoUrl,
+          coverSrc: tournament.coverImageUrl,
+          organiserName: tournament.organisationName,
+        })}
+      />
     </>
   );
 }

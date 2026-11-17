@@ -3,24 +3,16 @@
 // Reads the server-written private profile, public profile and membership
 // snapshots. Statistics are real values (zero for a new account), never sample
 // numbers. The avatar control uploads through the server route.
-import {
-  CalendarDays,
-  ChevronRight,
-  Gamepad2,
-  Globe2,
-  ListOrdered,
-  Pencil,
-  Swords,
-  Trophy,
-} from "lucide-react";
+import { CalendarDays, Gamepad2, Globe2, ListOrdered, Pencil, Swords, Trophy } from "lucide-react";
 import Link from "next/link";
 
 import { AvatarUploader } from "@/components/profile/avatar-uploader";
+import { ExportButton } from "@/components/graphics/export-button";
 import { PageHeader, SectionHeading } from "@/components/shared/page-header";
+import { PlayerStatsPanel } from "@/components/stats/player-stats-panel";
 import { CursorNav } from "@/components/super-admin/cursor-nav";
 import { buttonStyles } from "@/components/ui/button-styles";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CompactListRow } from "@/components/ui/compact-list-row";
 import { Avatar, EmptyState } from "@/components/ui/data-display";
 import { SectionCard } from "@/components/ui/section-card";
 import { requirePageSignedIn } from "@/lib/auth/page-access";
@@ -31,8 +23,14 @@ import { getPlayerMatchHistory, type MatchOutcome } from "@/lib/data/player-matc
 import { getPlayerStandings } from "@/lib/data/player-standings";
 import { STANDING_BAND_LABELS } from "@/lib/engine/standings/types";
 import { getOwnProfile } from "@/lib/profile/server";
+import { SITE_URL } from "@/lib/config/site";
+import { graphicBranding, playerCardGraphicData } from "@/lib/graphics/data";
+import { qrSvgDataUrl } from "@/lib/graphics/qr";
+import { getPlayerHistory, getPlayerRatingCards } from "@/lib/stats/server";
+import { buildGameStats, buildTournamentStats } from "@/lib/stats/view";
 import { firstQueryValue } from "@/lib/super-admin/query";
 import { formatDate } from "@/lib/utils/dates";
+import { EMPTY_PROFILE_STATS, PLAYER_FINAL_STAGE_LABELS } from "@/types/domain";
 
 export const metadata = { title: "Profile" };
 
@@ -67,10 +65,12 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
   const params = await searchParams;
   const after = firstQueryValue(params.after);
   const before = firstQueryValue(params.before);
-  const [profile, history, standings] = await Promise.all([
+  const [profile, history, standings, ratingCards, careerHistory] = await Promise.all([
     getOwnProfile(user.userId),
     getPlayerMatchHistory(user.userId, { after, before }),
     getPlayerStandings(user.userId),
+    getPlayerRatingCards(user.userId),
+    getPlayerHistory(user.userId, { limit: 50 }),
   ]);
 
   if (!profile) {
@@ -90,12 +90,46 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
   }
 
   const { user: privateProfile, publicProfile, memberships } = profile;
-  const stats = publicProfile?.stats.overall;
+  const stats = publicProfile?.stats.overall ?? EMPTY_PROFILE_STATS.overall;
   const game = getGame(privateProfile.preferredGame);
   const platform = PLATFORMS.find((candidate) => candidate.id === privateProfile.platform);
-  const played = stats?.played ?? 0;
-  const wins = stats?.wins ?? 0;
-  const winRate = played > 0 ? `${Math.round((wins / played) * 100)}%` : "—";
+  const games = buildGameStats(publicProfile?.stats ?? EMPTY_PROFILE_STATS, ratingCards);
+  const tournaments = buildTournamentStats(careerHistory);
+  const preferredGameStats = games.find((entry) => entry.gameId === privateProfile.preferredGame);
+  const profileUrl = `${SITE_URL}/players/${encodeURIComponent(privateProfile.gamerTag)}`;
+  const profileQr = await qrSvgDataUrl(profileUrl);
+  const profileGraphic = playerCardGraphicData({
+    player: {
+      uid: user.userId,
+      gamerTag: privateProfile.gamerTag,
+      avatarUrl: privateProfile.avatarUrl,
+    },
+    country: privateProfile.country,
+    community: privateProfile.community,
+    favouriteClub: privateProfile.favouriteClub,
+    platform: platform?.name ?? privateProfile.platform,
+    game: game.name,
+    played: stats.played,
+    wins: stats.wins,
+    draws: stats.draws,
+    losses: stats.losses,
+    goalsFor: stats.goalsFor,
+    goalsAgainst: stats.goalsAgainst,
+    tournaments: stats.tournaments,
+    titles: stats.titles,
+    winRate: stats.winRate,
+    rating: preferredGameStats?.rating ?? null,
+    rank: preferredGameStats?.rank ?? null,
+    eligible: preferredGameStats?.eligible ?? false,
+    ratedMatches: preferredGameStats?.ratedMatches ?? 0,
+    profileUrl,
+    qrSvg: profileQr,
+  });
+  const profileBranding = graphicBranding({
+    tournamentName: `@${privateProfile.gamerTag}`,
+    tournamentSlug: privateProfile.gamerTag,
+    gameName: game.name,
+  });
 
   return (
     <div className="space-y-8">
@@ -104,10 +138,18 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
         title="Your profile"
         description="Your permanent gamer tag, display details and verified competitive record."
         actions={
-          <Link href="/dashboard/profile/edit" className={buttonStyles({ size: "sm" })}>
-            <Pencil aria-hidden="true" className="h-4 w-4" />
-            Edit profile
-          </Link>
+          <>
+            <Link href="/dashboard/profile/edit" className={buttonStyles({ size: "sm" })}>
+              <Pencil aria-hidden="true" className="h-4 w-4" />
+              Edit profile
+            </Link>
+            <ExportButton
+              payload={{ template: "player-profile", data: profileGraphic }}
+              branding={profileBranding}
+              label="Share profile"
+              size="sm"
+            />
+          </>
         }
       />
 
@@ -158,45 +200,76 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
       <section>
         <SectionHeading
           title="Competitive record"
-          description="Pulled from your public profile. New accounts show zero until an admin records a real match."
+          description="Exact totals recomputed from completed matches. Switch between every competition, one game, or a single completed tournament."
         />
-        <SectionCard
-          id="competitive-record"
-          className="mt-4"
-          bodyClassName="p-3 sm:p-5"
-          title="Season totals"
-        >
-          <dl className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-            {[
-              { label: "Wins", value: stats?.wins ?? 0 },
-              { label: "Draws", value: stats?.draws ?? 0 },
-              { label: "Losses", value: stats?.losses ?? 0 },
-              { label: "Win rate", value: winRate },
-              { label: "Goals for", value: stats?.goalsFor ?? 0 },
-              { label: "Goals against", value: stats?.goalsAgainst ?? 0 },
-              { label: "Tournaments", value: stats?.tournaments ?? 0 },
-              { label: "Platform rank", value: "Unranked" },
-            ].map((tile) => (
-              <div
-                key={tile.label}
-                className="rounded-lg border border-white/10 bg-navy-950/50 px-3 py-3 text-center"
-              >
-                <dt className="text-xs font-semibold uppercase tracking-eyebrow text-grey-400">
-                  {tile.label}
-                </dt>
-                <dd className="mt-1 font-display text-2xl font-semibold tabular-nums text-white">
-                  {tile.value}
-                </dd>
-              </div>
-            ))}
-          </dl>
-          <p className="mt-3 px-1 text-xs leading-5 text-grey-400">
-            {played > 0
-              ? "Recorded from completed matches only."
-              : "No matches recorded yet, so every total is a real zero."}{" "}
-            The rating system opens in a later phase; no placeholder rank is shown.
-          </p>
-        </SectionCard>
+        <div className="mt-4">
+          <PlayerStatsPanel overall={stats} games={games} tournaments={tournaments} />
+        </div>
+      </section>
+
+      <section>
+        <SectionHeading
+          title="Tournament history"
+          description="Your final position in every completed competition. Titles are counted from Hall of Fame entries, never typed in by hand."
+        />
+        <div className="mt-5">
+          {careerHistory.length === 0 ? (
+            <EmptyState
+              icon={Trophy}
+              eyebrow="Tournament history"
+              title="No completed tournaments yet"
+              description="A tournament appears here with its final position once its final result is recorded and the competition is completed."
+            />
+          ) : (
+            <SectionCard id="tournament-history" bodyClassName="p-0">
+              <ul className="divide-y divide-white/10">
+                {careerHistory.map((entry) => (
+                  <li key={entry.tournamentId}>
+                    <div className="flex flex-wrap items-center gap-3 px-3 py-3 sm:px-4">
+                      <span
+                        className={
+                          entry.wonTitle
+                            ? "grid h-10 w-10 shrink-0 place-items-center rounded-full border border-gold-400/40 bg-gold-400/10 font-display text-sm font-semibold text-gold-200"
+                            : "grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/15 bg-white/[0.04] font-display text-sm font-semibold text-grey-200"
+                        }
+                        aria-label={`Final position ${entry.finalPosition}`}
+                      >
+                        {entry.finalPosition}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <Link
+                          href={`/tournaments/${entry.slug}`}
+                          className="block truncate text-sm font-semibold text-grey-100 underline-offset-4 hover:underline"
+                        >
+                          {entry.tournamentName}
+                        </Link>
+                        <p className="mt-0.5 text-xs text-grey-500">
+                          {getGame(entry.gameId).name}
+                          {entry.season ? ` · ${entry.season}` : ""}
+                          {entry.completedAt ? ` · ${formatDate(entry.completedAt)}` : ""}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge tone={entry.wonTitle ? "gold" : "neutral"}>
+                          {entry.wonTitle ? (
+                            <Trophy aria-hidden="true" className="h-3.5 w-3.5" />
+                          ) : null}
+                          {entry.wonTitle
+                            ? "Champion"
+                            : PLAYER_FINAL_STAGE_LABELS[entry.finalStage]}
+                        </Badge>
+                        <span className="text-xs tabular-nums text-grey-400">
+                          {entry.wins}W {entry.draws}D {entry.losses}L · {entry.goalsFor}:
+                          {entry.goalsAgainst}
+                        </span>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </SectionCard>
+          )}
+        </div>
       </section>
 
       <section>
@@ -225,35 +298,25 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
               }
             />
           ) : (
-            <SectionCard id="my-tournaments" bodyClassName="p-0">
-              <ul className="divide-y divide-white/10">
-                {memberships.map((membership) => {
-                  const status = TOURNAMENT_STATUS_META[membership.status];
+            <ul className="flex flex-wrap gap-2">
+              {memberships.map((membership) => {
+                const status = TOURNAMENT_STATUS_META[membership.status];
 
-                  return (
-                    <li key={membership.tournamentId}>
-                      <CompactListRow
-                        href={`/tournaments/${membership.slug}`}
-                        ariaLabel={`Open ${membership.name}, ${getGame(membership.gameId).name}, ${status.label}`}
-                        leading={
-                          <span className="grid h-10 w-10 place-items-center rounded-lg border border-electric-400/20 bg-electric-500/10 text-electric-300">
-                            <Trophy aria-hidden="true" className="h-5 w-5" />
-                          </span>
-                        }
-                        title={membership.name}
-                        subtitle={getGame(membership.gameId).name}
-                        trailing={
-                          <span className="flex items-center gap-2">
-                            <Badge tone={status.tone}>{status.label}</Badge>
-                            <ChevronRight aria-hidden="true" className="h-4 w-4 text-grey-500" />
-                          </span>
-                        }
-                      />
-                    </li>
-                  );
-                })}
-              </ul>
-            </SectionCard>
+                return (
+                  <li key={membership.tournamentId}>
+                    <Link
+                      href={`/tournaments/${membership.slug}`}
+                      aria-label={`Open ${membership.name}, ${getGame(membership.gameId).name}, ${status.label}`}
+                      className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/15 bg-white/[0.04] px-3 text-xs font-semibold text-grey-100 transition-colors hover:border-electric-400/40 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-400"
+                    >
+                      <Trophy aria-hidden="true" className="h-3.5 w-3.5 text-electric-300" />
+                      <span className="max-w-[14rem] truncate">{membership.name}</span>
+                      <span className="text-[11px] font-medium text-grey-500">{status.label}</span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </div>
       </section>

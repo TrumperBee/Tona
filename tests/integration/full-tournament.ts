@@ -149,6 +149,11 @@ export async function clearEmulatorData(): Promise<void> {
     await firestore.recursiveDelete(tournament);
   }
 
+  const rankings = await firestore.collection(paths.rankings()).listDocuments();
+  for (const game of rankings) {
+    await firestore.recursiveDelete(game);
+  }
+
   for (const collection of [
     paths.users(),
     paths.publicProfiles(),
@@ -159,6 +164,7 @@ export async function clearEmulatorData(): Promise<void> {
     paths.platformSettings(),
     paths.rateLimits(),
     paths.platformStats(),
+    paths.hallOfFame(),
   ]) {
     const snapshot = await firestore.collection(collection).get();
 
@@ -223,6 +229,7 @@ export async function createEmulatorUser(options: {
           goalsFor: 0,
           goalsAgainst: 0,
           titles: 0,
+          winRate: 0,
         },
         byGame: {},
       },
@@ -338,10 +345,12 @@ export async function createSimulationTournament(options: {
   const batch = firestore.batch();
 
   for (let index = 0; index < PLAYER_COUNT; index += 1) {
+    const gamerTag = playerTag(index);
+
     batch.set(firestore.doc(paths.tournamentRegistration(options.tournamentId, playerUid(index))), {
       tournamentId: options.tournamentId,
-      gamerTag: playerTag(index),
-      gamerTagLower: playerTag(index).toLowerCase(),
+      gamerTag,
+      gamerTagLower: gamerTag.toLowerCase(),
       country: "KE",
       avatarUrl: null,
       platform: "android",
@@ -350,6 +359,33 @@ export async function createSimulationTournament(options: {
       withdrawnAt: null,
       removedAt: null,
       removedBy: null,
+    });
+    batch.set(firestore.doc(paths.publicProfile(playerUid(index))), {
+      gamerTag,
+      gamerTagLower: gamerTag.toLowerCase(),
+      country: "KE",
+      preferredGame: "efootball",
+      platform: "android",
+      community: null,
+      favouriteClub: null,
+      photoUrl: null,
+      avatarUrl: null,
+      avatarPublicId: null,
+      status: "active",
+      stats: {
+        overall: {
+          tournaments: 0,
+          played: 0,
+          wins: 0,
+          draws: 0,
+          losses: 0,
+          goalsFor: 0,
+          goalsAgainst: 0,
+          titles: 0,
+          winRate: 0,
+        },
+        byGame: {},
+      },
     });
   }
 

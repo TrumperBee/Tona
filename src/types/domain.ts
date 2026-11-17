@@ -174,21 +174,18 @@ export interface ProfileStatTotals {
   readonly goalsFor: number;
   readonly goalsAgainst: number;
   readonly titles: number;
-}
-
-export interface GameProfileStats extends ProfileStatTotals {
-  readonly rating: number | null;
-  readonly ratedMatches: number;
+  /** Wins divided by played (0 to 1); 0 when no match has been played. */
+  readonly winRate: number;
 }
 
 /**
- * Typed profile aggregates. Phase 17 computes these values; until then the
- * server writes the zero default. `byGame` is partial because a player only
- * has entries for games they have actually played.
+ * Typed profile aggregates, recomputed from completed matches. `byGame` is
+ * partial because a player only has entries for games they have actually
+ * played. Ratings live in `rankings/{gameId}/players/{uid}`, not here.
  */
 export interface ProfileStats {
   readonly overall: ProfileStatTotals;
-  readonly byGame: Readonly<Partial<Record<GameId, GameProfileStats>>>;
+  readonly byGame: Readonly<Partial<Record<GameId, ProfileStatTotals>>>;
 }
 
 export const EMPTY_PROFILE_STATS: ProfileStats = {
@@ -201,6 +198,7 @@ export const EMPTY_PROFILE_STATS: ProfileStats = {
     goalsFor: 0,
     goalsAgainst: 0,
     titles: 0,
+    winRate: 0,
   },
   byGame: {},
 };
@@ -241,13 +239,36 @@ export interface MembershipDocument {
   readonly updatedAt: Timestamp;
 }
 
+export const PLAYER_FINAL_STAGES = [
+  "champion",
+  "runner_up",
+  "semi_finalist",
+  "quarter_finalist",
+  "round_of_16",
+  "playoffs",
+  "league_phase",
+] as const;
+export type PlayerFinalStage = (typeof PLAYER_FINAL_STAGES)[number];
+
+export const PLAYER_FINAL_STAGE_LABELS: Readonly<Record<PlayerFinalStage, string>> = {
+  champion: "Champion",
+  runner_up: "Runner-up",
+  semi_finalist: "Semi-finalist",
+  quarter_finalist: "Quarter-finalist",
+  round_of_16: "Round of 16",
+  playoffs: "Play-offs",
+  league_phase: "League phase",
+};
+
 /** Server-written public career history entry for a completed tournament. */
 export interface PlayerHistoryDocument {
+  readonly tournamentId: string;
   readonly tournamentName: string;
   readonly slug: string;
   readonly season: string;
   readonly gameId: GameId;
   readonly finalPosition: number;
+  readonly finalStage: PlayerFinalStage;
   readonly played: number;
   readonly wins: number;
   readonly draws: number;
@@ -255,7 +276,28 @@ export interface PlayerHistoryDocument {
   readonly goalsFor: number;
   readonly goalsAgainst: number;
   readonly wonTitle: boolean;
+  /** Rating after this tournament was replayed, or null before ratings apply. */
+  readonly ratingAfter: number | null;
+  readonly ratingChange: number | null;
   readonly completedAt: Timestamp;
+}
+
+/**
+ * One player's row on a per-game Elo ladder. The document id is the uid under
+ * `rankings/{gameId}/players`. Only completed tournaments move a rating.
+ */
+export interface RankingDocument {
+  readonly gamerTag: string;
+  readonly gamerTagLower: string;
+  readonly avatarUrl: string | null;
+  readonly country: string;
+  readonly rating: number;
+  readonly ratedMatches: number;
+  readonly played: number;
+  readonly wins: number;
+  readonly draws: number;
+  readonly losses: number;
+  readonly updatedAt: Timestamp;
 }
 
 export interface GamerTagReservation {
@@ -398,6 +440,10 @@ export interface TournamentDocument {
   readonly championUid?: string | null;
   readonly runnerUpUid?: string | null;
   readonly completedAt?: Timestamp | null;
+  /** Set once this tournament's results have been replayed into the Elo ladder. */
+  readonly ratingsAppliedAt?: Timestamp | null;
+  /** Ratings used as the starting point for that replay, keyed by uid. */
+  readonly ratingSnapshot?: Readonly<Record<string, number>> | null;
   readonly createdAt: Timestamp;
   readonly updatedAt: Timestamp;
 }
@@ -704,18 +750,63 @@ export interface HallOfFameStats {
   readonly goalsAgainst: number;
 }
 
+export interface HallOfFamePlayerRef {
+  readonly uid: string;
+  readonly tag: string;
+  readonly avatarUrl: string | null;
+}
+
+export interface HallOfFameStandingRow extends HallOfFamePlayerRef {
+  readonly position: number;
+  readonly played: number;
+  readonly wins: number;
+  readonly draws: number;
+  readonly losses: number;
+  readonly goalsFor: number;
+  readonly goalsAgainst: number;
+}
+
+export interface HallOfFameTournamentStats {
+  /** Completed matches across the league and knockout phases. */
+  readonly matches: number;
+  readonly goals: number;
+  readonly goalsPerMatch: number;
+  /** Highest scorer in the league phase only. */
+  readonly topScorer: {
+    readonly uid: string;
+    readonly tag: string;
+    readonly goals: number;
+  } | null;
+  /** Fewest goals conceded in the league phase, from the frozen table. */
+  readonly bestDefence: {
+    readonly uid: string;
+    readonly tag: string;
+    readonly goalsAgainst: number;
+  } | null;
+}
+
 export interface HallOfFameDocument {
   readonly tournamentId: string;
+  readonly tournamentName: string;
+  readonly slug: string;
   readonly season: string;
+  readonly gameId: GameId;
   readonly championUid: string;
   readonly championTag: string;
+  readonly championAvatarUrl: string | null;
   readonly finalistUid: string;
   readonly finalistTag: string;
+  readonly finalistAvatarUrl: string | null;
+  readonly semiFinalists: readonly HallOfFamePlayerRef[];
   readonly thirdPlace: {
     readonly uid: string;
     readonly tag: string;
   } | null;
+  readonly standings: readonly HallOfFameStandingRow[];
+  /** The champion's own record in the tournament. */
   readonly stats: HallOfFameStats;
+  readonly tournamentStats: HallOfFameTournamentStats;
+  readonly completedAt: Timestamp;
 }
 
 export interface AuditLogDocument {
@@ -750,6 +841,9 @@ export interface PlatformStatsDocument {
   readonly usersByGame: ReadonlyArray<{ readonly key: string; readonly count: number }>;
   readonly usersByPlatform: ReadonlyArray<{ readonly key: string; readonly count: number }>;
   readonly tournamentsByStatus: ReadonlyArray<{ readonly key: string; readonly count: number }>;
+  readonly matchesByDay: ReadonlyArray<{ readonly date: string; readonly count: number }>;
+  readonly averageGoalsPerMatch: number;
+  readonly goalsSampled: number;
   readonly usersSampled: number;
   /** Maximum number of user documents sampled for the breakdown charts. */
   readonly sampleCap: number;

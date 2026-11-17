@@ -8,6 +8,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/shared/page-header";
+import { RecomputeStatsButton } from "@/components/super-admin/recompute-stats-button";
 import { RoleBadge, StatusBadge } from "@/components/super-admin/badges";
 import { RevealContactButton } from "@/components/super-admin/reveal-contact-button";
 import { RevokeOrganiserButton } from "@/components/super-admin/revoke-organiser-button";
@@ -184,6 +185,14 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
                   <RevokeOrganiserButton uid={uid} gamerTag={user.gamerTag} />
                 </div>
               ) : null}
+
+              <div className="border-t border-white/10 pt-4">
+                <p className="mb-2 text-xs leading-5 text-grey-400">
+                  Rebuild this player&apos;s statistics from their recorded completed matches. The
+                  repair is audited and never invents a value.
+                </p>
+                <RecomputeStatsButton uid={uid} />
+              </div>
             </CardContent>
           </Card>
         </div>

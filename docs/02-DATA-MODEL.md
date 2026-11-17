@@ -115,25 +115,33 @@ when the Super Admin changes an account status.
 ```text
 {
   overall: {
-    tournaments, played, wins, draws, losses, goalsFor, goalsAgainst, titles
+    tournaments, played, wins, draws, losses, goalsFor, goalsAgainst,
+    titles, winRate
   },
   byGame: {
     [gameId]: {
-      tournaments, played, wins, draws, losses, goalsFor, goalsAgainst, titles,
-      rating: number | null,
-      ratedMatches: number
+      tournaments, played, wins, draws, losses, goalsFor, goalsAgainst,
+      titles, winRate
     }
   }
 }
 ```
 
-Every counter defaults to zero and `rating` defaults to `null`. `byGame` is
-partial: a game appears only after the player has played it.
+`winRate` is stored as a 0–1 ratio (`wins / played`, or 0 when nothing has
+been played) and is formatted as a percentage only in the UI. Every counter
+defaults to zero and `byGame` is partial: a game appears only after the player
+has played it. The server recomputes the whole object from completed matches
+whenever an affected result is entered, corrected or cleared; ratings are read
+from `rankings/{gameId}/players/{uid}` and titles from Hall of Fame entries.
+Nothing increments a counter in place.
 
 `publicProfiles/{uid}/history/{tournamentId}` stores a public career-history
-snapshot for a completed tournament: `tournamentName`, `slug`, `season`,
-`gameId`, `finalPosition`, `played`, `wins`, `draws`, `losses`, `goalsFor`,
-`goalsAgainst`, `wonTitle`, `completedAt`.
+snapshot for a completed tournament: `tournamentId`, `tournamentName`, `slug`,
+`season`, `gameId`, `finalPosition`, `finalStage`, `played`, `wins`, `draws`,
+`losses`, `goalsFor`, `goalsAgainst`, `wonTitle`, `ratingAfter`,
+`ratingChange`, `completedAt`. `finalPosition` is the numeric placement and
+`finalStage` is one of the `PlayerFinalStage` values; a merge write makes a
+repair idempotent.
 
 **Writer:** server only. **Readers:** anyone.
 
@@ -229,6 +237,7 @@ Server-only; rules deny every client read and write.
 | `registrationCount`                                       | number             | Server-derived from active registrations               |
 | `status`                                                  | `TournamentStatus` | Lifecycle below                                        |
 | `season`                                                  | string             | Display season label                                   |
+| `ratingsAppliedAt`, `ratingSnapshot`                      | Timestamp / map    | Elo idempotence: written once on completion            |
 | `createdAt`, `updatedAt`                                  | Timestamp          | Server-written                                         |
 
 **Tournament lifecycle** (`canTransition` in `src/types/domain.ts`):
@@ -434,9 +443,14 @@ render). Email delivery arrives in Phase 16.
 
 ### 3.16 `hallOfFame/{id}` — permanent champions
 
-Fields: `tournamentId`, `season`, `championUid`, `championTag`, `finalistUid`,
-`finalistTag`, `thirdPlace { uid, tag } | null`, `stats { played, wins, draws,
-losses, goalsFor, goalsAgainst }`. Public and never deleted.
+Document id is the tournament id, so a retry can never produce a second entry.
+Fields: `tournamentId`, `tournamentName`, `slug`, `season`, `gameId`,
+`championUid`, `championTag`, `championAvatarUrl`, `finalistUid`,
+`finalistTag`, `finalistAvatarUrl`, `semiFinalists[]`, `thirdPlace`, `standings[]`,
+`stats { played, wins, draws, losses, goalsFor, goalsAgainst }` (the champion's
+record) and `tournamentStats { matches, goals, goalsPerMatch, topScorer,
+bestDefence }`. Written once when the final is recorded, overwritten only by an
+idempotent repair; public read, never deleted.
 
 ### 3.17 `auditLogs/{id}` — append-only audit trail
 
@@ -470,11 +484,14 @@ Refresh action. Figures that can be counted use Firestore `count()`
 aggregations.
 
 Exact counters: `totalUsers`, `totalTournaments`, `totalMatches`,
-`activeTournaments`, `totalRegistrations`, plus `tournamentsByStatus`.
+`activeTournaments`, `totalRegistrations`, plus `tournamentsByStatus` and
+`matchesByDay` (30 exact completed-match counts, one per UTC day).
 Breakdowns: `signupsByDay` (last 30 days), `usersByCountry`, `usersByGame` and
-`usersByPlatform`. Breakdowns and the daily series are derived from a bounded
-sample of at most `sampleCap` (`USER_SAMPLE_CAP = 1000`) user documents;
+`usersByPlatform`. Breakdowns and the daily signup series are derived from a
+bounded sample of at most `sampleCap` (`USER_SAMPLE_CAP = 1000`) user documents;
 `usersSampled` records how many were read so the UI can be honest about it.
+`averageGoalsPerMatch` and `goalsSampled` come from at most
+`GOALS_SAMPLE_CAP = 1000` completed matches, so the page names the sample size.
 
 Cache metadata: `generatedAt` and `updatedAt`. The console treats a summary
 older than five minutes as stale and offers a manual Refresh; it never claims a
@@ -489,10 +506,11 @@ a broad collection-group read over registrations.
 
 ### 3.21 `publicProfiles/{uid}/history/{tournamentId}` — public career history
 
-Fields: `tournamentName`, `slug`, `season`, `gameId`, `finalPosition`, `played`,
-`wins`, `draws`, `losses`, `goalsFor`, `goalsAgainst`, `wonTitle`,
-`completedAt`. Written by the server when a tournament is completed. Public
-read, never deleted.
+Fields: `tournamentId`, `tournamentName`, `slug`, `season`, `gameId`,
+`finalPosition`, `finalStage`, `played`, `wins`, `draws`, `losses`, `goalsFor`,
+`goalsAgainst`, `wonTitle`, `ratingAfter`, `ratingChange`, `completedAt`.
+Written by the server when a tournament is completed, with `{ merge: true }` so
+a repair is idempotent. Public read, never deleted.
 
 ### 3.22 `platformSettings/main` — platform configuration
 
@@ -548,6 +566,20 @@ latest approved application's `communityName`, falling back to the public
 `gamerTag`. When neither exists the profile is not created until the owner
 saves a name, so the public page and attributions simply show nothing.
 
+### 3.24 `rankings/{gameId}/players/{uid}` — per-game Elo ladder
+
+Document id under `players` is the player UID; `gameId` is the ladder. Fields:
+`gamerTag`, `gamerTagLower`, `avatarUrl`, `country`, `rating`, `ratedMatches`,
+`played`, `wins`, `draws`, `losses`, `updatedAt`. Ratings start at 1000 and are
+written only inside the completion transaction (`K = 32`, draw = 0.5, goal
+margin ignored). `ratedMatches` accumulates every replayed match; the public
+ladder hides a player until it reaches `RATED_MATCH_THRESHOLD` (5), while the
+profile shows the rating and an "Unranked" hint. The ladder read is a bounded
+scan ordered by rating (500 documents) filtered in memory for eligibility,
+country and tag prefix.
+
+**Writer:** server only. **Readers:** anyone.
+
 ## 4. Relationships
 
 ```text
@@ -569,6 +601,9 @@ tournaments/{id}
   ├── knockoutTies/{tieId}
   └── announcements/{id}
 
+rankings/{gameId}/players/{uid} ── uid ── publicProfiles/{uid}
+hallOfFame/{id} ── id ── tournaments/{id} (one induction per tournament)
+
 tournamentSlugs/{slug} ── tournamentId ── tournaments/{id}
 users/{uid}/memberships/{tournamentId} ── tournamentId ── tournaments/{id}
 registrations/{uid} ── uid ── users/{uid}
@@ -585,7 +620,7 @@ hallOfFame/{id} ── tournamentId ── tournaments/{id}
 
 ## 5. Composite indexes
 
-`firestore.indexes.json` declares 56 composite indexes:
+`firestore.indexes.json` declares 57 composite indexes:
 
 | Collection group    | Fields                                                                                                       | Use                                                             |
 | ------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
@@ -594,6 +629,7 @@ hallOfFame/{id} ── tournamentId ── tournaments/{id}
 | `matches`           | `participants` ARRAY_CONTAINS + `updatedAt` DESC                                                             | A player's match history                                        |
 | `matches`           | `participants` ARRAY_CONTAINS + `status` ASC + `updatedAt` DESC                                              | Completed match history, newest recorded first (Phase 11)       |
 | `matches`           | `tournamentId` ASC + `participants` ARRAY_CONTAINS + `updatedAt` DESC                                        | Scoped player history that rules can prove is public            |
+| `matches`           | `status` ASC + `updatedAt` ASC                                                                               | Completed matches per day for analytics (Phase 17)              |
 | `matches`           | `status` ASC + `matchday` ASC                                                                                | Operations queues                                               |
 | `tournaments`       | `status` ASC + `startsAt` ASC                                                                                | Public discovery                                                |
 | `tournaments`       | `ownerUid` ASC + `updatedAt` DESC                                                                            | Organiser dashboard and owned-tournament list                   |
@@ -638,7 +674,7 @@ Add an index only with the query that needs it. Deploy rules and indexes with
 - Default deny. `allow write: if false` for every document.
 - Public reads: `publicProfiles` (including `history` subcollection),
   `organiserProfiles`, published and unexpired platform `announcements`,
-  `hallOfFame`.
+  `hallOfFame`, and `rankings/{gameId}/players/{uid}`.
 - Draft, expired and soft-deleted platform announcements are readable only by
   the Super Admin.
 - Private reads: `users` (owner/Super Admin), notifications and memberships

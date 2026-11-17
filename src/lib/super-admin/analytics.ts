@@ -17,6 +17,8 @@ import type { PlatformStatsDocument } from "@/types/domain";
 export const ANALYTICS_CACHE_MS = 5 * 60 * 1000;
 export const SIGNUP_DAYS = 30;
 export const USER_SAMPLE_CAP = 1000;
+export const MATCH_DAY_COUNT = 30;
+export const GOALS_SAMPLE_CAP = 1000;
 
 export interface CountedKey {
   readonly key: string;
@@ -34,6 +36,9 @@ export interface AnalyticsSummary {
   readonly usersByGame: readonly CountedKey[];
   readonly usersByPlatform: readonly CountedKey[];
   readonly tournamentsByStatus: readonly CountedKey[];
+  readonly matchesByDay: readonly { readonly date: string; readonly count: number }[];
+  readonly averageGoalsPerMatch: number;
+  readonly goalsSampled: number;
   readonly usersSampled: number;
   readonly sampleCap: number;
   readonly generatedAt: Date;
@@ -85,6 +90,8 @@ async function computeSummary(): Promise<AnalyticsSummary> {
     platformCounts,
     signupCounts,
     countrySample,
+    matchDayCounts,
+    goalsSample,
   ] = await Promise.all([
     count(users),
     count(tournaments),
@@ -128,6 +135,25 @@ async function computeSummary(): Promise<AnalyticsSummary> {
       })),
     ),
     users.select("country").limit(USER_SAMPLE_CAP).get(),
+    Promise.all(
+      days.map(async (day) => ({
+        date: day.date,
+        count: await count(
+          firestore
+            .collectionGroup("matches")
+            .where("status", "==", "completed")
+            .where("updatedAt", ">=", Timestamp.fromDate(day.start))
+            .where("updatedAt", "<", Timestamp.fromDate(day.end)),
+        ),
+      })),
+    ),
+    firestore
+      .collectionGroup("matches")
+      .where("status", "==", "completed")
+      .select("result")
+      .limit(GOALS_SAMPLE_CAP)
+      .get()
+      .catch(() => null),
   ]);
 
   const countryCounts = new Map<string, number>();
@@ -145,6 +171,25 @@ async function computeSummary(): Promise<AnalyticsSummary> {
     .sort((left, right) => right.count - left.count)
     .slice(0, 10);
 
+  let goalTotal = 0;
+  let goalsSampled = 0;
+
+  for (const document of goalsSample?.docs ?? []) {
+    const result = document.data().result;
+
+    if (
+      typeof result === "object" &&
+      result !== null &&
+      typeof (result as Record<string, unknown>).homeGoals === "number" &&
+      typeof (result as Record<string, unknown>).awayGoals === "number"
+    ) {
+      goalTotal +=
+        ((result as Record<string, number>).homeGoals ?? 0) +
+        ((result as Record<string, number>).awayGoals ?? 0);
+      goalsSampled += 1;
+    }
+  }
+
   return {
     totalUsers,
     totalTournaments,
@@ -156,6 +201,9 @@ async function computeSummary(): Promise<AnalyticsSummary> {
     usersByGame: gameCounts,
     usersByPlatform: platformCounts,
     tournamentsByStatus: tournamentCounts,
+    matchesByDay: matchDayCounts,
+    averageGoalsPerMatch: goalsSampled > 0 ? Math.round((goalTotal / goalsSampled) * 100) / 100 : 0,
+    goalsSampled,
     usersSampled: countrySample.size,
     sampleCap: USER_SAMPLE_CAP,
     generatedAt: new Date(),
@@ -184,6 +232,9 @@ function fromDocument(document: PlatformStatsDocument): AnalyticsSummary {
     usersByGame: document.usersByGame ?? [],
     usersByPlatform: document.usersByPlatform ?? [],
     tournamentsByStatus: document.tournamentsByStatus ?? [],
+    matchesByDay: document.matchesByDay ?? [],
+    averageGoalsPerMatch: document.averageGoalsPerMatch ?? 0,
+    goalsSampled: document.goalsSampled ?? 0,
     usersSampled: document.usersSampled ?? 0,
     sampleCap: document.sampleCap ?? USER_SAMPLE_CAP,
     generatedAt: document.generatedAt?.toDate() ?? new Date(0),
