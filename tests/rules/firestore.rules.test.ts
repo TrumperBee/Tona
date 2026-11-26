@@ -23,7 +23,6 @@ import {
   doc,
   getDoc,
   getDocs,
-  orderBy,
   query,
   setDoc,
   Timestamp,
@@ -554,10 +553,10 @@ async function seed(): Promise<void> {
         createdAt: now,
       }),
       setDoc(doc(db, "rateLimits/key"), {
-        key: "key",
+        fingerprint: "0123456789ab",
         count: 1,
         windowStart: 0,
-        expiresAt: 1,
+        expiresAt: now,
         updatedAt: 0,
       }),
       setDoc(doc(db, "emailUsage/20261117"), {
@@ -784,6 +783,69 @@ describe("public reads", () => {
     // A confirmed draw on a cancelled competition is not public (ADR-044).
     await assertFails(getDoc(doc(db, "tournaments/cancelled/draw/current")));
   });
+
+  it("refuses to publish private contact fields in public projections", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = firestoreFor(context);
+
+      await Promise.all([
+        setDoc(doc(db, "publicProfiles/leaky"), {
+          gamerTag: "Leaky",
+          email: "leaky@example.com",
+        }),
+        setDoc(doc(db, "publicProfiles/alice/history/leaky"), {
+          tournamentId: "public",
+          whatsappE164: "+2348012345678",
+        }),
+        setDoc(doc(db, "organiserProfiles/leaky"), {
+          organisationName: "Leaky",
+          emailAddress: "leaky@example.com",
+        }),
+        setDoc(doc(db, "announcements/platform-leaky"), {
+          title: "Leaky",
+          body: "Body",
+          publishedAt: now,
+          phone: "+2348012345678",
+        }),
+        setDoc(doc(db, "hallOfFame/leaky"), { tournamentId: "public", mobile: "+2348012345678" }),
+        setDoc(doc(db, "rankings/efootball/players/leaky"), {
+          gamerTag: "Leaky",
+          rating: 1000,
+          phone: "+2348012345678",
+        }),
+        setDoc(doc(db, "tournaments/leaky-tournament"), {
+          ownerUid: "organiser-a",
+          slug: "leaky-cup",
+          status: "registration_open",
+          email: "leaky@example.com",
+        }),
+        setDoc(doc(db, "tournaments/public/registrations/leaky"), {
+          tournamentId: "public",
+          email: "leaky@example.com",
+        }),
+        setDoc(doc(db, "tournaments/published/matches/leaky"), {
+          tournamentId: "published",
+          email: "leaky@example.com",
+        }),
+      ]);
+    });
+
+    const db = anonymous();
+
+    for (const path of [
+      "publicProfiles/leaky",
+      "publicProfiles/alice/history/leaky",
+      "organiserProfiles/leaky",
+      "announcements/platform-leaky",
+      "hallOfFame/leaky",
+      "rankings/efootball/players/leaky",
+      "tournaments/leaky-tournament",
+      "tournaments/public/registrations/leaky",
+      "tournaments/published/matches/leaky",
+    ]) {
+      await assertFails(getDoc(doc(db, path)));
+    }
+  });
 });
 
 describe("organiser ownership", () => {
@@ -865,53 +927,68 @@ describe("membership and history reads", () => {
   });
 });
 
-describe("collection-group player history", () => {
-  it("lets a player query matches for a published tournament", async () => {
-    const db = user("alice");
-    const history = query(
-      collectionGroup(db, "matches"),
-      where("tournamentId", "==", "published"),
-      where("participants", "array-contains", "alice"),
-      orderBy("updatedAt", "desc"),
-    );
-
-    await assertSucceeds(getDocs(history));
-  });
-
-  it("does not leak draft or suspended tournament matches through collection-group queries", async () => {
+describe("collection-group reads", () => {
+  it("denies every collection-group match query, including constrained public ones", async () => {
     const db = user("alice");
 
-    const broad = query(
-      collectionGroup(db, "matches"),
-      where("participants", "array-contains", "alice"),
-      orderBy("updatedAt", "desc"),
-    );
-    await assertFails(getDocs(broad));
-
-    for (const tournamentId of ["draft", "suspended"]) {
-      const hidden = query(
-        collectionGroup(db, "matches"),
-        where("tournamentId", "==", tournamentId),
-        where("participants", "array-contains", "alice"),
-      );
-      await assertFails(getDocs(hidden));
+    for (const whereClauses of [
+      [],
+      [where("tournamentId", "==", "published"), where("participants", "array-contains", "alice")],
+      [where("tournamentId", "==", "draft"), where("participants", "array-contains", "alice")],
+    ]) {
+      await assertFails(getDocs(query(collectionGroup(db, "matches"), ...whereClauses)));
     }
   });
 
-  it("lets a player query registrations for public tournaments only", async () => {
-    const published = query(
-      collectionGroup(user("alice"), "registrations"),
-      where("tournamentId", "==", "public"),
-    );
-    await assertSucceeds(getDocs(published));
+  it("denies every collection-group registration query, including constrained public ones", async () => {
+    const db = user("alice");
 
-    for (const tournamentId of ["draft", "suspended", "cancelled"]) {
-      const hidden = query(
-        collectionGroup(user("alice"), "registrations"),
-        where("tournamentId", "==", tournamentId),
+    for (const tournamentId of ["public", "draft", "suspended", "cancelled"]) {
+      await assertFails(
+        getDocs(
+          query(collectionGroup(db, "registrations"), where("tournamentId", "==", tournamentId)),
+        ),
       );
-      await assertFails(getDocs(hidden));
     }
+  });
+
+  it("rejects a hidden-parent document that claims a public tournamentId", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = firestoreFor(context);
+
+      await Promise.all([
+        setDoc(doc(db, "tournaments/draft/registrations/mismatch"), {
+          tournamentId: "public",
+          gamerTag: "Mismatch",
+          status: "registered",
+        }),
+        setDoc(doc(db, "tournaments/suspended/matches/mismatch"), {
+          tournamentId: "published",
+          participants: ["alice"],
+          status: "completed",
+          updatedAt: now,
+        }),
+        setDoc(doc(db, "archive/wrong-parent/matches/mismatch"), {
+          tournamentId: "published",
+          participants: ["alice"],
+          status: "completed",
+          updatedAt: now,
+        }),
+      ]);
+    });
+
+    const db = user("alice");
+
+    // The nested /tournaments/{id}/... rules deny by path; the collection-group
+    // rules deny the same documents when reached from a different parent,
+    // because their physical path does not match resource.data.tournamentId.
+    await assertFails(getDoc(doc(db, "tournaments/draft/registrations/mismatch")));
+    await assertFails(getDoc(doc(db, "tournaments/suspended/matches/mismatch")));
+    await assertFails(getDoc(doc(db, "archive/wrong-parent/matches/mismatch")));
+
+    // Normal collection reads still work for genuine public subcollections.
+    await assertSucceeds(getDoc(doc(db, "tournaments/public/registrations/alice")));
+    await assertSucceeds(getDoc(doc(db, "tournaments/published/matches/m1")));
   });
 });
 

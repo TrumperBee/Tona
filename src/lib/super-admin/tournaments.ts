@@ -11,6 +11,7 @@ import "server-only";
 import { FieldValue, type DocumentSnapshot, type Query } from "firebase-admin/firestore";
 
 import { writeAuditLog } from "@/lib/audit/log";
+import { withPublicInvalidation } from "@/lib/cache/public-data";
 import type { SessionUser } from "@/lib/auth/session";
 import type { GameId } from "@/lib/config/games";
 import { getFirebaseAdminAuth, getFirebaseAdminFirestore } from "@/lib/firebase/admin";
@@ -142,7 +143,7 @@ function parseReason(raw: unknown): string {
  * archived and cancelled competitions are terminal and a suspended competition
  * cannot be suspended again. The prior stage is stored on the document.
  */
-export async function suspendTournament(
+async function suspendTournamentWrite(
   actor: SessionUser,
   tournamentId: string,
   rawReason: unknown,
@@ -216,7 +217,7 @@ export async function suspendTournament(
 }
 
 /** Restores a suspended competition to the exact stage it was suspended from. */
-export async function unsuspendTournament(
+async function unsuspendTournamentWrite(
   actor: SessionUser,
   tournamentId: string,
   rawReason: unknown,
@@ -293,7 +294,7 @@ export async function unsuspendTournament(
  * public surfaces never need a join. The authoritative role is the Firebase
  * custom claim, checked server-side with the Admin SDK.
  */
-export async function transferTournamentOwnership(
+async function transferTournamentOwnershipWrite(
   actor: SessionUser,
   tournamentId: string,
   newOwnerUid: string,
@@ -438,3 +439,7 @@ export async function searchOrganisers(prefix: string): Promise<OrganiserSearchR
       typeof names.get(document.id) === "string" ? (names.get(document.id) as string) : "",
   }));
 }
+
+export const suspendTournament = withPublicInvalidation(suspendTournamentWrite);
+export const unsuspendTournament = withPublicInvalidation(unsuspendTournamentWrite);
+export const transferTournamentOwnership = withPublicInvalidation(transferTournamentOwnershipWrite);

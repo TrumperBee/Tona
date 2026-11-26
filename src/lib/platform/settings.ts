@@ -10,6 +10,7 @@ import "server-only";
 
 import { Timestamp } from "firebase-admin/firestore";
 
+import { cachePublicData, withPublicInvalidation } from "@/lib/cache/public-data";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 import type { PlatformSettingsDocument } from "@/types/domain";
@@ -105,7 +106,7 @@ export async function getPlatformSettings(): Promise<PlatformSettingsValues> {
 }
 
 /** Returns only the three fields that are safe to show on public pages. */
-export async function getPublicPlatformSettings(): Promise<PublicPlatformSettings> {
+async function getPublicPlatformSettingsUncached(): Promise<PublicPlatformSettings> {
   const settings = await getPlatformSettings();
 
   return {
@@ -114,6 +115,10 @@ export async function getPublicPlatformSettings(): Promise<PublicPlatformSetting
     registrationsOpen: settings.registrationsOpen,
   };
 }
+
+export const getPublicPlatformSettings = cachePublicData(getPublicPlatformSettingsUncached, [
+  "public-platform-settings",
+]);
 
 /**
  * Blocks non-Super-Admin callers while maintenance mode is on. Pass `null` when
@@ -139,7 +144,7 @@ export async function assertRegistrationsOpen(): Promise<void> {
 }
 
 /** Writes a complete settings document and returns the serialisable values. */
-export async function writePlatformSettings(
+async function writePlatformSettingsWrite(
   values: Omit<PlatformSettingsValues, "updatedBy" | "updatedAt">,
   updatedBy: string,
 ): Promise<PlatformSettingsValues> {
@@ -165,3 +170,5 @@ export async function writePlatformSettings(
     updatedAt: new Date(),
   };
 }
+
+export const writePlatformSettings = withPublicInvalidation(writePlatformSettingsWrite);

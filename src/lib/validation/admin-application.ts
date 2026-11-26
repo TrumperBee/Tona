@@ -59,6 +59,8 @@ export const adminApplicationSubmitSchema = z
     agreesToRules: z.boolean().refine((value) => value === true, {
       message: "You must agree to the organiser code of conduct.",
     }),
+    // Verified and stripped by the route; never stored on the application.
+    turnstileToken: z.string().trim().max(4096).optional(),
   })
   .strict();
 

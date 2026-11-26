@@ -11,6 +11,7 @@ import "server-only";
 import { FieldValue } from "firebase-admin/firestore";
 
 import { writeAuditLog } from "@/lib/audit/log";
+import { withPublicInvalidation } from "@/lib/cache/public-data";
 import { requireTournamentOwnerOrSuperAdmin } from "@/lib/auth/guards";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
@@ -35,7 +36,7 @@ const FIELD_MAP: Readonly<Record<TournamentImageKind, ImageFields>> = {
  * Stores a freshly uploaded image reference on the tournament. `stored` comes
  * from the platform's own Cloudinary upload, never from client input.
  */
-export async function storeTournamentImage(
+async function storeTournamentImageWrite(
   tournamentId: string,
   kind: TournamentImageKind,
   stored: { readonly url: string; readonly publicId: string },
@@ -93,3 +94,5 @@ export async function storeTournamentImage(
     after: { [fields.urlField]: stored.url },
   });
 }
+
+export const storeTournamentImage = withPublicInvalidation(storeTournamentImageWrite);

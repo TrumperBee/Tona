@@ -17,6 +17,7 @@ import {
 } from "@/lib/platform/settings";
 import { checkRateLimit, rateLimitPolicy } from "@/lib/rate-limit";
 import { assertSameOrigin, SameOriginError } from "@/lib/security/same-origin";
+import { TURNSTILE_FAILURE_MESSAGE, verifyTurnstile } from "@/lib/security/turnstile";
 import { registrationSchema } from "@/lib/validation/registration";
 
 export const runtime = "nodejs";
@@ -77,6 +78,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return jsonError("Too many registration attempts for this email. Try again later.", 429, {
       "Retry-After": String(emailLimit.retryAfterSeconds),
     });
+  }
+
+  const turnstile = await verifyTurnstile({
+    token: parsed.data.turnstileToken,
+    ip: clientIdentifier(request),
+    action: "register",
+  });
+
+  if (!turnstile.ok) {
+    return jsonError(TURNSTILE_FAILURE_MESSAGE, 400);
   }
 
   try {

@@ -8,6 +8,7 @@ import "server-only";
 import { Timestamp } from "firebase-admin/firestore";
 
 import { writeAuditLog } from "@/lib/audit/log";
+import { cachePublicData, withPublicInvalidation } from "@/lib/cache/public-data";
 import type { SessionUser } from "@/lib/auth/session";
 import { broadcastPlatformAnnouncement } from "@/lib/email/announcements";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
@@ -109,7 +110,7 @@ export async function listAnnouncements(options: {
 }
 
 /** Public page: published, non-deleted announcements, newest first. */
-export async function getPublicAnnouncements(options: {
+async function getPublicAnnouncementsUncached(options: {
   readonly after?: string | null;
   readonly pageSize?: number;
 }): Promise<AnnouncementListResult> {
@@ -143,11 +144,15 @@ export async function getPublicAnnouncements(options: {
   };
 }
 
+export const getPublicAnnouncements = cachePublicData(getPublicAnnouncementsUncached, [
+  "public-announcements-list",
+]);
+
 /**
  * Latest active announcements for the site banner. Pinned entries come first.
  * The query is bounded; older active announcements remain on /announcements.
  */
-export async function getBannerAnnouncements(limit = 5): Promise<readonly AnnouncementRow[]> {
+async function getBannerAnnouncementsUncached(limit = 5): Promise<readonly AnnouncementRow[]> {
   const firestore = getFirebaseAdminFirestore();
   const now = new Date();
   const snapshot = await firestore
@@ -168,6 +173,10 @@ export async function getBannerAnnouncements(limit = 5): Promise<readonly Announ
     .slice(0, limit);
 }
 
+export const getBannerAnnouncements = cachePublicData(getBannerAnnouncementsUncached, [
+  "public-announcement-banners",
+]);
+
 function auditSummary(input: AnnouncementContentInput | AnnouncementCreateInput) {
   return {
     title: input.title,
@@ -177,7 +186,7 @@ function auditSummary(input: AnnouncementContentInput | AnnouncementCreateInput)
   };
 }
 
-export async function createAnnouncement(
+async function createAnnouncementWrite(
   actor: SessionUser,
   input: AnnouncementCreateInput,
 ): Promise<{ id: string }> {
@@ -227,6 +236,8 @@ export async function createAnnouncement(
   return { id: reference.id };
 }
 
+export const createAnnouncement = withPublicInvalidation(createAnnouncementWrite);
+
 async function requireAnnouncement(id: string): Promise<PlatformAnnouncementDocument> {
   const snapshot = await getFirebaseAdminFirestore().doc(paths.announcement(id)).get();
 
@@ -243,7 +254,7 @@ async function requireAnnouncement(id: string): Promise<PlatformAnnouncementDocu
   return data;
 }
 
-export async function updateAnnouncement(
+async function updateAnnouncementWrite(
   actor: SessionUser,
   id: string,
   input: AnnouncementContentInput,
@@ -278,7 +289,9 @@ export async function updateAnnouncement(
   });
 }
 
-export async function publishAnnouncement(actor: SessionUser, id: string): Promise<void> {
+export const updateAnnouncement = withPublicInvalidation(updateAnnouncementWrite);
+
+async function publishAnnouncementWrite(actor: SessionUser, id: string): Promise<void> {
   const before = await requireAnnouncement(id);
 
   if (before.publishedAt) {
@@ -308,7 +321,9 @@ export async function publishAnnouncement(actor: SessionUser, id: string): Promi
   });
 }
 
-export async function unpublishAnnouncement(actor: SessionUser, id: string): Promise<void> {
+export const publishAnnouncement = withPublicInvalidation(publishAnnouncementWrite);
+
+async function unpublishAnnouncementWrite(actor: SessionUser, id: string): Promise<void> {
   const before = await requireAnnouncement(id);
 
   if (!before.publishedAt) {
@@ -331,7 +346,9 @@ export async function unpublishAnnouncement(actor: SessionUser, id: string): Pro
   });
 }
 
-export async function softDeleteAnnouncement(actor: SessionUser, id: string): Promise<void> {
+export const unpublishAnnouncement = withPublicInvalidation(unpublishAnnouncementWrite);
+
+async function softDeleteAnnouncementWrite(actor: SessionUser, id: string): Promise<void> {
   const before = await requireAnnouncement(id);
   const now = Timestamp.now();
 
@@ -350,3 +367,5 @@ export async function softDeleteAnnouncement(actor: SessionUser, id: string): Pr
     after: { deleted: true },
   });
 }
+
+export const softDeleteAnnouncement = withPublicInvalidation(softDeleteAnnouncementWrite);

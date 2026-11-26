@@ -9,10 +9,11 @@
 import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { CountryCombobox } from "@/components/auth/country-combobox";
 import { PasswordInput, PasswordStrength } from "@/components/auth/password-input";
+import { TurnstileWidget } from "@/components/security/turnstile-widget";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/ui/form-field";
@@ -80,6 +81,10 @@ export function RegisterForm() {
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [tagCheck, setTagCheck] = useState<{ tag: string; state: TagState } | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const handleTurnstileToken = useCallback((token: string | null) => {
+    setTurnstileToken(token);
+  }, []);
 
   const platformOptions = useMemo(
     () =>
@@ -202,6 +207,7 @@ export function RegisterForm() {
       preferredGame: values.preferredGame,
       platform: values.platform,
       acceptTerms: values.acceptTerms,
+      turnstileToken: turnstileToken ?? undefined,
     };
     const parsed = registrationSchema.safeParse(payload);
 
@@ -495,6 +501,17 @@ export function RegisterForm() {
             {fieldErrors.acceptTerms}
           </p>
         ) : null}
+
+        <div className="space-y-3" aria-label="Security check">
+          <p className="text-xs leading-5 text-grey-400">
+            This check helps keep registration open to real players.
+          </p>
+          <TurnstileWidget
+            action="register"
+            onToken={handleTurnstileToken}
+            className="w-full min-w-0"
+          />
+        </div>
 
         <Button
           type="submit"

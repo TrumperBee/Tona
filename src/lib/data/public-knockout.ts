@@ -13,6 +13,7 @@ import {
   type KnockoutRound,
 } from "@/lib/engine/knockout";
 import type { StandingBand } from "@/lib/engine/standings/types";
+import { cachePublicData } from "@/lib/cache/public-data";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 import { slotSourceLabel } from "@/lib/tournament/knockout";
@@ -171,7 +172,7 @@ function readSlot(
  * Reads the generated knockout bracket for a public tournament page. Returns
  * null before the bracket exists or when Firestore is unavailable. Never throws.
  */
-export async function getPublicKnockout(
+async function getPublicKnockoutUncached(
   tournamentId: string,
   status: TournamentStatus,
 ): Promise<PublicKnockout | null> {
@@ -353,3 +354,7 @@ export async function getPublicKnockout(
     return null;
   }
 }
+
+export const getPublicKnockout = cachePublicData(getPublicKnockoutUncached, [
+  "public-tournament-knockout",
+]);

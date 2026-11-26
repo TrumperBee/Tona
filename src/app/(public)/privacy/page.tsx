@@ -216,6 +216,34 @@ const sections: readonly LegalSection[] = [
     ),
   },
   {
+    id: "deleting-your-account",
+    heading: "Deleting your account",
+    body: (
+      <>
+        <p>
+          You can delete your account from profile settings. We ask you to sign in again first: a
+          session older than ten minutes is not enough. The deletion removes your Firebase sign-in,
+          email address, full name, WhatsApp number, community, favourite club and profile
+          photo/avatar. The avatar file is also removed from Cloudinary on a best-effort basis.
+          Deletion attempts are limited to three per hour.
+        </p>
+        <p>
+          Your public profile becomes &ldquo;Deleted player&rdquo; with no avatar. Completed
+          matches, tournament history, standings and titles are kept under your existing gamer tag
+          as part of the permanent sporting record. Your gamer tag stays reserved, and tournament
+          entries are neither withdrawn nor released: organisers see &ldquo;Deleted player&rdquo; in
+          their registration lists, with the same place in the field. Nothing is released silently.
+        </p>
+        <p>
+          The Super Admin account and organisers who still own an active tournament cannot use
+          self-service deletion. Contact us through the contact page if you need an exceptional
+          review. Every deletion is recorded in our audit log without storing the removed personal
+          details.
+        </p>
+      </>
+    ),
+  },
+  {
     id: "security",
     heading: "Security",
     body: (
@@ -290,8 +318,8 @@ export default function PrivacyPage() {
     <LegalPage
       eyebrow="Legal"
       title="Privacy policy"
-      updated="7 November 2026"
-      summary="What GCC collects, why it is needed, who can see it and how competition records are kept. Your email address and WhatsApp number are never public."
+      updated="26 November 2026"
+      summary="What GCC collects, why it is needed, who can see it, how account deletion works and how competition records are kept. Your email address and WhatsApp number are never public."
       sections={sections}
       contactNote={
         <p>

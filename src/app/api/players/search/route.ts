@@ -4,6 +4,7 @@
 // is a lower-case copy of the display tag.
 import type { NextRequest } from "next/server";
 
+import { cachePublicData } from "@/lib/cache/public-data";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 import { clientIdentifier, jsonError } from "@/lib/http/respond";
@@ -13,6 +14,38 @@ import type { PublicProfileDocument } from "@/types/domain";
 export const runtime = "nodejs";
 
 const MAX_RESULTS = 20;
+
+const searchPublicPlayers = cachePublicData(
+  async (query: string) => {
+    const snapshot = await getFirebaseAdminFirestore()
+      .collection(paths.publicProfiles())
+      .where("gamerTagLower", ">=", query)
+      .where("gamerTagLower", "<=", `${query}\uf8ff`)
+      .orderBy("gamerTagLower")
+      .limit(MAX_RESULTS)
+      .get();
+
+    return snapshot.docs
+      .map((document) => {
+        const data = document.data() as PublicProfileDocument;
+
+        if (data.deleted === true || data.status !== "active") {
+          return null;
+        }
+
+        return {
+          uid: document.id,
+          gamerTag: data.gamerTag,
+          country: data.country,
+          preferredGame: data.preferredGame,
+          avatarUrl: data.avatarUrl ?? null,
+          titles: data.stats?.overall?.titles ?? 0,
+        };
+      })
+      .filter((player): player is NonNullable<typeof player> => player !== null);
+  },
+  ["public-player-search"],
+);
 
 export async function GET(request: NextRequest): Promise<Response> {
   const limit = await checkRateLimit(
@@ -35,37 +68,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     return Response.json({ players: [] });
   }
 
-  const snapshot = await getFirebaseAdminFirestore()
-    .collection(paths.publicProfiles())
-    .where("gamerTagLower", ">=", query)
-    .where("gamerTagLower", "<=", `${query}\uf8ff`)
-    .orderBy("gamerTagLower")
-    .limit(MAX_RESULTS)
-    .get();
-
-  const players = snapshot.docs
-    .map((document) => {
-      const data = document.data() as PublicProfileDocument;
-
-      return {
-        uid: document.id,
-        gamerTag: data.gamerTag,
-        country: data.country,
-        preferredGame: data.preferredGame,
-        avatarUrl: data.avatarUrl ?? null,
-        titles: data.stats?.overall?.titles ?? 0,
-        status: data.status,
-      };
-    })
-    .filter((player) => player.status === "active")
-    .map((player) => ({
-      uid: player.uid,
-      gamerTag: player.gamerTag,
-      country: player.country,
-      preferredGame: player.preferredGame,
-      avatarUrl: player.avatarUrl,
-      titles: player.titles,
-    }));
+  const players = await searchPublicPlayers(query);
 
   return Response.json({ players });
 }

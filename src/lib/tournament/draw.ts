@@ -16,6 +16,7 @@ import { randomBytes } from "node:crypto";
 import { FieldValue, Timestamp, type QuerySnapshot } from "firebase-admin/firestore";
 
 import { writeAuditLog } from "@/lib/audit/log";
+import { withPublicInvalidation } from "@/lib/cache/public-data";
 import { requireTournamentOwnerOrSuperAdmin } from "@/lib/auth/guards";
 import { notify } from "@/lib/notifications/service";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
@@ -339,7 +340,7 @@ export interface ShuffleDrawResult {
  * Creates a fresh seeded draft. Locked players keep their pot; everyone else is
  * shuffled into the open slots. The seed is always server-generated.
  */
-export async function shuffleDraw(
+async function shuffleDrawWrite(
   tournamentId: string,
   lockedInput: Readonly<Record<string, 1 | 2 | 3 | 4>> = {},
 ): Promise<ShuffleDrawResult> {
@@ -434,7 +435,7 @@ export async function shuffleDraw(
 }
 
 /** Moves one player to a pot (numeric 1-4) or back to unassigned (null). */
-export async function assignPlayer(
+async function assignPlayerWrite(
   tournamentId: string,
   uid: string,
   pot: number | null,
@@ -529,7 +530,7 @@ export async function assignPlayer(
 }
 
 /** Pins a player to the pot they currently occupy, or releases the pin. */
-export async function lockPlayer(
+async function lockPlayerWrite(
   tournamentId: string,
   uid: string,
   locked: boolean,
@@ -604,7 +605,7 @@ export async function lockPlayer(
 }
 
 /** Clears the draft: every player becomes unassigned and all pins are released. */
-export async function clearDraw(tournamentId: string): Promise<StoredDraw> {
+async function clearDrawWrite(tournamentId: string): Promise<StoredDraw> {
   const access = await requireTournamentOwnerOrSuperAdmin(tournamentId);
   const firestore = getFirebaseAdminFirestore();
   const tournamentRef = firestore.doc(paths.tournament(tournamentId));
@@ -681,7 +682,7 @@ function groupByPot(draw: StoredDraw): ReadonlyMap<PotNumber, string[]> {
  * stored pots; the draw only becomes public when exactly 36 registered players
  * fill four pots of nine.
  */
-export async function confirmDraw(tournamentId: string): Promise<StoredDraw> {
+async function confirmDrawWrite(tournamentId: string): Promise<StoredDraw> {
   const access = await requireTournamentOwnerOrSuperAdmin(tournamentId);
   const firestore = getFirebaseAdminFirestore();
   const tournamentRef = firestore.doc(paths.tournament(tournamentId));
@@ -820,7 +821,7 @@ function assertNoFixtureWork(guard: DrawFixtureGuard): void {
  * and only while no fixture draft or match exists. The tiebreak seed is
  * discarded; the shuffle seed stays so the original draw remains replayable.
  */
-export async function unconfirmDraw(tournamentId: string, reason: string): Promise<void> {
+async function unconfirmDrawWrite(tournamentId: string, reason: string): Promise<void> {
   const access = await requireTournamentOwnerOrSuperAdmin(tournamentId);
   const firestore = getFirebaseAdminFirestore();
   const tournamentRef = firestore.doc(paths.tournament(tournamentId));
@@ -918,7 +919,7 @@ function membershipWrite(
  * field at exactly 36. Allowed while registration is closed (draft draw) or
  * after confirmation, but never once fixture work exists.
  */
-export async function replaceDrawPlayer(
+async function replaceDrawPlayerWrite(
   tournamentId: string,
   outUid: string,
   inUid: string,
@@ -1134,3 +1135,11 @@ export async function replaceDrawPlayer(
     },
   }).catch(() => undefined);
 }
+
+export const shuffleDraw = withPublicInvalidation(shuffleDrawWrite);
+export const assignPlayer = withPublicInvalidation(assignPlayerWrite);
+export const lockPlayer = withPublicInvalidation(lockPlayerWrite);
+export const clearDraw = withPublicInvalidation(clearDrawWrite);
+export const confirmDraw = withPublicInvalidation(confirmDrawWrite);
+export const unconfirmDraw = withPublicInvalidation(unconfirmDrawWrite);
+export const replaceDrawPlayer = withPublicInvalidation(replaceDrawPlayerWrite);

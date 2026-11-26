@@ -12,6 +12,7 @@ import "server-only";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { writeAuditLog } from "@/lib/audit/log";
+import { withPublicInvalidation } from "@/lib/cache/public-data";
 import { requireTournamentOwnerOrSuperAdmin } from "@/lib/auth/guards";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
@@ -117,7 +118,7 @@ function storedValue(tournament: TournamentDocument, field: string): unknown {
  * Applies a partial update to a tournament owned by the caller (or the Super
  * Admin). Every change is audited with the stored and new values.
  */
-export async function updateTournament(
+async function updateTournamentWrite(
   tournamentId: string,
   patch: TournamentUpdateInput,
 ): Promise<void> {
@@ -296,3 +297,5 @@ export async function updateTournament(
     after,
   });
 }
+
+export const updateTournament = withPublicInvalidation(updateTournamentWrite);

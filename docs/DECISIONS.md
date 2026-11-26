@@ -2080,3 +2080,169 @@ still showing every notification in-app.
   that cannot be honoured.
 - Delivery is best effort. An outage delays or drops email; the in-app record is
   already written and remains the source of truth.
+
+## ADR-078 - One nonce CSP is built per request and rolls out in report-only mode
+
+**Date:** 2026-11-26
+**Status:** Accepted
+
+**Context.** The app had only basic security headers. Firebase Auth, Firestore,
+App Check, Cloudinary, Turnstile, reCAPTCHA and the client-side PNG exporter all
+need different origins, and a static wildcard policy would have allowed far more
+than the app uses.
+
+**Decision.**
+
+- `src/lib/security/csp.ts` builds the policy from exact hosts. `script-src`
+  uses a per-request nonce plus `'strict-dynamic'`; `script-src-attr` is `'none'`;
+  style, image, connect and frame sources are explicit; `object-src`,
+  `base-uri`, `form-action` and `frame-ancestors` are locked down.
+- `src/proxy.ts` generates a 128-bit nonce and always sends it in the **request**
+  `Content-Security-Policy` header so Next stamps its own scripts even when the
+  response header is `Content-Security-Policy-Report-Only`.
+- `CSP_MODE=report-only|enforce` selects the response header. Production defaults
+  to enforce; a deployment switches to report-only with one environment change
+  and rolls back the same way.
+- `/api/csp-report` accepts both Reporting API and legacy formats but logs only a
+  sanitised directive and pathname, never URLs, queries, blocked URIs or user
+  data. It is 16 KiB capped and rate limited to 60/min per IP.
+
+**Consequences.**
+
+- A violation report cannot become a PII leak or a log-injection vector.
+- Rollout requires observing report-only traffic through key flows before
+  removing `CSP_MODE`; the exact steps and rollback are in
+  `docs/SECURITY-REVIEW.md`.
+- `'unsafe-inline'` remains only for React style attributes, and `'unsafe-eval'`
+  only outside production for the Next dev overlay.
+
+## ADR-079 - Bot challenges fail closed in production and are bound to an action
+
+**Date:** 2026-11-26
+**Status:** Accepted
+
+**Context.** Registration, password reset, organiser applications and repeated
+failed sign-ins are cheap to automate. A client-side checkbox is not a control,
+and a missing secret must not silently turn protection off in production.
+
+**Decision.**
+
+- The Turnstile widget is public and reports a token; `src/lib/security/turnstile.ts`
+  verifies it with a server-side `fetch` to Cloudflare and checks the returned
+  action against the expected one.
+- A missing `TURNSTILE_SECRET_KEY` in production denies the request. In
+  development it is skipped with one console notice.
+- Failed sign-ins are counted per IP plus `sha256(lowercased email)` and trigger
+  the challenge after three failures in 15 minutes; a success clears the counter.
+- No new SDK was added; verification uses the platform `fetch`.
+
+**Consequences.**
+
+- Automated abuse must solve a real challenge, and a misconfiguration cannot
+  open the registration or application flow in production.
+- The login form performs an extra state call before deciding whether to render
+  the widget; the readable email is never written to the counter document.
+
+## ADR-080 - Firebase App Check is monitored before it is enforced
+
+**Date:** 2026-11-26
+**Status:** Accepted
+
+**Context.** Browser Firebase calls were unauthenticated at the SDK boundary.
+Enforcing App Check on day one would break users with stale clients, but leaving
+it off forever leaves the client SDK open to direct abuse.
+
+**Decision.**
+
+- `src/lib/firebase/client.ts` initialises App Check with reCAPTCHA v3 and
+  `NEXT_PUBLIC_APPCHECK_SITE_KEY`; a production build without the key fails
+  closed, while development may use a Console debug token.
+- Firebase Console stays in monitoring mode for 3–5 days with ≥99% verified
+  traffic for Authentication and Firestore. Enforcement is enabled for
+  Authentication first, then Firestore after another observation day.
+- The Admin SDK is exempt, so server routes and jobs continue to work.
+
+**Consequences.**
+
+- Rollout is a Console operation with a measurable switch point, documented in
+  `docs/SECURITY-REVIEW.md`; no emergency code change is needed to stop it.
+
+## ADR-081 - Rate-limit counters never store readable keys
+
+**Date:** 2026-11-26
+**Status:** Accepted
+
+**Context.** Rate-limit keys are built from IPs, emails or user ids. Writing the
+key into the counter document would scatter PII through a collection that is
+already wide and long-lived.
+
+**Decision.**
+
+- The document id is the SHA-256 of the whole key and the only persisted
+  fingerprint is its first 12 characters.
+- The count, numeric window start and a Firestore `expiresAt` timestamp are the
+  only other fields. `readRateLimit` and `clearRateLimit` use the same hash.
+- TTL deletion is a cleanup mechanism, not part of the fixed-window logic.
+
+**Consequences.**
+
+- An operator can correlate a counter with a key only by already knowing the
+  key; logs and counter documents cannot reveal an address.
+- Boundary bursts remain possible because the window is fixed, not sliding.
+
+## ADR-082 - Deletion removes PII and keeps history under the same gamer tag
+
+**Date:** 2026-11-26
+**Status:** Accepted
+
+**Context.** A player may ask for their data to be removed. Hard-deleting
+competition records would corrupt standings, draws and other players' history,
+and releasing the gamer tag would let a new account inherit that history.
+
+**Decision.**
+
+- `DELETE /api/profile/account` requires a fresh same-origin session, a writable
+  platform and a per-uid limit; it deletes Auth, clears private PII and destroys
+  the Cloudinary avatar best-effort.
+- The public profile becomes `Deleted player` without an avatar and is hidden
+  from search, compare and direct pages; registration snapshots are anonymised.
+- Match/tournament history, standings, titles and the gamer-tag reservation are
+  kept under the existing gamer tag. Nothing is silently released.
+- The configured Super Admin and organisers with non-terminal tournaments cannot
+  delete their accounts through this route. The action is audit-logged without
+  the removed values.
+
+**Consequences.**
+
+- Competition records stay truthful and no identity can be reused to rewrite
+  them.
+- This policy is a product decision that remains subject to explicit owner
+  confirmation; it is documented in `docs/PRIVACY.md`.
+
+## ADR-083 - Route and permission inventory is enforced by tests
+
+**Date:** 2026-11-26
+**Status:** Accepted
+
+**Context.** Security controls were originally reviewed by hand. New routes
+could omit a session, origin, role, rate-limit or validation guard without any
+test failing.
+
+**Decision.**
+
+- `tests/security/route-inventory.test.ts` statically scans every `route.ts`
+  and protected page/layout, follows imported guard modules, and fails on a
+  missing control. Deviations require an explicit allow-list entry with a
+  one-line justification.
+- `docs/PERMISSION_MATRIX.md` is generated from the same route tree and lists
+  method, required role/ownership, rate limit and audit action for each route.
+- `tests/integration/route-permissions.test.ts` calls every route as a
+  signed-out visitor, player, organiser, non-owning organiser, pinned Super Admin
+  and forged-claim impersonator, asserting the denial status and that allowed
+  actors never receive 401/403 or a 500.
+
+**Consequences.**
+
+- Adding a route without its guard or matrix row breaks `npm run test:security`.
+- The integration proof needs the Firebase emulators and is deliberately part
+  of `npm run test:integration`, not the fast unit suite.

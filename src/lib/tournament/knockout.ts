@@ -24,6 +24,7 @@ import {
 } from "firebase-admin/firestore";
 
 import { writeAuditLog } from "@/lib/audit/log";
+import { withPublicInvalidation } from "@/lib/cache/public-data";
 import { requireTournamentOwnerOrSuperAdmin, type TournamentAccess } from "@/lib/auth/guards";
 import {
   advanceBracket,
@@ -848,7 +849,7 @@ export interface GenerateKnockoutResult {
  * The single knockout generation action. It is idempotent: a second call for an
  * already-generated bracket returns the stored summary and writes nothing.
  */
-export async function generateKnockoutStage(
+async function generateKnockoutStageWrite(
   tournamentId: string,
   legs: KnockoutLegs,
 ): Promise<GenerateKnockoutResult> {
@@ -1087,7 +1088,7 @@ export async function generateKnockoutStage(
 }
 
 /** Deletes a generated bracket that has no knockout result yet. */
-export async function resetKnockoutStage(
+async function resetKnockoutStageWrite(
   tournamentId: string,
   reason: string | undefined,
 ): Promise<{ readonly deletedTies: number; readonly deletedMatches: number }> {
@@ -1189,7 +1190,7 @@ export async function resetKnockoutStage(
 }
 
 /** Applies an organiser decider to a level tie and advances the bracket. */
-export async function decideKnockoutTie(
+async function decideKnockoutTieWrite(
   tournamentId: string,
   tieId: string,
   input: KnockoutDecideInput,
@@ -1431,7 +1432,7 @@ export async function readCompletionTargets(
 }
 
 /** Post-transaction completion side effects: audit plus a message to everyone. */
-export async function announceCompletion(
+async function announceCompletionWrite(
   access: TournamentAccess,
   tournamentId: string,
   tournament: TournamentDocument,
@@ -1475,3 +1476,8 @@ export async function announceCompletion(
     },
   }).catch(() => undefined);
 }
+
+export const generateKnockoutStage = withPublicInvalidation(generateKnockoutStageWrite);
+export const resetKnockoutStage = withPublicInvalidation(resetKnockoutStageWrite);
+export const decideKnockoutTie = withPublicInvalidation(decideKnockoutTieWrite);
+export const announceCompletion = withPublicInvalidation(announceCompletionWrite);

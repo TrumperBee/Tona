@@ -43,6 +43,15 @@ npm run dev:seed -- cleanup --tournament <slug> --execute
 npm run dev:seed -- cleanup --tournament <slug> --delete-tournament --execute
 ```
 
+## Verification suites
+
+```bash
+npm test                 # fast unit/component suite (no emulators, no tests/security)
+npm run test:rules       # Firestore/Auth rules against emulators
+npm run test:integration # emulator-backed integration tests
+npm run test:security    # static route/permission inventory checks
+```
+
 ### `list`
 
 Read-only. Shows every tournament's slug, name, stored status, `registrationCount / capacity`, and

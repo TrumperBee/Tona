@@ -11,6 +11,7 @@ import "server-only";
 import { FieldValue } from "firebase-admin/firestore";
 
 import { writeAuditLog } from "@/lib/audit/log";
+import { withPublicInvalidation } from "@/lib/cache/public-data";
 import { requireUser, requireTournamentOwnerOrSuperAdmin } from "@/lib/auth/guards";
 import type { SessionUser } from "@/lib/auth/session";
 import type { PlatformId } from "@/lib/config/games";
@@ -163,10 +164,7 @@ function registrationWrite(
  * The caller supplies the authenticated session, so both the HTTP route (via
  * `registerPlayer`) and trusted local tooling can reuse the exact same rules.
  */
-export async function registerPlayerForUser(
-  user: SessionUser,
-  tournamentId: string,
-): Promise<void> {
+async function registerPlayerForUserWrite(user: SessionUser, tournamentId: string): Promise<void> {
   await assertPlatformWritable(user);
   await requireActivePlayer(user);
   const player = await loadPlayerSnapshot(user.userId);
@@ -269,7 +267,7 @@ export async function registerPlayerForUser(
  * Registers the signed-in player for a tournament. Thin wrapper that resolves
  * the session and delegates to `registerPlayerForUser`.
  */
-export async function registerPlayer(tournamentId: string): Promise<void> {
+async function registerPlayerWrite(tournamentId: string): Promise<void> {
   const user = await requireUser();
   await registerPlayerForUser(user, tournamentId);
 }
@@ -280,7 +278,7 @@ export async function registerPlayer(tournamentId: string): Promise<void> {
  * which also guarantees the pots are not confirmed); a full field or a window
  * that just ended does not lock a player into their entry.
  */
-export async function withdrawPlayer(tournamentId: string): Promise<void> {
+async function withdrawPlayerWrite(tournamentId: string): Promise<void> {
   const user = await requireUser();
   await assertPlatformWritable(user);
 
@@ -365,7 +363,7 @@ export async function withdrawPlayer(tournamentId: string): Promise<void> {
  * The organiser (or Super Admin) removes a player with a required reason.
  * Removed players cannot re-register on their own.
  */
-export async function removePlayer(
+async function removePlayerWrite(
   tournamentId: string,
   uid: string,
   rawReason: string,
@@ -474,7 +472,7 @@ export async function removePlayer(
  * pots) and entry restrictions still apply. Unlike a self-registration, a
  * previously withdrawn or removed player may be re-added by the organiser.
  */
-export async function addPlayer(tournamentId: string, uid: string): Promise<void> {
+async function addPlayerWrite(tournamentId: string, uid: string): Promise<void> {
   const access = await requireTournamentOwnerOrSuperAdmin(tournamentId);
 
   const firestore = getFirebaseAdminFirestore();
@@ -566,3 +564,9 @@ export async function addPlayer(tournamentId: string, uid: string): Promise<void
     },
   }).catch(() => undefined);
 }
+
+export const registerPlayerForUser = withPublicInvalidation(registerPlayerForUserWrite);
+export const registerPlayer = withPublicInvalidation(registerPlayerWrite);
+export const withdrawPlayer = withPublicInvalidation(withdrawPlayerWrite);
+export const removePlayer = withPublicInvalidation(removePlayerWrite);
+export const addPlayer = withPublicInvalidation(addPlayerWrite);

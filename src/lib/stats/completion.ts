@@ -12,6 +12,7 @@ import "server-only";
 import { Timestamp } from "firebase-admin/firestore";
 
 import { writeAuditLog } from "@/lib/audit/log";
+import { withPublicInvalidation } from "@/lib/cache/public-data";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 import { computePlayerStats } from "@/lib/stats/player-stats";
@@ -319,7 +320,7 @@ function buildStandings(
  * Rebuilds every completion-derived document for one completed tournament.
  * Safe to call repeatedly. Returns null when the tournament is not complete.
  */
-export async function finaliseTournamentCompletion(
+async function finaliseTournamentCompletionWrite(
   tournamentId: string,
 ): Promise<TournamentCompletionResult | null> {
   const firestore = getFirebaseAdminFirestore();
@@ -547,12 +548,12 @@ export async function finaliseTournamentCompletion(
 }
 
 /** Refresh one profile from a Super Admin repair action. */
-export async function recomputePlayerStats(uid: string): Promise<void> {
+async function recomputePlayerStatsWrite(uid: string): Promise<void> {
   await refreshPlayerStats(uid);
 }
 
 /** Re-derives every completion document, or just the players of a live event. */
-export async function recomputeTournamentStats(tournamentId: string): Promise<{
+async function recomputeTournamentStatsWrite(tournamentId: string): Promise<{
   readonly players: number;
   readonly completed: boolean;
   readonly ratingsApplied: boolean;
@@ -596,7 +597,7 @@ export interface RecomputeBatchResult {
 }
 
 /** Refreshes profiles in stable uid order so a repair run can resume. */
-export async function recomputeAllStats(
+async function recomputeAllStatsWrite(
   options: { readonly cursor?: string | null; readonly batchSize?: number } = {},
 ): Promise<RecomputeBatchResult> {
   const firestore = getFirebaseAdminFirestore();
@@ -619,3 +620,10 @@ export async function recomputeAllStats(
     nextCursor: snapshot.size === batchSize ? (snapshot.docs.at(-1)?.id ?? null) : null,
   };
 }
+
+export const finaliseTournamentCompletion = withPublicInvalidation(
+  finaliseTournamentCompletionWrite,
+);
+export const recomputePlayerStats = withPublicInvalidation(recomputePlayerStatsWrite);
+export const recomputeTournamentStats = withPublicInvalidation(recomputeTournamentStatsWrite);
+export const recomputeAllStats = withPublicInvalidation(recomputeAllStatsWrite);

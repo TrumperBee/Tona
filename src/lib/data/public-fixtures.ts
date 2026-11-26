@@ -5,6 +5,7 @@
 // plain serialisable rows for its matchday selector and "My matches" filter.
 import "server-only";
 
+import { cachePublicData } from "@/lib/cache/public-data";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 import type { MatchStatus, TournamentStatus } from "@/types/domain";
@@ -79,7 +80,7 @@ function compareText(a: string, b: string): number {
  * Reads the published fixtures for a public tournament page. Never throws and
  * returns null while the schedule is private or missing.
  */
-export async function getPublicFixtures(
+async function getPublicFixturesUncached(
   tournamentId: string,
   status: TournamentStatus,
 ): Promise<PublicFixtures | null> {
@@ -148,3 +149,7 @@ export async function getPublicFixtures(
     return null;
   }
 }
+
+export const getPublicFixtures = cachePublicData(getPublicFixturesUncached, [
+  "public-tournament-fixtures",
+]);

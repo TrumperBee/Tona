@@ -11,6 +11,7 @@ import "server-only";
 import { FieldValue, type Transaction } from "firebase-admin/firestore";
 
 import { writeAuditLog } from "@/lib/audit/log";
+import { withPublicInvalidation } from "@/lib/cache/public-data";
 import type { SessionUser } from "@/lib/auth/session";
 import { DEFAULT_MATCH_DURATION_MINUTES, UCL_LEAGUE_PHASE_36 } from "@/lib/config/formats";
 import { DEFAULT_TIEBREAKER_PROFILE } from "@/lib/engine/standings/types";
@@ -67,7 +68,7 @@ export interface CreatedTournament {
  * Creates a draft tournament for the signed-in organiser (or Super Admin, who
  * is exempt from the slot limit and becomes the owner).
  */
-export async function createTournamentDraft(
+async function createTournamentDraftWrite(
   user: SessionUser,
   input: TournamentBasicsInput,
 ): Promise<CreatedTournament> {
@@ -165,3 +166,5 @@ export async function createTournamentDraft(
 
   return created;
 }
+
+export const createTournamentDraft = withPublicInvalidation(createTournamentDraftWrite);

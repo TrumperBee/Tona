@@ -54,6 +54,8 @@ import { GET as contactRoute } from "@/app/api/organiser/tournaments/[id]/regist
 import { GET as exportRoute } from "@/app/api/organiser/tournaments/[id]/registrations/export/route";
 import { POST as playerRegisterRoute } from "@/app/api/tournaments/[id]/register/route";
 import { POST as playerWithdrawRoute } from "@/app/api/tournaments/[id]/withdraw/route";
+import { POST as tournamentCoverRoute } from "@/app/api/organiser/tournaments/[id]/cover/route";
+import { POST as tournamentLogoRoute } from "@/app/api/organiser/tournaments/[id]/logo/route";
 import { POST as suspendRoute } from "@/app/api/super-admin/tournaments/[id]/suspend/route";
 import { POST as unsuspendRoute } from "@/app/api/super-admin/tournaments/[id]/unsuspend/route";
 import { POST as transferRoute } from "@/app/api/super-admin/tournaments/[id]/transfer/route";
@@ -280,6 +282,21 @@ function jsonRequest(
 
 function idContext(id: string): { readonly params: Promise<{ id: string }> } {
   return { params: Promise.resolve({ id }) };
+}
+
+function imageRequest(path: string): NextRequest {
+  const form = new FormData();
+  form.append(
+    "image",
+    new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00])], { type: "image/jpeg" }),
+    "cover.jpg",
+  );
+
+  return new NextRequest(`http://localhost:3000${path}`, {
+    method: "POST",
+    headers: { origin: "http://localhost:3000" },
+    body: form,
+  });
 }
 
 function uidContext(
@@ -1665,6 +1682,23 @@ describe("route-level ownership", () => {
       (
         await exportRoute(
           jsonRequest("GET", "/api/organiser/tournaments/own-cup/registrations/export"),
+          idContext("own-cup"),
+        )
+      ).status,
+    ).toBe(404);
+    // Image uploads must reject a non-owner before any bytes reach Cloudinary.
+    expect(
+      (
+        await tournamentCoverRoute(
+          imageRequest("/api/organiser/tournaments/own-cup/cover"),
+          idContext("own-cup"),
+        )
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await tournamentLogoRoute(
+          imageRequest("/api/organiser/tournaments/own-cup/logo"),
           idContext("own-cup"),
         )
       ).status,

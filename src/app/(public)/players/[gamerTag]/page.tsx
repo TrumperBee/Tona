@@ -38,6 +38,13 @@ export async function generateMetadata({ params }: PlayerPageProps) {
     return { title: "Player not found" };
   }
 
+  if (player.profile.deleted) {
+    return {
+      title: "Deleted player",
+      description: "This GCC account was deleted. Personal details are no longer published.",
+    };
+  }
+
   return {
     title: `@${player.profile.gamerTag}`,
     description: `Public GCC profile for @${player.profile.gamerTag}: country, game, platform and verified competitive record.`,
@@ -50,6 +57,31 @@ export default async function PlayerPage({ params }: PlayerPageProps) {
 
   if (!player) {
     notFound();
+  }
+
+  if (player.profile.deleted) {
+    return (
+      <section className="container py-12 sm:py-16">
+        <PageHeader
+          eyebrow="Public profile"
+          title="Deleted player"
+          description="This player closed their account. Personal details and the avatar were removed."
+          breadcrumbs={[
+            { label: "Home", href: "/" },
+            { label: "Players", href: "/players" },
+            { label: "Deleted player" },
+          ]}
+        />
+        <div className="mt-8 flex items-start gap-3 rounded-md border border-white/10 bg-white/[0.03] p-4 text-sm leading-6 text-grey-400">
+          <Globe2 aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-electric-300" />
+          <p>
+            GCC retains completed match results, standings and titles under the original gamer tag
+            as part of the permanent competition record. No email address, phone number, full name,
+            community, favourite club or avatar is shown.
+          </p>
+        </div>
+      </section>
+    );
   }
 
   if (player.status !== "active") {

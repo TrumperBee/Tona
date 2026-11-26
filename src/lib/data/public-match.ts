@@ -5,6 +5,7 @@
 // public profile display data is returned.
 import "server-only";
 
+import { cachePublicData } from "@/lib/cache/public-data";
 import { getPublicTournamentBySlug } from "@/lib/data/public-tournaments";
 import { isFixturesPublicStatus } from "@/lib/data/public-fixtures";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
@@ -70,7 +71,7 @@ async function publicPlayer(uid: string, fallbackTag: string): Promise<PublicMat
  * Returns the public match or null when the tournament or match is not public.
  * Never throws.
  */
-export async function getPublicMatch(
+async function getPublicMatchUncached(
   slug: string,
   matchId: string,
 ): Promise<PublicMatchDetail | null> {
@@ -135,3 +136,5 @@ export async function getPublicMatch(
     return null;
   }
 }
+
+export const getPublicMatch = cachePublicData(getPublicMatchUncached, ["public-match"]);

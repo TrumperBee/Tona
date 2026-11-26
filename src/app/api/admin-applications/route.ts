@@ -13,6 +13,8 @@ import {
   submitApplication,
 } from "@/lib/applications";
 import { guardApplicantMutation } from "@/lib/applications/route-guard";
+import { clientIdentifier } from "@/lib/http/respond";
+import { TURNSTILE_FAILURE_MESSAGE, verifyTurnstile } from "@/lib/security/turnstile";
 import { adminApplicationSubmitSchema } from "@/lib/validation/admin-application";
 
 export const runtime = "nodejs";
@@ -49,6 +51,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       { error: "Check the highlighted fields.", fieldErrors },
       { status: 400 },
     );
+  }
+
+  const turnstile = await verifyTurnstile({
+    token: parsed.data.turnstileToken,
+    ip: clientIdentifier(request),
+    action: "application",
+  });
+
+  if (!turnstile.ok) {
+    return NextResponse.json({ error: TURNSTILE_FAILURE_MESSAGE }, { status: 400 });
   }
 
   try {

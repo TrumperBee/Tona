@@ -15,6 +15,7 @@ import { randomBytes } from "node:crypto";
 import { FieldValue, Timestamp, type QuerySnapshot } from "firebase-admin/firestore";
 
 import { writeAuditLog } from "@/lib/audit/log";
+import { withPublicInvalidation } from "@/lib/cache/public-data";
 import { requireTournamentOwnerOrSuperAdmin } from "@/lib/auth/guards";
 import {
   FIXTURE_ALGORITHM_VERSION,
@@ -725,7 +726,7 @@ export interface GenerateFixturesResult {
  * and the output is validated before anything is stored. A previous draft is
  * overwritten only while the tournament is still at `pots_confirmed`.
  */
-export async function generateFixtures(tournamentId: string): Promise<GenerateFixturesResult> {
+async function generateFixturesWrite(tournamentId: string): Promise<GenerateFixturesResult> {
   const access = await requireTournamentOwnerOrSuperAdmin(tournamentId);
 
   if (access.tournament.status !== "pots_confirmed") {
@@ -883,7 +884,7 @@ export interface PublishFixturesResult {
  * transaction; a concurrent second publish loses the tournament document
  * conflict and then sees the new status.
  */
-export async function publishFixtures(
+async function publishFixturesWrite(
   tournamentId: string,
   windows: readonly FixtureWindowInput[] | undefined,
 ): Promise<PublishFixturesResult> {
@@ -1109,7 +1110,7 @@ export interface ResetFixturesResult {
  * so the organiser can publish it again; the tournament returns to
  * `pots_confirmed`.
  */
-export async function resetFixtures(
+async function resetFixturesWrite(
   tournamentId: string,
   reason: string | undefined,
 ): Promise<ResetFixturesResult> {
@@ -1288,7 +1289,7 @@ export async function verifyFixtures(tournamentId: string): Promise<FixtureInteg
 }
 
 /** Updates one informational matchday window. Allowed at any published stage. */
-export async function updateMatchdayWindow(
+async function updateMatchdayWindowWrite(
   tournamentId: string,
   matchday: number,
   startsOnInput: string,
@@ -1346,3 +1347,8 @@ export async function updateMatchdayWindow(
     endsOn: endsOn.toDate().toISOString(),
   };
 }
+
+export const generateFixtures = withPublicInvalidation(generateFixturesWrite);
+export const publishFixtures = withPublicInvalidation(publishFixturesWrite);
+export const resetFixtures = withPublicInvalidation(resetFixturesWrite);
+export const updateMatchdayWindow = withPublicInvalidation(updateMatchdayWindowWrite);

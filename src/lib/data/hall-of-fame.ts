@@ -4,6 +4,7 @@
 // repeated completion job cannot create a duplicate induction.
 import "server-only";
 
+import { cachePublicData } from "@/lib/cache/public-data";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 import type { GameId } from "@/lib/config/games";
@@ -158,7 +159,7 @@ export interface HallOfFameListPage {
   readonly pageCount: number;
 }
 
-export async function listHallOfFame(
+async function listHallOfFameUncached(
   page = 1,
   pageSize = HALL_OF_FAME_PAGE_SIZE,
 ): Promise<HallOfFameListPage> {
@@ -188,7 +189,9 @@ export async function listHallOfFame(
   }
 }
 
-export async function getHallOfFameEntry(tournamentId: string): Promise<HallOfFameEntry | null> {
+export const listHallOfFame = cachePublicData(listHallOfFameUncached, ["public-hall-of-fame-list"]);
+
+async function getHallOfFameEntryUncached(tournamentId: string): Promise<HallOfFameEntry | null> {
   if (!tournamentId || tournamentId.includes("/")) return null;
 
   try {
@@ -203,3 +206,7 @@ export async function getHallOfFameEntry(tournamentId: string): Promise<HallOfFa
     return null;
   }
 }
+
+export const getHallOfFameEntry = cachePublicData(getHallOfFameEntryUncached, [
+  "public-hall-of-fame-entry",
+]);

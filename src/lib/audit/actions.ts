@@ -11,6 +11,7 @@ export const AUDIT_ACTIONS: readonly AuditActionDefinition[] = [
   { action: "user.contact_revealed", label: "Contact number revealed" },
   { action: "user.role.set", label: "User role changed" },
   { action: "user.status.set", label: "Account status changed" },
+  { action: "user.account.deleted", label: "Account deleted by owner" },
   { action: "platform.settings.updated", label: "Platform settings updated" },
   { action: "announcement.created", label: "Announcement created" },
   { action: "announcement.updated", label: "Announcement edited" },

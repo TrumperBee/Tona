@@ -6,6 +6,7 @@
 // client-readable document.
 import "server-only";
 
+import { cachePublicData } from "@/lib/cache/public-data";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 import { isGameId, type GameId } from "@/lib/config/games";
@@ -56,7 +57,7 @@ function readText(value: unknown, fallback = ""): string {
   return typeof value === "string" && value.length > 0 ? value : fallback;
 }
 
-export async function listArchive(options: {
+async function listArchiveUncached(options: {
   readonly gameId?: GameId | null;
   readonly season?: string | null;
   readonly search?: string | null;
@@ -135,3 +136,5 @@ export async function listArchive(options: {
     return { rows: [], total: 0, page, pageCount: 1, seasons: [] };
   }
 }
+
+export const listArchive = cachePublicData(listArchiveUncached, ["public-archives"]);

@@ -14,15 +14,48 @@ function publicEnv(value: string | undefined): string | null {
   return trimmed ? trimmed : null;
 }
 
-/** Promotional partner link. Falls back to the canonical URL when unset. */
-export const EHUBMARKET_URL =
-  publicEnv(process.env.NEXT_PUBLIC_EHUBMARKET_URL) ?? fallbackEHubMarketUrl;
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+
+/**
+ * Public URLs become `href`/`src` values, so only https (or local http for
+ * development) is accepted. javascript:, data: and other schemes fall back to
+ * the canonical value instead of becoming executable link targets.
+ */
+function safePublicUrl(value: string | undefined, fallback: string, stripSlashes: boolean): string {
+  const candidate = publicEnv(value);
+
+  if (!candidate) {
+    return fallback;
+  }
+
+  try {
+    const url = new URL(candidate);
+    const loopback = url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname);
+
+    if (
+      !url.username &&
+      !url.password &&
+      url.hostname.length > 0 &&
+      (url.protocol === "https:" || loopback)
+    ) {
+      return stripSlashes ? candidate.replace(/\/+$/, "") : candidate;
+    }
+  } catch {
+    // Malformed values fall through to the canonical fallback.
+  }
+
+  return fallback;
+}
+
+/** Promotional partner link. Falls back to the canonical URL when unsafe. */
+export const EHUBMARKET_URL = safePublicUrl(
+  process.env.NEXT_PUBLIC_EHUBMARKET_URL,
+  fallbackEHubMarketUrl,
+  false,
+);
 
 /** Canonical deployment URL used for metadata, robots and sitemap. */
-export const SITE_URL = (publicEnv(process.env.NEXT_PUBLIC_SITE_URL) ?? fallbackSiteUrl).replace(
-  /\/+$/,
-  "",
-);
+export const SITE_URL = safePublicUrl(process.env.NEXT_PUBLIC_SITE_URL, fallbackSiteUrl, true);
 
 /** Public contact channels. Unset values are omitted rather than invented. */
 export const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL?.trim() || null;

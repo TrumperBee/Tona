@@ -7,7 +7,13 @@ import "server-only";
 
 import { redirect } from "next/navigation";
 
-import { AuthenticationError, hasSessionCookie, requireUser } from "@/lib/auth/guards";
+import {
+  AuthenticationError,
+  AuthorizationError,
+  hasSessionCookie,
+  requireSuperAdmin,
+  requireUser,
+} from "@/lib/auth/guards";
 import { hasRoleAtLeast } from "@/lib/auth/roles";
 import { safeRedirectPath } from "@/lib/security/redirect";
 import type { SessionUser } from "@/lib/auth/session";
@@ -81,12 +87,27 @@ export async function requirePageRole(role: UserRole, nextPath: string): Promise
   return user;
 }
 
-/** Requires the configured Super Admin account. */
+/**
+ * Requires the configured Super Admin account. The email+uid pin is checked here
+ * as well as on API routes, so a stale `super_admin` claim can never render a
+ * privileged page after the pin changed.
+ */
 export async function requirePageSuperAdmin(nextPath: string): Promise<SessionUser> {
-  const user = await requirePageUser(nextPath);
+  let user: SessionUser;
 
-  if (!user.isSuperAdmin) {
-    redirect(user.role === "organiser" ? "/organiser" : "/dashboard");
+  try {
+    user = await requireSuperAdmin();
+  } catch (error) {
+    if (error instanceof AuthenticationError) {
+      return redirectToSignIn(nextPath);
+    }
+
+    if (error instanceof AuthorizationError) {
+      const viewer = await requirePageUser(nextPath);
+      redirect(viewer.role === "organiser" ? "/organiser" : "/dashboard");
+    }
+
+    throw error;
   }
 
   return user;

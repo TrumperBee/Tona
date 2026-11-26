@@ -20,7 +20,7 @@ import { getServerEnv } from "@/lib/config/env.server";
 import { getFirebaseAdminAuth } from "@/lib/firebase/admin";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
-import type { TournamentDocument, UserRole } from "@/types/domain";
+import { isAccountStatus, type TournamentDocument, type UserRole } from "@/types/domain";
 
 export type AuthContext = SessionUser;
 
@@ -71,7 +71,11 @@ export async function hasSessionCookie(): Promise<boolean> {
 
 /**
  * Returns the current user, or null when there is no valid, unrevoked session.
- * Disabled Firebase Auth users are treated as signed out.
+ *
+ * Status is re-read from Firestore on EVERY request, not only at sign-in. A
+ * player suspended mid-session therefore loses access on the next request even
+ * if a stale session cookie has not expired yet. Deleted accounts are handled
+ * the same way, independently of whether the Auth user still exists.
  */
 export async function getCurrentUser(): Promise<SessionUser | null> {
   let cookieValue: string | undefined;
@@ -92,6 +96,19 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     const userRecord = await getFirebaseAdminAuth().getUser(decoded.uid);
 
     if (userRecord.disabled) {
+      return null;
+    }
+
+    const privateSnapshot = await getFirebaseAdminFirestore().doc(paths.user(decoded.uid)).get();
+    const privateData = privateSnapshot.data();
+
+    if (privateData?.deleted === true) {
+      return null;
+    }
+
+    const accountStatus = privateData?.status;
+
+    if (isAccountStatus(accountStatus) && accountStatus !== "active") {
       return null;
     }
 
@@ -125,11 +142,15 @@ export const FRESH_SIGN_IN_MAX_AGE_SECONDS = 10 * 60;
 
 /**
  * Requires a session whose Firebase sign-in happened within `maxAgeSeconds`.
- * A long-lived cookie alone is not enough for an email change, so a stolen
- * session cannot quietly move an account to another address.
+ * A long-lived cookie alone is not enough for an email change or account
+ * deletion, so a stolen session cannot quietly take over the account.
+ *
+ * `purpose` only changes the human-readable message; callers must not pass
+ * untrusted input here.
  */
 export async function requireFreshSession(
   maxAgeSeconds = FRESH_SIGN_IN_MAX_AGE_SECONDS,
+  purpose = "changing your email address",
 ): Promise<SessionUser> {
   const user = await requireUser();
   let cookieValue: string | undefined;
@@ -138,11 +159,11 @@ export async function requireFreshSession(
     const cookieStore = await cookies();
     cookieValue = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   } catch {
-    throw new AuthenticationError("Sign in again to change your email address.");
+    throw new AuthenticationError(`Sign in again before ${purpose}.`);
   }
 
   if (!cookieValue) {
-    throw new AuthenticationError("Sign in again to change your email address.");
+    throw new AuthenticationError(`Sign in again before ${purpose}.`);
   }
 
   let authTime = 0;
@@ -151,15 +172,13 @@ export async function requireFreshSession(
     const decoded = await getFirebaseAdminAuth().verifySessionCookie(cookieValue, true);
     authTime = typeof decoded.auth_time === "number" ? decoded.auth_time : 0;
   } catch {
-    throw new AuthenticationError("Sign in again to change your email address.");
+    throw new AuthenticationError(`Sign in again before ${purpose}.`);
   }
 
   const ageSeconds = Date.now() / 1000 - authTime;
 
   if (authTime === 0 || ageSeconds > maxAgeSeconds) {
-    throw new AuthenticationError(
-      "For your security, sign in again before changing your email address.",
-    );
+    throw new AuthenticationError(`For your security, sign in again before ${purpose}.`);
   }
 
   return user;

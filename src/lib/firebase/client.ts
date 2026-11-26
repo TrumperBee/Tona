@@ -5,6 +5,7 @@
 // Lazy singletons: nothing is initialised until a client component asks for it.
 // Analytics is deliberately NOT initialised. Storage is not used on the Spark plan.
 import { getApp, getApps, initializeApp, type FirebaseApp } from "firebase/app";
+import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 import { getAuth, type Auth } from "firebase/auth";
 import { getFirestore, type Firestore } from "firebase/firestore";
 
@@ -13,6 +14,7 @@ import { getPublicEnv, type PublicEnv } from "@/lib/config/env";
 let clientApp: FirebaseApp | undefined;
 let clientAuth: Auth | undefined;
 let clientFirestore: Firestore | undefined;
+let appCheckInitialised = false;
 
 /** A readable configuration failure for developers and operators. */
 export class FirebaseClientConfigError extends Error {
@@ -79,10 +81,57 @@ export function getFirebaseClientApp(): FirebaseApp {
   return clientApp;
 }
 
+/**
+ * Attaches App Check tokens to browser Auth and Firestore calls.
+ *
+ * Development is skipped unless NEXT_PUBLIC_APPCHECK_DEBUG_TOKEN is set; the
+ * documented Firebase Console debug token flow is in docs/SECURITY-REVIEW.md.
+ * Production fails closed: a missing site key is a configuration error, not a
+ * reason to silently send unverified traffic.
+ */
+function initialiseAppCheck(app: FirebaseApp): void {
+  if (appCheckInitialised) {
+    return;
+  }
+
+  const isProduction = process.env.NODE_ENV === "production";
+  const env = getPublicEnv();
+  const siteKey = env.NEXT_PUBLIC_APPCHECK_SITE_KEY;
+
+  if (!siteKey) {
+    if (isProduction) {
+      throw new FirebaseClientConfigError(
+        "NEXT_PUBLIC_APPCHECK_SITE_KEY is required in production so browser Firebase calls carry App Check tokens.",
+      );
+    }
+
+    console.info(
+      "[app-check] NEXT_PUBLIC_APPCHECK_SITE_KEY is not set; skipping App Check in development.",
+    );
+    appCheckInitialised = true;
+    return;
+  }
+
+  if (!isProduction && env.NEXT_PUBLIC_APPCHECK_DEBUG_TOKEN) {
+    // Firebase reads this global when the provider is initialised.
+    (
+      globalThis as typeof globalThis & { FIREBASE_APPCHECK_DEBUG_TOKEN?: string }
+    ).FIREBASE_APPCHECK_DEBUG_TOKEN = env.NEXT_PUBLIC_APPCHECK_DEBUG_TOKEN;
+  }
+
+  initializeAppCheck(app, {
+    provider: new ReCaptchaV3Provider(siteKey),
+    isTokenAutoRefreshEnabled: true,
+  });
+  appCheckInitialised = true;
+}
+
 /** Returns the singleton browser Firebase Auth instance. */
 export function getFirebaseClientAuth(): Auth {
   if (!clientAuth) {
-    clientAuth = getAuth(getFirebaseClientApp());
+    const app = getFirebaseClientApp();
+    initialiseAppCheck(app);
+    clientAuth = getAuth(app);
   }
 
   return clientAuth;
@@ -94,7 +143,9 @@ export function getFirebaseClientAuth(): Auth {
  */
 export function getFirebaseClientFirestore(): Firestore {
   if (!clientFirestore) {
-    clientFirestore = getFirestore(getFirebaseClientApp());
+    const app = getFirebaseClientApp();
+    initialiseAppCheck(app);
+    clientFirestore = getFirestore(app);
   }
 
   return clientFirestore;

@@ -6,6 +6,7 @@ import "server-only";
 
 import type { DocumentSnapshot } from "firebase-admin/firestore";
 
+import { cachePublicData, withPublicInvalidation } from "@/lib/cache/public-data";
 import { isFixturesPublicStatus } from "@/lib/data/public-fixtures";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
@@ -114,7 +115,7 @@ function toStatsMatch(
  * a draft, suspended or cancelled tournament never count toward public stats.
  * The Admin SDK bypasses Security Rules, so visibility is checked here.
  */
-export async function readPlayerStatsMatches(uid: string): Promise<StatsMatch[]> {
+async function readPlayerStatsMatchesUncached(uid: string): Promise<StatsMatch[]> {
   if (!uid) return [];
 
   const firestore = getFirebaseAdminFirestore();
@@ -157,6 +158,10 @@ export async function readPlayerStatsMatches(uid: string): Promise<StatsMatch[]>
   });
 }
 
+export const readPlayerStatsMatches = cachePublicData(readPlayerStatsMatchesUncached, [
+  "public-player-stats-matches",
+]);
+
 async function readTitleTournamentIds(uid: string): Promise<string[]> {
   if (!uid) return [];
 
@@ -184,7 +189,7 @@ export interface PlayerRatingCard {
   readonly eligible: boolean;
 }
 
-export async function getPlayerRatingCards(uid: string): Promise<PlayerRatingCard[]> {
+async function getPlayerRatingCardsUncached(uid: string): Promise<PlayerRatingCard[]> {
   if (!uid) return [];
 
   const firestore = getFirebaseAdminFirestore();
@@ -220,8 +225,12 @@ export async function getPlayerRatingCards(uid: string): Promise<PlayerRatingCar
   return records.filter((record): record is PlayerRatingCard => record !== null);
 }
 
+export const getPlayerRatingCards = cachePublicData(getPlayerRatingCardsUncached, [
+  "public-player-rating-cards",
+]);
+
 /** Rebuilds and stores one public profile's statistics. */
-export async function refreshPlayerStats(uid: string): Promise<void> {
+async function refreshPlayerStatsWrite(uid: string): Promise<void> {
   if (!uid) return;
 
   const firestore = getFirebaseAdminFirestore();
@@ -240,12 +249,16 @@ export async function refreshPlayerStats(uid: string): Promise<void> {
   await profileReference.set({ stats }, { merge: true });
 }
 
+export const refreshPlayerStats = withPublicInvalidation(refreshPlayerStatsWrite);
+
 /** Refreshes several players without letting one failure block the rest. */
-export async function refreshPlayersStats(uids: readonly string[]): Promise<void> {
+async function refreshPlayersStatsWrite(uids: readonly string[]): Promise<void> {
   const unique = [...new Set(uids.filter((uid) => uid.length > 0))];
 
   await Promise.allSettled(unique.map((uid) => refreshPlayerStats(uid)));
 }
+
+export const refreshPlayersStats = withPublicInvalidation(refreshPlayersStatsWrite);
 
 export interface PlayerHistoryRow {
   readonly tournamentId: string;
@@ -267,7 +280,7 @@ export interface PlayerHistoryRow {
   readonly completedAt: string | null;
 }
 
-export async function getPlayerHistory(
+async function getPlayerHistoryUncached(
   uid: string,
   options: { readonly limit?: number } = {},
 ): Promise<PlayerHistoryRow[]> {
@@ -305,6 +318,10 @@ export async function getPlayerHistory(
   });
 }
 
+export const getPlayerHistory = cachePublicData(getPlayerHistoryUncached, [
+  "public-player-history",
+]);
+
 export interface RankingRow {
   readonly uid: string;
   readonly rank: number;
@@ -335,7 +352,7 @@ export interface RankingsPageData {
  * the eligibility threshold, country and gamer-tag prefix, which keeps the
  * query index-free and the page honest about its scan window.
  */
-export async function getRankings(options: {
+async function getRankingsUncached(options: {
   readonly gameId: GameId;
   readonly country?: string | null;
   readonly search?: string | null;
@@ -403,6 +420,8 @@ export async function getRankings(options: {
   };
 }
 
+export const getRankings = cachePublicData(getRankingsUncached, ["public-rankings"]);
+
 export interface HeadToHeadEncounter {
   readonly matchId: string;
   readonly tournamentId: string;
@@ -438,7 +457,7 @@ export interface HeadToHeadResult {
  * is filtered server-side for the other, so the read stays small and no broad
  * cross-tournament scan is exposed to a client.
  */
-export async function getHeadToHead(
+async function getHeadToHeadUncached(
   aUid: string,
   bUid: string,
   options: { readonly page?: number; readonly pageSize?: number } = {},
@@ -537,6 +556,8 @@ export async function getHeadToHead(
     scanned: snapshot.size,
   };
 }
+
+export const getHeadToHead = cachePublicData(getHeadToHeadUncached, ["public-head-to-head"]);
 
 function tournamentSnapshotId(
   tournament: TournamentDocument,

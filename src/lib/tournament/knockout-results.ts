@@ -14,6 +14,7 @@ import "server-only";
 import { Timestamp } from "firebase-admin/firestore";
 
 import { writeAuditLog } from "@/lib/audit/log";
+import { withPublicInvalidation } from "@/lib/cache/public-data";
 import type { TournamentAccess } from "@/lib/auth/guards";
 import { resolveTie, type KnockoutPlayer } from "@/lib/engine";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
@@ -402,7 +403,7 @@ async function applyKnockoutMatchChange(
   }
 }
 
-export async function enterKnockoutMatchResult(
+async function enterKnockoutMatchResultWrite(
   access: TournamentAccess,
   tournamentId: string,
   input: MatchResultEntryInput,
@@ -415,7 +416,7 @@ export async function enterKnockoutMatchResult(
   });
 }
 
-export async function correctKnockoutMatchResult(
+async function correctKnockoutMatchResultWrite(
   access: TournamentAccess,
   tournamentId: string,
   input: MatchResultCorrectionInput,
@@ -428,7 +429,7 @@ export async function correctKnockoutMatchResult(
   });
 }
 
-export async function clearKnockoutMatchResult(
+async function clearKnockoutMatchResultWrite(
   access: TournamentAccess,
   tournamentId: string,
   input: MatchResultClearInput,
@@ -450,3 +451,7 @@ export function isKnockoutStage(value: unknown): boolean {
 
 // Re-exported so the route layer can surface the champion after a final result.
 export { completionFromTie };
+
+export const enterKnockoutMatchResult = withPublicInvalidation(enterKnockoutMatchResultWrite);
+export const correctKnockoutMatchResult = withPublicInvalidation(correctKnockoutMatchResultWrite);
+export const clearKnockoutMatchResult = withPublicInvalidation(clearKnockoutMatchResultWrite);

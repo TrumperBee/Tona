@@ -10,6 +10,7 @@ import "server-only";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { writeAuditLog } from "@/lib/audit/log";
+import { withPublicInvalidation } from "@/lib/cache/public-data";
 import { requireTournamentOwnerOrSuperAdmin } from "@/lib/auth/guards";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
@@ -355,7 +356,7 @@ async function readMatchStage(tournamentId: string, matchId: string): Promise<St
 }
 
 /** Records one result and moves the tournament into the league phase. */
-export async function enterMatchResult(
+async function enterMatchResultWrite(
   tournamentId: string,
   input: MatchResultEntryInput,
 ): Promise<void> {
@@ -451,7 +452,7 @@ export async function enterMatchResult(
 }
 
 /** Records many results in one all-or-nothing transaction. */
-export async function enterMatchResultsBulk(
+async function enterMatchResultsBulkWrite(
   tournamentId: string,
   input: MatchResultBulkInput,
 ): Promise<{ readonly recorded: number }> {
@@ -591,7 +592,7 @@ export async function enterMatchResultsBulk(
 }
 
 /** Corrects a completed result and records the reason in the audit trail. */
-export async function correctMatchResult(
+async function correctMatchResultWrite(
   tournamentId: string,
   input: MatchResultCorrectionInput,
 ): Promise<void> {
@@ -690,7 +691,7 @@ export async function correctMatchResult(
 }
 
 /** Clears a recorded result and returns the match to `scheduled`. */
-export async function clearMatchResult(
+async function clearMatchResultWrite(
   tournamentId: string,
   input: MatchResultClearInput,
 ): Promise<void> {
@@ -780,3 +781,8 @@ export async function clearMatchResult(
     () => undefined,
   );
 }
+
+export const enterMatchResult = withPublicInvalidation(enterMatchResultWrite);
+export const enterMatchResultsBulk = withPublicInvalidation(enterMatchResultsBulkWrite);
+export const correctMatchResult = withPublicInvalidation(correctMatchResultWrite);
+export const clearMatchResult = withPublicInvalidation(clearMatchResultWrite);

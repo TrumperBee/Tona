@@ -49,5 +49,11 @@ firebase-debug.log*
 firestore-debug.log*
 ui-debug.log*
 
+# service account / credential exports (never commit these)
+*serviceAccount*.json
+*service-account*.json
+*adminsdk*.json
+firebase-adminsdk-*.json
+
 # local dev-seeder state (manifest contains the batch password)
 .seed/

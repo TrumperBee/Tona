@@ -41,7 +41,7 @@ function usablePlayer(
   player: PublicPlayerProfile | null,
   tag: string | null,
 ): PublicPlayerProfile | null {
-  if (!player || player.status !== "active" || !tag) return null;
+  if (!player || player.status !== "active" || player.profile.deleted || !tag) return null;
   return player;
 }
 

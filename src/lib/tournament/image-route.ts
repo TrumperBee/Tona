@@ -7,6 +7,7 @@
 // editable-fields matrix. The browser never supplies a URL.
 import { NextResponse, type NextRequest } from "next/server";
 
+import { requireTournamentOwnerOrSuperAdmin } from "@/lib/auth/guards";
 import { guardOrganiserMutation } from "@/lib/organiser/route-guard";
 import {
   CloudinaryConfigError,
@@ -14,11 +15,9 @@ import {
   uploadTournamentLogo,
 } from "@/lib/profile/cloudinary";
 import { detectImageType, MAX_AVATAR_BYTES } from "@/lib/profile/image";
-import { checkRateLimit, rateLimitPolicy } from "@/lib/rate-limit";
 import { TournamentMutationError } from "@/lib/tournament/errors";
 import { storeTournamentImage, type TournamentImageKind } from "@/lib/tournament/images";
-
-const IMAGE_RATE_LIMIT = { limit: 10, windowSeconds: 3600 } as const;
+import { tournamentErrorResponse } from "@/lib/tournament/route-errors";
 
 /** Shared POST body for both tournament image routes. */
 export async function handleTournamentImageUpload(
@@ -32,31 +31,19 @@ export async function handleTournamentImageUpload(
     return guard.response;
   }
 
-  const rate = await checkRateLimit(
-    rateLimitPolicy(
-      `organiser:tournament-${kind}`,
-      guard.user.userId,
-      IMAGE_RATE_LIMIT.limit,
-      IMAGE_RATE_LIMIT.windowSeconds,
-    ),
-  );
-
-  if (!rate.allowed) {
-    return NextResponse.json(
-      {
-        error: "Too many image uploads. Try again later.",
-      },
-      {
-        status: 429,
-        headers: { "Retry-After": String(rate.retryAfterSeconds) },
-      },
-    );
-  }
-
   const { id } = await context.params;
 
   if (!id || id.includes("/")) {
     return NextResponse.json({ error: "Invalid tournament." }, { status: 400 });
+  }
+
+  // Verify ownership before sending bytes to Cloudinary. Otherwise any signed-in
+  // organiser could write images into another tournament's public-id folder and
+  // only be rejected when the database reference was saved.
+  try {
+    await requireTournamentOwnerOrSuperAdmin(id);
+  } catch (error) {
+    return tournamentErrorResponse(error);
   }
 
   let form: FormData;

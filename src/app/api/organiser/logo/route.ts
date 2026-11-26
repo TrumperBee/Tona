@@ -126,7 +126,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   try {
     const stored = await uploadOrganiserLogo(auth.uid, bytes, detectedType);
-    await storeOrganiserLogoReference(auth.uid, { url: stored.url, publicId: stored.publicId });
+    const previousPublicId = await storeOrganiserLogoReference(auth.uid, {
+      url: stored.url,
+      publicId: stored.publicId,
+    });
+
+    // A deterministic public id is overwritten in place. Only destroy when a
+    // legacy id points at a different asset.
+    if (previousPublicId && previousPublicId !== stored.publicId) {
+      await destroyAvatar(previousPublicId);
+    }
 
     return NextResponse.json({ ok: true, logoUrl: stored.url });
   } catch (error) {

@@ -7,14 +7,20 @@
 import { AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useCallback, useState, type FormEvent } from "react";
 
 import { PasswordInput } from "@/components/auth/password-input";
+import { TurnstileWidget } from "@/components/security/turnstile-widget";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { authErrorMessage, signInWithSession } from "@/lib/auth/client";
 import { safeRedirectPath } from "@/lib/security/redirect";
+import {
+  TURNSTILE_CLIENT_FAILURE_MESSAGE,
+  reportLoginAttempt,
+  verifyClientTurnstile,
+} from "@/lib/security/turnstile-client";
 
 export interface LoginFormProps {
   readonly nextPath: string | null;
@@ -26,6 +32,11 @@ export function LoginForm({ nextPath }: LoginFormProps) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [challengeRequired, setChallengeRequired] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const handleTurnstileToken = useCallback((token: string | null) => {
+    setTurnstileToken(token);
+  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -33,11 +44,29 @@ export function LoginForm({ nextPath }: LoginFormProps) {
     setSubmitting(true);
 
     try {
+      const before = await reportLoginAttempt(email, "check");
+      setChallengeRequired(before.challengeRequired);
+
+      if (before.challengeRequired) {
+        const verified = await verifyClientTurnstile("login", turnstileToken);
+
+        if (!verified) {
+          setError(TURNSTILE_CLIENT_FAILURE_MESSAGE);
+          return;
+        }
+      }
+
       await signInWithSession(email, password);
+      void reportLoginAttempt(email, "success");
       const safeNext = safeRedirectPath(nextPath);
       router.push(safeNext ?? "/dashboard");
       router.refresh();
     } catch (signInError) {
+      void reportLoginAttempt(email, "failed").then((after) => {
+        if (after.challengeRequired) {
+          setChallengeRequired(true);
+        }
+      });
       setError(authErrorMessage(signInError));
     } finally {
       setSubmitting(false);
@@ -88,6 +117,22 @@ export function LoginForm({ nextPath }: LoginFormProps) {
           Create account
         </Link>
       </div>
+
+      {challengeRequired ? (
+        <div
+          className="space-y-3 rounded-md border border-white/10 bg-white/[0.03] p-3"
+          aria-label="Additional security check"
+        >
+          <p className="text-xs leading-5 text-grey-300">
+            For your security, complete this check before signing in.
+          </p>
+          <TurnstileWidget
+            action="login"
+            onToken={handleTurnstileToken}
+            className="w-full min-w-0"
+          />
+        </div>
+      ) : null}
 
       <Button
         type="submit"

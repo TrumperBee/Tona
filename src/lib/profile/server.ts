@@ -5,6 +5,7 @@
 // email, WhatsApp number and role never leave this module in a public shape.
 import "server-only";
 
+import { cachePublicData } from "@/lib/cache/public-data";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 import { gamerTagSchema, normalizeGamerTag } from "@/lib/validation/gamer-tag";
@@ -54,7 +55,7 @@ export interface PublicPlayerProfile {
  * Resolves a gamer tag through the server-only reservation document, then reads
  * the public profile. Returns null for unknown or malformed tags.
  */
-export async function getPublicPlayerByGamerTag(
+async function getPublicPlayerByGamerTagUncached(
   rawGamerTag: string,
 ): Promise<PublicPlayerProfile | null> {
   const parsed = gamerTagSchema.safeParse(rawGamerTag);
@@ -97,3 +98,7 @@ export async function getPublicPlayerByGamerTag(
     profile: publicSnapshot.data() as PublicProfileDocument,
   };
 }
+
+export const getPublicPlayerByGamerTag = cachePublicData(getPublicPlayerByGamerTagUncached, [
+  "public-player-by-tag",
+]);

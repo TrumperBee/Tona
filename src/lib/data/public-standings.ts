@@ -5,6 +5,7 @@
 // until the schedule is public, exactly like fixtures and results.
 import "server-only";
 
+import { cachePublicData } from "@/lib/cache/public-data";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 import { isFixturesPublicStatus } from "@/lib/data/public-fixtures";
@@ -80,7 +81,7 @@ function readForm(value: unknown): StandingsForm[] {
  * Reads the public table. Returns null while the tournament has no public
  * schedule or before the first standings write.
  */
-export async function getPublicStandings(
+async function getPublicStandingsUncached(
   tournamentId: string,
   status: TournamentStatus,
 ): Promise<PublicStandings | null> {
@@ -131,6 +132,10 @@ export async function getPublicStandings(
     return null;
   }
 }
+
+export const getPublicStandings = cachePublicData(getPublicStandingsUncached, [
+  "public-tournament-standings",
+]);
 
 /** Profile used by the table's tie-break explanation. */
 export function readTiebreakerProfile(value: unknown): TiebreakerProfile {

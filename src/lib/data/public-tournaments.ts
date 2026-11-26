@@ -12,6 +12,7 @@ import "server-only";
 
 import { Timestamp, type DocumentSnapshot, type Query } from "firebase-admin/firestore";
 
+import { cachePublicData } from "@/lib/cache/public-data";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 import { isGameId, type GameId } from "@/lib/config/games";
@@ -260,7 +261,7 @@ function buildListQuery(
  * Cursor-paginated public tournament list. Never throws; Firestore failures
  * degrade to an empty page.
  */
-export async function listPublicTournaments(
+async function listPublicTournamentsUncached(
   options: ListTournamentsOptions,
 ): Promise<PublicTournamentListPage> {
   const empty: PublicTournamentListPage = { rows: [], hasMore: false, nextCursor: null };
@@ -336,13 +337,17 @@ export async function listPublicTournaments(
   }
 }
 
+export const listPublicTournaments = cachePublicData(listPublicTournamentsUncached, [
+  "public-tournaments-list",
+]);
+
 /**
  * Returns one tournament by slug for a public page, or null when it does not
  * exist or is not renderable. Drafts and suspended competitions 404; a
  * cancelled competition is returned so its page can show the cancellation
  * notice. Never throws.
  */
-export async function getPublicTournamentBySlug(
+async function getPublicTournamentBySlugUncached(
   slug: string,
 ): Promise<PublicTournamentDetail | null> {
   if (slug.trim().length === 0) {
@@ -380,6 +385,10 @@ export async function getPublicTournamentBySlug(
   }
 }
 
+export const getPublicTournamentBySlug = cachePublicData(getPublicTournamentBySlugUncached, [
+  "public-tournament-by-slug",
+]);
+
 export interface PublicRegistrationRow {
   readonly uid: string;
   readonly gamerTag: string;
@@ -410,7 +419,7 @@ function mapRegistration(document: DocumentSnapshot): PublicRegistrationRow | nu
  * Confirmed participants of one tournament, earliest entry first. Capacity is
  * 36 so the read is bounded. Never throws.
  */
-export async function getTournamentParticipants(
+async function getTournamentParticipantsUncached(
   tournamentId: string,
 ): Promise<PublicRegistrationRow[]> {
   try {
@@ -428,6 +437,10 @@ export async function getTournamentParticipants(
     return [];
   }
 }
+
+export const getTournamentParticipants = cachePublicData(getTournamentParticipantsUncached, [
+  "public-tournament-participants",
+]);
 
 /** The viewer's own registration row, or null. Never throws. */
 export async function getViewerRegistration(
@@ -508,7 +521,7 @@ function readDrawSnapshotPlayers(value: unknown): PublicDrawPlayer[] {
  * this returns null until the document is confirmed and carries a timestamp.
  * Never throws.
  */
-export async function getPublicDraw(tournamentId: string): Promise<PublicDraw | null> {
+async function getPublicDrawUncached(tournamentId: string): Promise<PublicDraw | null> {
   try {
     const snapshot = await getFirebaseAdminFirestore()
       .doc(paths.tournamentDrawCurrent(tournamentId))
@@ -561,6 +574,8 @@ export async function getPublicDraw(tournamentId: string): Promise<PublicDraw | 
   }
 }
 
+export const getPublicDraw = cachePublicData(getPublicDrawUncached, ["public-tournament-draw"]);
+
 export interface PublicTournamentPage {
   readonly rows: readonly PublicTournamentSummary[];
   readonly hasMore: boolean;
@@ -575,7 +590,7 @@ const OWNER_PAGE_SIZE = 9;
  * forward cursor at a time (`after` is a tournament id). Cancelled
  * competitions are excluded. Never throws.
  */
-export async function getPublicTournamentsByOwner(
+async function getPublicTournamentsByOwnerUncached(
   ownerUid: string,
   after?: string | null,
 ): Promise<PublicTournamentPage> {
@@ -618,6 +633,10 @@ export async function getPublicTournamentsByOwner(
   }
 }
 
+export const getPublicTournamentsByOwner = cachePublicData(getPublicTournamentsByOwnerUncached, [
+  "public-tournaments-by-owner",
+]);
+
 export interface PublicTournamentSitemapEntry {
   readonly slug: string;
   readonly updatedAt: string | null;
@@ -629,7 +648,7 @@ export interface PublicTournamentSitemapEntry {
  * excluded because they only exist as notice pages, not discoverable content.
  * Never throws.
  */
-export async function listPublicTournamentSitemapEntries(
+async function listPublicTournamentSitemapEntriesUncached(
   limit = 500,
 ): Promise<PublicTournamentSitemapEntry[]> {
   try {
@@ -659,3 +678,8 @@ export async function listPublicTournamentSitemapEntries(
     return [];
   }
 }
+
+export const listPublicTournamentSitemapEntries = cachePublicData(
+  listPublicTournamentSitemapEntriesUncached,
+  ["public-tournament-sitemap"],
+);

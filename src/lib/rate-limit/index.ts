@@ -7,8 +7,9 @@
 // - It is a fixed window, not a sliding window, so a caller can burst around a
 //   window boundary.
 // - Firestore transactions add latency and can retry under contention.
-// - Counter documents are permanent until a maintenance job or TTL policy
-//   removes them; they are not client-readable.
+// - Counter documents are removed by the configured Firestore TTL policy on
+//   `expiresAt`; deletion is asynchronous (typically within 24 hours) and the
+//   fixed-window logic does not depend on the delete happening promptly.
 // - Keys must be derived carefully (IP, user id, endpoint) to avoid one caller
 //   exhausting another caller's budget.
 // - This is application-level abuse control, not a substitute for a WAF or
@@ -16,6 +17,8 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
+
+import { Timestamp } from "firebase-admin/firestore";
 
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
@@ -51,6 +54,14 @@ export function rateLimitDocumentId(key: string): string {
 }
 
 /**
+ * Firestore TTL policies only expire `Date and time` values. The fixed-window
+ * logic still uses numeric `windowStart`, so `expiresAt` exists for TTL only.
+ */
+export function rateLimitExpiryTimestamp(windowStart: number, windowMs: number): Timestamp {
+  return Timestamp.fromMillis(windowStart + windowMs);
+}
+
+/**
  * Consumes one unit from a fixed window and reports whether the caller is
  * allowed to continue. Denied calls do not extend the window.
  */
@@ -82,16 +93,57 @@ export async function checkRateLimit(policy: RateLimitPolicy): Promise<RateLimit
       };
     }
 
+    // Never persist the readable key: it can contain an email address or IP.
+    // The document id is already a SHA-256 of the key, so this fingerprint is
+    // only for operator debugging.
     transaction.set(reference, {
-      key: policy.key,
+      fingerprint: rateLimitDocumentId(policy.key).slice(0, 12),
       count,
       windowStart,
-      expiresAt: windowStart + windowMs,
+      expiresAt: rateLimitExpiryTimestamp(windowStart, windowMs),
       updatedAt: now,
     });
 
     return { allowed: true, remaining: policy.limit - count };
   });
+}
+
+/**
+ * Reads the current count without consuming a unit. Used by challenge flows
+ * (for example "require Turnstile after 3 failed sign-ins") where the caller
+ * asks a question instead of making a request.
+ */
+export async function readRateLimit(policy: RateLimitPolicy): Promise<number> {
+  validatePolicy(policy);
+
+  const reference = getFirebaseAdminFirestore()
+    .collection(paths.rateLimits())
+    .doc(rateLimitDocumentId(policy.key));
+  const snapshot = await reference.get();
+
+  if (!snapshot.exists) {
+    return 0;
+  }
+
+  const existing = snapshot.data() as Partial<RateLimitDocument>;
+  const windowStart = typeof existing.windowStart === "number" ? existing.windowStart : 0;
+  const windowMs = policy.windowSeconds * 1000;
+
+  if (windowStart === 0 || Date.now() - windowStart >= windowMs) {
+    return 0;
+  }
+
+  return typeof existing.count === "number" ? existing.count : 0;
+}
+
+/** Removes a counter, for example after a successful sign-in. */
+export async function clearRateLimit(policy: RateLimitPolicy): Promise<void> {
+  validatePolicy(policy);
+
+  await getFirebaseAdminFirestore()
+    .collection(paths.rateLimits())
+    .doc(rateLimitDocumentId(policy.key))
+    .delete();
 }
 
 /** Convenience policy factory for endpoint-specific limits. */

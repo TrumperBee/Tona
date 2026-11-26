@@ -492,9 +492,12 @@ number.
 
 ### 3.18 `rateLimits/{key}` — fixed-window counters
 
-Fields: `key`, `count`, `windowStart`, `expiresAt`, `updatedAt` (epoch
-milliseconds). The document id is a SHA-256 hash of the caller key. Written by
+Fields: `fingerprint` (short SHA-256 prefix for debugging), `count`,
+`windowStart`, `expiresAt` (Firestore `Date and time` / Timestamp used by the
+TTL policy), `updatedAt` (epoch milliseconds). The document id is a SHA-256 hash
+of the caller key; the readable key is never stored. Written by
 `src/lib/rate-limit/index.ts` inside a Firestore transaction. Not client-readable.
+See `docs/TTL-AND-CACHING.md` for the exact TTL policy.
 
 ### 3.19 `platformStats/summary` — Super Admin analytics
 
@@ -692,18 +695,14 @@ hallOfFame/{id} ── tournamentId ── tournaments/{id}
 
 ## 5. Composite indexes
 
-`firestore.indexes.json` declares 59 composite indexes:
+`firestore.indexes.json` declares 52 composite indexes:
 
 | Collection group    | Fields                                                                                                       | Use                                                             |
 | ------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
 | `matches`           | `participants` ARRAY_CONTAINS + `matchday` ASC                                                               | A participant's fixtures by matchday                            |
-| `matches`           | `participants` ARRAY_CONTAINS + `scheduledAt` ASC                                                            | A participant's schedule                                        |
-| `matches`           | `participants` ARRAY_CONTAINS + `updatedAt` DESC                                                             | A player's match history                                        |
 | `matches`           | `participants` ARRAY_CONTAINS + `status` ASC + `updatedAt` DESC                                              | Completed match history, newest recorded first (Phase 11)       |
 | `matches`           | `tournamentId` ASC + `participants` ARRAY_CONTAINS + `updatedAt` DESC                                        | Scoped player history that rules can prove is public            |
 | `matches`           | `status` ASC + `updatedAt` ASC                                                                               | Completed matches per day for analytics (Phase 17)              |
-| `matches`           | `status` ASC + `matchday` ASC                                                                                | Operations queues                                               |
-| `tournaments`       | `status` ASC + `startsAt` ASC                                                                                | Public discovery                                                |
 | `tournaments`       | `ownerUid` ASC + `updatedAt` DESC                                                                            | Organiser dashboard and owned-tournament list                   |
 | `tournaments`       | `status` ASC + `createdAt` DESC                                                                              | Super Admin tournament list, newest first                       |
 | `tournaments`       | `status` ASC + `nameLower` ASC                                                                               | Super Admin tournament name search (Phase 8)                    |
@@ -719,7 +718,6 @@ hallOfFame/{id} ── tournamentId ── tournaments/{id}
 | `registrations`     | `status` ASC + `registeredAt` ASC                                                                            | Player registration history                                     |
 | `registrations`     | `status` ASC + `registeredAt` DESC                                                                           | Organiser participant list, newest first (Phase 8)              |
 | `registrations`     | `status` ASC + `gamerTagLower` ASC                                                                           | Organiser participant search by tag (Phase 8)                   |
-| `registrations`     | `tournamentId` ASC + `registeredAt` DESC                                                                     | Scoped player registration history                              |
 | `users`             | Any non-empty subset of `role`, `status`, `country`, `preferredGame` in that fixed order, + `createdAt` DESC | Super Admin user list and every filter combination (15 indexes) |
 | `auditLogs`         | `action` / `actorUid` / `targetType` singly or in combination, + `createdAt` DESC                            | Audit viewer filters (7 indexes)                                |
 | `auditLogs`         | `targetType` ASC + `targetId` ASC + `createdAt` DESC                                                         | User-detail audit history                                       |

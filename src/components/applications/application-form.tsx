@@ -6,8 +6,9 @@
 // Identity, email and status are never sent from this component.
 import { ShieldCheck } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
+import { TurnstileWidget } from "@/components/security/turnstile-widget";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -50,6 +51,10 @@ export function ApplicationForm() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const handleTurnstileToken = useCallback((token: string | null) => {
+    setTurnstileToken(token);
+  }, []);
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -82,6 +87,7 @@ export function ApplicationForm() {
       experience: form.experience,
       motivation: form.motivation,
       agreesToRules: form.agreesToRules,
+      turnstileToken: turnstileToken ?? undefined,
     };
 
     try {
@@ -318,7 +324,18 @@ export function ApplicationForm() {
             ) : null}
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 border-t border-white/10 pt-5">
+          <div className="space-y-3 border-t border-white/10 pt-5" aria-label="Security check">
+            <p className="text-xs leading-5 text-grey-400">
+              This check protects the review queue from automated submissions.
+            </p>
+            <TurnstileWidget
+              action="application"
+              onToken={handleTurnstileToken}
+              className="w-full min-w-0"
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
             <Button type="submit" loading={saving} loadingLabel="Submitting">
               Submit application
             </Button>

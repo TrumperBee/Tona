@@ -39,14 +39,42 @@ describe("assertRoleAssignmentAllowed", () => {
     expectRoleError("someone@example.com", SUPER_ADMIN_UID, "super_admin");
   });
 
-  it("refuses super_admin for a different uid", () => {
-    expectRoleError("owner@example.com", "someone-else", "super_admin");
+  it("refuses super_admin for a different uid even with the exact configured email", () => {
+    expectRoleError(SUPER_ADMIN_EMAIL.toLowerCase(), "someone-else", "super_admin");
+    expectRoleError(SUPER_ADMIN_EMAIL, "attacker-uid", "super_admin");
+    expect(
+      isSuperAdminAccount(SUPER_ADMIN_EMAIL, "attacker-uid", SUPER_ADMIN_EMAIL, SUPER_ADMIN_UID),
+    ).toBe(false);
   });
 
   it("fails closed for everyone when SUPER_ADMIN_UID is missing or blank", () => {
-    expectRoleError(SUPER_ADMIN_EMAIL, SUPER_ADMIN_UID, "super_admin", SUPER_ADMIN_EMAIL, "");
-    expectRoleError(SUPER_ADMIN_EMAIL, SUPER_ADMIN_UID, "super_admin", SUPER_ADMIN_EMAIL, "   ");
-    expectRoleError(SUPER_ADMIN_EMAIL, SUPER_ADMIN_UID, "super_admin", SUPER_ADMIN_EMAIL, "  ");
+    for (const blankUid of ["", "   ", "  "]) {
+      expectRoleError(
+        SUPER_ADMIN_EMAIL,
+        SUPER_ADMIN_UID,
+        "super_admin",
+        SUPER_ADMIN_EMAIL,
+        blankUid,
+      );
+      expect(
+        isSuperAdminAccount(SUPER_ADMIN_EMAIL, SUPER_ADMIN_UID, SUPER_ADMIN_EMAIL, blankUid),
+      ).toBe(false);
+    }
+
+    // Call the function directly: the helper's default parameter would replace
+    // an explicit `undefined` with the valid test UID.
+    expect(() =>
+      assertRoleAssignmentAllowed(
+        SUPER_ADMIN_EMAIL,
+        SUPER_ADMIN_UID,
+        "super_admin",
+        SUPER_ADMIN_EMAIL,
+        undefined,
+      ),
+    ).toThrow(RoleAssignmentError);
+    expect(
+      isSuperAdminAccount(SUPER_ADMIN_EMAIL, SUPER_ADMIN_UID, SUPER_ADMIN_EMAIL, undefined),
+    ).toBe(false);
   });
 
   it("refuses super_admin when SUPER_ADMIN_EMAIL is empty", () => {

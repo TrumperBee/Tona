@@ -17,6 +17,7 @@ import {
   issueMatchContactLink,
 } from "@/lib/contact/match-contact";
 import { jsonError } from "@/lib/http/respond";
+import { assertPlatformWritable, PlatformWriteBlockedError } from "@/lib/platform/settings";
 import { checkRateLimit, rateLimitPolicy } from "@/lib/rate-limit";
 import { assertSameOrigin, SameOriginError } from "@/lib/security/same-origin";
 import { tournamentErrorResponse } from "@/lib/tournament/route-errors";
@@ -76,6 +77,16 @@ export async function POST(request: NextRequest, context: RouteContext): Promise
 
   if (!user) {
     return jsonError("Sign in to continue.", 401);
+  }
+
+  try {
+    await assertPlatformWritable(user);
+  } catch (error) {
+    if (error instanceof PlatformWriteBlockedError) {
+      return jsonError(error.message, 503);
+    }
+
+    throw error;
   }
 
   const rate = await checkRateLimit(

@@ -173,6 +173,13 @@ export interface UserDocument {
   readonly role?: UserRole;
   readonly status: AccountStatus;
   /**
+   * Set by the self-service deletion flow. The Auth user and all contact/name
+   * fields are removed, while competition history keeps the original gamer tag.
+   * A deleted document can never sign in again.
+   */
+  readonly deleted?: boolean;
+  readonly deletedAt?: Timestamp | null;
+  /**
    * Server-written email preferences. Missing means the defaults apply
    * (important on, result/announcement off). Read by the owner and the server.
    */
@@ -238,6 +245,8 @@ export interface PublicProfileDocument {
    */
   readonly status: AccountStatus;
   readonly stats: ProfileStats;
+  /** True when the player deleted their account; display name is the placeholder. */
+  readonly deleted?: boolean;
 }
 
 /**
@@ -865,10 +874,12 @@ export interface AuditLogDocument {
 }
 
 export interface RateLimitDocument {
-  readonly key: string;
+  /** Short SHA-256 fingerprint for debugging; never the readable key. */
+  readonly fingerprint: string;
   readonly count: number;
   readonly windowStart: number;
-  readonly expiresAt: number;
+  /** Firestore `Date and time` value used by the collection-group TTL policy. */
+  readonly expiresAt: Timestamp;
   readonly updatedAt: number;
 }
 

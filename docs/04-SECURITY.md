@@ -1,12 +1,15 @@
 # GCC — Security Requirements
 
-> **Status: Phase 8 implemented.** Firestore rules, session exchange, guards,
-> registration, password policy, password reset, profile editing, avatar upload,
-> role/status administration, audit logging, rate limiting, same-origin checks,
-> security headers, the Super Admin console, platform settings/maintenance mode,
-> announcements, the organiser application and approval flow, in-app
-> notifications, tournament creation and registration, rules tests and emulator
-> integration tests exist. CSP and App Check remain Phase 18.
+> **Status: Phase 18A audit and hardening implemented.** Firestore rules,
+> session exchange, guards, registration, password policy, password reset,
+> profile editing, avatar upload, role/status administration, audit logging,
+> rate limiting, same-origin checks, security headers, the Super Admin console,
+> platform settings/maintenance mode, announcements, the organiser application
+> and approval flow, in-app notifications, tournament creation and registration,
+> rules tests and emulator integration tests exist. Phase 18A adds a per-request
+> nonce CSP, Turnstile, Firebase App Check, an automated route/permission
+> inventory, PII-free rate limits, self-service account deletion and the full
+> audit record in `docs/SECURITY-REVIEW.md`.
 
 ## 1. Security model
 
@@ -169,9 +172,13 @@ session after role/status changes or sign-out.
 
 **Controls:**
 
-- The session cookie is `httpOnly`, `Secure` in production, `SameSite=Lax`,
-  path `/`, with a lifetime from `SESSION_COOKIE_MAX_AGE_DAYS` (default 5 days).
-- Guards verify the cookie with `checkRevoked: true` on every protected request.
+- The session cookie is `httpOnly`, `Secure` in production (including
+  `VERCEL_ENV=production`), `SameSite=Lax`, path `/`, `priority: high`, with a
+  lifetime from `SESSION_COOKIE_MAX_AGE_DAYS` (default 5 days) clamped to
+  Firebase's 14-day session-cookie maximum.
+- Guards verify the cookie with `checkRevoked: true` on every protected request
+  and re-read the Firestore `status` and `deleted` fields, so a suspension or a
+  deletion takes effect on the very next request rather than at token expiry.
 - Disabled Firebase Auth users are treated as signed out.
 - Sign-out revokes refresh tokens and clears the cookie.
 - Role and account-status changes revoke the target's refresh tokens.
@@ -182,12 +189,21 @@ session after role/status changes or sign-out.
 - The client never stores Admin credentials.
 - Security headers are set in `next.config.ts`: `X-Content-Type-Options:
 nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options:
-DENY` and a restrictive `Permissions-Policy`. A Content-Security-Policy is
-  deferred to Phase 18 so it can allow Firebase and Cloudinary deliberately.
+DENY`, a complete `Permissions-Policy`, preload-ready HSTS,
+  `Cross-Origin-Opener-Policy: same-origin` and `X-DNS-Prefetch-Control: off`.
+- A per-request nonce CSP is built in `src/lib/security/csp.ts` and applied in
+  `src/proxy.ts`. `script-src` uses `'strict-dynamic'`; styles are confined to
+  self/nonce; images allow self, `data:`, `blob:` and Cloudinary only;
+  `connect-src` and `frame-src` list exact Firebase/Google/Turnstile endpoints;
+  `object-src`, `base-uri`, `form-action` and `frame-ancestors` are locked down.
+  Production defaults to `CSP_MODE=enforce`; deployments may start with
+  `CSP_MODE=report-only` and roll back by restoring that value. Reports go to
+  `/api/csp-report`, which is size-capped, rate-limited and PII-free.
 - State-changing routes call `assertSameOrigin()` before reading a body. A
   request without a matching Origin (or same-origin Referer fallback) is rejected
   with 403. This complements `SameSite=Lax`; every future POST/PATCH/PUT/DELETE
-  route must use the helper.
+  route must use the helper. `tests/security/route-inventory.test.ts` enforces
+  this for every existing route.
 
 ### 2.7 Enumeration
 
@@ -458,6 +474,51 @@ quietly moves an account to another address.
   quota pre-check. One broadcast is capped at 900 opted-in active recipients and
   writes one in-app record per recipient.
 
+### 2.17 Bot protection and App Check
+
+**Threat:** automated account creation, password resets and organiser
+applications, or scripted sign-ins after repeated failures.
+
+**Controls:**
+
+- Cloudflare Turnstile is rendered by `src/components/security/turnstile-widget.tsx`
+  and verified server-side by `src/lib/security/turnstile.ts` with a `fetch` to
+  Cloudflare's `siteverify` endpoint. The token is bound to the action and the
+  caller IP is forwarded; a production deployment without `TURNSTILE_SECRET_KEY`
+  fails closed. Development skips with a console notice.
+- Registration, forgot-password and organiser application always challenge.
+  Sign-in challenges only after three failures keyed by IP plus a SHA-256 of the
+  lowercased email; `POST /api/auth/login-attempt` reports check/failed/success
+  state without ever storing the readable address.
+- Firebase App Check is initialised in `src/lib/firebase/client.ts` with
+  reCAPTCHA v3 and `NEXT_PUBLIC_APPCHECK_SITE_KEY`. A production build without the
+  site key fails closed; development may use `NEXT_PUBLIC_APPCHECK_DEBUG_TOKEN`.
+  Enforcement in Firebase Console moves from monitoring to Authentication first,
+  then Cloud Firestore, after 3–5 days of ≥99% verified traffic
+  (exact procedure in `docs/SECURITY-REVIEW.md`).
+
+### 2.18 Account deletion and data permanence
+
+**Threat:** a deleted account keeps access or leaves personal data in public
+surfaces; a privileged organiser removes a live competition by deleting their
+account.
+
+**Controls:**
+
+- `DELETE /api/profile/account` requires a same-origin request, a fresh sign-in
+  (10 minutes), a writable platform and a per-uid rate limit of 3/hour.
+- Firebase Auth is deleted; private `email`, `fullName`, WhatsApp number,
+  community, favourite club and all avatar references are cleared; the Cloudinary
+  avatar is destroyed best-effort.
+- The public profile becomes `Deleted player` with no avatar and is hidden from
+  player search, compare and direct profile pages. Registration snapshots become
+  `Deleted player`.
+- Match/tournament history, standings, titles and the gamer-tag reservation are
+  retained under the existing gamer tag; no status, count or draw is changed.
+- The configured Super Admin and any organiser with a non-terminal tournament
+  are blocked, and the deletion is written to the audit log without removed PII.
+- The retained-history policy is documented in `docs/PRIVACY.md`.
+
 ## 3. Authentication and sessions
 
 - Firebase Authentication owns password hashing and credential verification.
@@ -573,9 +634,17 @@ quietly moves an account to another address.
   link that cannot be honoured.
 - The private key keeps escaped `\n` sequences and is normalised only in server
   memory.
-- `.env.local` is git-ignored; `.env.example` contains no real values.
+- `TURNSTILE_SECRET_KEY`, `CSP_MODE`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`,
+  `NEXT_PUBLIC_APPCHECK_SITE_KEY` and `NEXT_PUBLIC_APPCHECK_DEBUG_TOKEN` are
+  documented alongside their fail-closed behaviour.
+- `.env.local`, `.env*` and `.seed/` are git-ignored, as are service-account and
+  Admin SDK JSON files. `.env.example` contains only blank placeholders.
 - Secrets are never logged, returned in responses or embedded in client
-  components.
+  components. A full git-history scan (all refs plus an unreachable object), a
+  working-tree scan and a scan of a fresh build found no high-confidence secret
+  leaks; see `docs/SECRETS-AND-DEPENDENCIES.md`. Production dependencies are
+  pinned and `npm audit --omit=dev` reports zero vulnerabilities; the remaining
+  dev-only advisories come from `firebase-tools` and are documented there.
 
 ## 7. Input validation
 
@@ -628,7 +697,18 @@ quietly moves an account to another address.
 - Firestore document shapes are enforced in server code because Firestore has no
   schema.
 - URLs, slugs, phone numbers, country codes and gamer tags use allow-lists and
-  normalisation.
+  normalisation. `safePublicUrl()` additionally rejects `javascript:`, `data:`
+  and remote `http:` configuration values.
+- CSV cells are escaped by `src/lib/utils/csv.ts`, which neutralises leading
+  `=`, `+`, `-`, `@`, tab and CR formula markers; a leading space bypass is
+  covered by its unit test.
+- There are no `dangerouslySetInnerHTML`, `eval`, `new Function`, `innerHTML`,
+  `document.write` or `insertAdjacentHTML` sinks. React text rendering and the
+  email layout's `escapeHtml()` contain user text, and every `target="_blank"`
+  link carries `rel="noopener noreferrer"`.
+- Uploads are validated by magic bytes and a 1 MB cap, written to deterministic
+  server-built Cloudinary folders, and old assets are destroyed on replacement
+  or removal. Ownership is checked before the Cloudinary write.
 
 ## 8. Rate limiting
 
@@ -649,8 +729,18 @@ quietly moves an account to another address.
   minute), unsubscribe (10 per minute per IP), notification preferences
   (20 per 10 minutes), email change (3 per day) and the Super Admin test email
   (5 per hour).
+- Phase 18A adds: CSP reports (60/min per IP), login-attempt state (60/min per
+  IP), failed-sign-in counters (3 per 15 min per IP + hashed email), Turnstile
+  verification, account deletion (3/hour per uid) and Super Admin organiser
+  search (30/min per admin). `docs/RATE-LIMIT-COVERAGE.md` enumerates all 77 API
+  routes; a route without a counter must justify it there.
+- Rate-limit documents store only a 12-character SHA-256 fingerprint and a
+  numeric window start/count plus the TTL timestamp; the hashed document id holds
+  the full key. Readable emails, IPs and user ids are never persisted in the
+  counter. `tests/integration/security-controls.test.ts` asserts this.
 - Limitations: fixed windows allow boundary bursts; transactions add latency;
-  counter documents need eventual cleanup; keys must be scoped carefully.
+  counter documents are removed by a Firestore TTL policy on `expiresAt`
+  (asynchronous); keys must be scoped carefully.
 - Rate limiting is abuse control, not a WAF or a replacement for Firebase Auth
   quotas.
 
@@ -674,16 +764,26 @@ quietly moves an account to another address.
 
 ## 10. Data permanence
 
-- Competition records, results and audit entries are never hard-deleted.
+- Competition records, results and audit entries are never hard-deleted by
+  normal flows.
 - Corrections create new state plus audit entries.
-- Firestore backups and point-in-time recovery are configured in Phase 18.
+- A self-service deletion removes Auth and private PII, anonymises the public
+  profile and keeps competition history under the same gamer tag; see §2.18.
+- Firestore backups and point-in-time recovery remain a deployment concern and
+  are not a substitute for the deletion controls above.
 
-## 11. Application hardening (Phase 18)
+## 11. Application hardening (Phase 18A)
 
-- Security headers (HSTS, CSP, frame ancestors, referrer policy, permissions
-  policy).
-- CSRF origin checks for cookie-based mutations.
-- Dependency audits, secret scanning and rules tests in CI.
-- No verbose production errors; redact secrets and personal data from logs.
-- Privacy: collect only necessary data, document retention, provide export and
-  account-deletion paths while preserving anonymised competition history.
+- Security headers (HSTS, COOP, DNS-prefetch, frame ancestors, referrer policy,
+  permissions policy) plus a nonce CSP with report-only rollout and documented
+  rollback.
+- CSRF origin checks for cookie-based mutations, enforced by the automated route
+  inventory in `tests/security/route-inventory.test.ts`.
+- Dependency audits, secret scanning (including full git history and build
+  output) and rules tests are documented in `docs/SECRETS-AND-DEPENDENCIES.md`
+  and `docs/SECURITY-REVIEW.md`.
+- No verbose production errors; secrets, emails, IPs, URLs and personal data are
+  redacted from logs, including CSP reports and rate-limit counters.
+- Privacy: collect only necessary data, document retention, provide an
+  account-deletion path while preserving anonymised competition history under
+  the existing gamer tag (`docs/PRIVACY.md`).

@@ -17,6 +17,7 @@ import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 import { parsePageSize } from "@/lib/super-admin/query";
 import { TournamentMutationError } from "@/lib/tournament/errors";
+import { csvCell } from "@/lib/utils/csv";
 import { buildWhatsAppLink } from "@/lib/whatsapp/link";
 import { renderWhatsAppTemplate } from "@/lib/whatsapp/templates";
 import type { RegistrationDocument, RegistrationStatus, TournamentDocument } from "@/types/domain";
@@ -190,15 +191,6 @@ export async function issueRegistrationContactLink(
   });
 
   return { link };
-}
-
-/** Escapes one CSV cell. */
-function csvCell(value: string): string {
-  if (/[",\n\r]/.test(value)) {
-    return `"${value.replaceAll('"', '""')}"`;
-  }
-
-  return value;
 }
 
 /**

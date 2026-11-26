@@ -9,6 +9,7 @@ import "server-only";
 import { Timestamp, type DocumentSnapshot } from "firebase-admin/firestore";
 
 import { writeAuditLog } from "@/lib/audit/log";
+import { withPublicInvalidation } from "@/lib/cache/public-data";
 import {
   requireSuperAdmin,
   requireTournamentOwnerOrSuperAdmin,
@@ -120,7 +121,7 @@ async function gamerTagFor(uid: string): Promise<string> {
 }
 
 /** Opens a report for one completed match the caller played in. */
-export async function createResultReport(
+async function createResultReportWrite(
   tournamentId: string,
   matchId: string,
   reason: string,
@@ -464,7 +465,7 @@ export async function listAllResultReports(
 }
 
 /** Resolves or dismisses one open report, notifies the reporter and audits it. */
-export async function resolveResultReport(
+async function resolveResultReportWrite(
   tournamentId: string,
   reportId: string,
   input: ResultReportResolveInput,
@@ -542,3 +543,6 @@ export async function createResultReportForCurrentUser(
 
   return createResultReport(tournamentId, matchId, reason, user);
 }
+
+export const resolveResultReport = withPublicInvalidation(resolveResultReportWrite);
+export const createResultReport = withPublicInvalidation(createResultReportWrite);

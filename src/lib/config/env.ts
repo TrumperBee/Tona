@@ -40,6 +40,21 @@ const publicEnvSchema = z
     // A blank site URL is tolerated in development and rejected in production.
     NEXT_PUBLIC_SITE_URL: z.preprocess(blankToUndefined, z.url().optional()),
     NEXT_PUBLIC_EHUBMARKET_URL: z.preprocess(blankToUndefined, z.url().optional()),
+    // Cloudflare Turnstile site key (public). The secret stays server-side.
+    NEXT_PUBLIC_TURNSTILE_SITE_KEY: z.preprocess(
+      blankToUndefined,
+      z.string().trim().min(1).optional(),
+    ),
+    // Firebase App Check reCAPTCHA v3 site key (public).
+    NEXT_PUBLIC_APPCHECK_SITE_KEY: z.preprocess(
+      blankToUndefined,
+      z.string().trim().min(1).optional(),
+    ),
+    // Development-only App Check debug token. Never set in production.
+    NEXT_PUBLIC_APPCHECK_DEBUG_TOKEN: z.preprocess(
+      blankToUndefined,
+      z.string().trim().min(1).optional(),
+    ),
   })
   .transform((value) => ({
     ...value,
@@ -104,6 +119,9 @@ export function getPublicEnv(): PublicEnv {
     NEXT_PUBLIC_FIREBASE_APP_ID: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
     NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
     NEXT_PUBLIC_EHUBMARKET_URL: process.env.NEXT_PUBLIC_EHUBMARKET_URL,
+    NEXT_PUBLIC_TURNSTILE_SITE_KEY: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
+    NEXT_PUBLIC_APPCHECK_SITE_KEY: process.env.NEXT_PUBLIC_APPCHECK_SITE_KEY,
+    NEXT_PUBLIC_APPCHECK_DEBUG_TOKEN: process.env.NEXT_PUBLIC_APPCHECK_DEBUG_TOKEN,
   });
 
   if (!parsed.success) {

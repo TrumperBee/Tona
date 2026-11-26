@@ -15,6 +15,18 @@ service cloud.firestore {
       return signedIn() && request.auth.token.role == 'super_admin';
     }
 
+    // Public documents are projections. A server bug that writes an address or
+    // phone number into one must fail closed instead of publishing it.
+    function publicSafeDocument() {
+      return resource == null || (
+        !('email' in resource.data) &&
+        !('emailAddress' in resource.data) &&
+        !('whatsappE164' in resource.data) &&
+        !('phone' in resource.data) &&
+        !('mobile' in resource.data)
+      );
+    }
+
     // Cancelled is deliberately NOT public: it is a terminal state whose
     // records stay readable only to the owner and the Super Admin (and to
     // server-rendered notice pages). ADR-044 documents this revision.
@@ -87,17 +99,17 @@ service cloud.firestore {
 
     // Public display profile and its public career history.
     match /publicProfiles/{uid} {
-      allow read: if true;
+      allow read: if publicSafeDocument();
 
       match /history/{tournamentId} {
-        allow read: if true;
+        allow read: if publicSafeDocument();
       }
     }
 
     // Public organiser identity. Created and edited by the server only, so the
     // owner cannot bypass validation or invent another organiser's profile.
     match /organiserProfiles/{uid} {
-      allow read: if true;
+      allow read: if publicSafeDocument();
     }
 
     // Gamer-tag reservation: server-only on both read and write.
@@ -126,70 +138,89 @@ service cloud.firestore {
     // Tournaments are public once they leave draft and are neither suspended
     // nor cancelled. Owners and the Super Admin always see their own records.
     match /tournaments/{tournamentId} {
-      allow read: if isPublicTournamentStatus(resource.data.status) ||
+      allow read: if publicSafeDocument() && (
+        isPublicTournamentStatus(resource.data.status) ||
         (signedIn() && resource.data.ownerUid == request.auth.uid) ||
-        isSuperAdmin();
+        isSuperAdmin()
+      );
 
       match /registrations/{uid} {
-        allow read: if isPublicTournament(tournamentId) ||
+        allow read: if publicSafeDocument() && (
+          isPublicTournament(tournamentId) ||
           isTournamentOwner(tournamentId) ||
-          isSuperAdmin();
+          isSuperAdmin()
+        );
       }
 
       // Draw is private until confirmed; afterwards it is public with the event.
       match /draw/{drawId} {
-        allow read: if isTournamentOwner(tournamentId) ||
+        allow read: if publicSafeDocument() && (
+          isTournamentOwner(tournamentId) ||
           isSuperAdmin() ||
           (isPublicTournament(tournamentId) &&
             resource != null &&
-            resource.data.confirmedAt != null);
+            resource.data.confirmedAt != null)
+        );
       }
 
       // Unpublished fixture drafts stay private.
       match /fixtureDrafts/{draftId} {
-        allow read: if isTournamentOwner(tournamentId) || isSuperAdmin();
+        allow read: if publicSafeDocument() &&
+          (isTournamentOwner(tournamentId) || isSuperAdmin());
       }
 
       // Fixtures become public once the tournament reaches fixtures_published.
       match /matches/{matchId} {
-        allow read: if isPublishedTournament(tournamentId) ||
+        allow read: if publicSafeDocument() && (
+          isPublishedTournament(tournamentId) ||
           isTournamentOwner(tournamentId) ||
-          isSuperAdmin();
+          isSuperAdmin()
+        );
       }
 
       // Informational matchday windows share the match visibility boundary.
       match /matchdays/{matchday} {
-        allow read: if isPublishedTournament(tournamentId) ||
+        allow read: if publicSafeDocument() && (
+          isPublishedTournament(tournamentId) ||
           isTournamentOwner(tournamentId) ||
-          isSuperAdmin();
+          isSuperAdmin()
+        );
       }
 
       // Result reports are a player-to-admin "Report a problem" channel. They
       // are readable by the reporter, the tournament owner and the Super Admin.
       // They never change an official result; writes remain deny-all.
       match /resultReports/{reportId} {
-        allow read: if isTournamentOwner(tournamentId) ||
+        allow read: if publicSafeDocument() && (
+          isTournamentOwner(tournamentId) ||
           isSuperAdmin() ||
-          (signedIn() && resource.data.reportedBy == request.auth.uid);
+          (signedIn() && resource.data.reportedBy == request.auth.uid)
+        );
       }
 
       // Derived competition data is public only with a public tournament.
       match /standings/{uid} {
-        allow read: if isPublicTournament(tournamentId) ||
+        allow read: if publicSafeDocument() && (
+          isPublicTournament(tournamentId) ||
           isTournamentOwner(tournamentId) ||
-          isSuperAdmin();
+          isSuperAdmin()
+        );
       }
 
       match /knockoutTies/{tieId} {
-        allow read: if isPublicTournament(tournamentId) ||
+        allow read: if publicSafeDocument() && (
+          isPublicTournament(tournamentId) ||
           isTournamentOwner(tournamentId) ||
-          isSuperAdmin();
+          isSuperAdmin()
+        );
       }
 
       match /announcements/{announcementId} {
-        allow read: if isPublicTournament(tournamentId) ||
+        allow read: if publicSafeDocument() && (
+          isPublicTournament(tournamentId) ||
           isTournamentOwner(tournamentId) ||
-          isSuperAdmin();
+          isSuperAdmin()
+        );
       }
     }
 
@@ -197,7 +228,8 @@ service cloud.firestore {
     // unexpired, non-deleted notices. Drafts and soft-deleted records remain
     // Super-Admin-readable for the console (which uses the Admin SDK anyway).
     match /announcements/{announcementId} {
-      allow read: if isSuperAdmin() ||
+      allow read: if publicSafeDocument() && (
+        isSuperAdmin() ||
         (
           (!('deletedAt' in resource.data) || resource.data.deletedAt == null) &&
           resource.data.publishedAt != null &&
@@ -207,7 +239,8 @@ service cloud.firestore {
             resource.data.expiresAt == null ||
             resource.data.expiresAt > request.time
           )
-        );
+        )
+      );
     }
 
     // The single platform settings document is Super Admin-only. Public pages
@@ -218,12 +251,12 @@ service cloud.firestore {
 
     // Permanent champions and records.
     match /hallOfFame/{entryId} {
-      allow read: if true;
+      allow read: if publicSafeDocument();
     }
 
     // Per-game Elo ladders are public read, server write only.
     match /rankings/{gameId}/players/{uid} {
-      allow read: if true;
+      allow read: if publicSafeDocument();
     }
 
     // Super Admin-only operational records.
@@ -261,20 +294,30 @@ service cloud.firestore {
       allow read: if isSuperAdmin();
     }
 
-    // Collection-group reads for player history. Every query must constrain
-    // tournamentId so the rules engine can prove that draft, suspended and
-    // otherwise hidden tournaments are excluded. A broad cross-tournament
-    // query fails rather than leaking a hidden tournament's documents.
+    // Collection-group access is denied outright. Every application read goes
+    // through a server route (Admin SDK), so no client needs a cross-tournament
+    // query. Allowing one would let a mismatched `tournamentId` disguise a hidden
+    // parent's documents as public: Firestore rules cannot verify a document's
+    // physical path from a collection-group query. Single-document reads still
+    // work below, and require the document to live under the tournament it names.
     match /{path=**}/matches/{matchId} {
-      allow read: if isPublishedTournament(resource.data.tournamentId) ||
-        isTournamentOwner(resource.data.tournamentId) ||
-        isSuperAdmin();
+      allow get: if publicSafeDocument() &&
+        resource.__name__ ==
+          /databases/$(database)/documents/tournaments/$(resource.data.tournamentId)/matches/$(resource.id) &&
+        (isPublishedTournament(resource.data.tournamentId) ||
+          isTournamentOwner(resource.data.tournamentId) ||
+          isSuperAdmin());
+      allow list: if false;
     }
 
     match /{path=**}/registrations/{uid} {
-      allow read: if isPublicTournament(resource.data.tournamentId) ||
-        isTournamentOwner(resource.data.tournamentId) ||
-        isSuperAdmin();
+      allow get: if publicSafeDocument() &&
+        resource.__name__ ==
+          /databases/$(database)/documents/tournaments/$(resource.data.tournamentId)/registrations/$(resource.id) &&
+        (isPublicTournament(resource.data.tournamentId) ||
+          isTournamentOwner(resource.data.tournamentId) ||
+          isSuperAdmin());
+      allow list: if false;
     }
 
     // Permanent deny-all writes. No client role, including Super Admin, may

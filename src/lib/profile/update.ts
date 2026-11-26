@@ -7,6 +7,7 @@ import "server-only";
 
 import { Timestamp } from "firebase-admin/firestore";
 
+import { withPublicInvalidation } from "@/lib/cache/public-data";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 import { normalizeToE164 } from "@/lib/whatsapp/phone";
@@ -35,7 +36,7 @@ export interface UpdatedProfile {
 }
 
 /** Applies a strict, partial profile edit to both documents atomically. */
-export async function updatePlayerProfile(
+async function updatePlayerProfileWrite(
   uid: string,
   input: ProfileEditInput,
 ): Promise<UpdatedProfile> {
@@ -135,19 +136,28 @@ export interface AvatarReference {
   readonly publicId: string;
 }
 
-/** Writes the server-built Cloudinary URL and public id to both documents. */
-export async function storeAvatarReference(uid: string, avatar: AvatarReference): Promise<void> {
+/**
+ * Writes the server-built Cloudinary URL and public id to both documents.
+ * Returns the previous public id so the caller can clean up a legacy asset
+ * whose id differs from the deterministic replacement id.
+ */
+async function storeAvatarReferenceWrite(
+  uid: string,
+  avatar: AvatarReference,
+): Promise<string | null> {
   const firestore = getFirebaseAdminFirestore();
   const userReference = firestore.doc(paths.user(uid));
   const publicReference = firestore.doc(paths.publicProfile(uid));
   const now = Timestamp.now();
 
-  await firestore.runTransaction(async (transaction) => {
+  return firestore.runTransaction(async (transaction) => {
     const userSnapshot = await transaction.get(userReference);
 
     if (!userSnapshot.exists) {
       throw new ProfileUpdateError("not-found", "Your profile could not be loaded.");
     }
+
+    const previousPublicId = (userSnapshot.data() as UserDocument).avatarPublicId ?? null;
 
     transaction.update(userReference, {
       avatarUrl: avatar.url,
@@ -159,11 +169,13 @@ export async function storeAvatarReference(uid: string, avatar: AvatarReference)
       { avatarUrl: avatar.url, avatarPublicId: avatar.publicId },
       { merge: true },
     );
+
+    return previousPublicId;
   });
 }
 
 /** Clears avatar references and returns the stored Cloudinary public id, if any. */
-export async function clearAvatarReference(uid: string): Promise<string | null> {
+async function clearAvatarReferenceWrite(uid: string): Promise<string | null> {
   const firestore = getFirebaseAdminFirestore();
   const userReference = firestore.doc(paths.user(uid));
   const publicReference = firestore.doc(paths.publicProfile(uid));
@@ -188,3 +200,7 @@ export async function clearAvatarReference(uid: string): Promise<string | null> 
     return publicId;
   });
 }
+
+export const updatePlayerProfile = withPublicInvalidation(updatePlayerProfileWrite);
+export const storeAvatarReference = withPublicInvalidation(storeAvatarReferenceWrite);
+export const clearAvatarReference = withPublicInvalidation(clearAvatarReferenceWrite);

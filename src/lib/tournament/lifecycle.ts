@@ -10,6 +10,7 @@ import "server-only";
 import { FieldValue } from "firebase-admin/firestore";
 
 import { writeAuditLog } from "@/lib/audit/log";
+import { withPublicInvalidation } from "@/lib/cache/public-data";
 import { requireTournamentOwnerOrSuperAdmin, type TournamentAccess } from "@/lib/auth/guards";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
@@ -78,7 +79,7 @@ async function writeStatus(
  * Publishes a draft. Requires a description, rules, the full schedule, a
  * registration deadline still in the future and a start within 18 months.
  */
-export async function publishTournament(tournamentId: string): Promise<void> {
+async function publishTournamentWrite(tournamentId: string): Promise<void> {
   const access = await requireTournamentOwnerOrSuperAdmin(tournamentId);
   const firestore = getFirebaseAdminFirestore();
   const reference = firestore.doc(paths.tournament(tournamentId));
@@ -168,7 +169,7 @@ export async function publishTournament(tournamentId: string): Promise<void> {
 }
 
 /** Closes registration early. The stored deadline keeps its meaning for history. */
-export async function closeRegistration(tournamentId: string): Promise<void> {
+async function closeRegistrationWrite(tournamentId: string): Promise<void> {
   const { access, write } = await writeStatus(tournamentId, "registration_closed");
 
   await writeAuditLog({
@@ -188,7 +189,7 @@ export async function closeRegistration(tournamentId: string): Promise<void> {
  * are confirmed the status has moved past that stage, so this is structurally
  * blocked.
  */
-export async function reopenRegistration(tournamentId: string): Promise<void> {
+async function reopenRegistrationWrite(tournamentId: string): Promise<void> {
   const { access, write } = await writeStatus(tournamentId, "registration_open");
 
   await writeAuditLog({
@@ -207,7 +208,7 @@ export async function reopenRegistration(tournamentId: string): Promise<void> {
  * Cancels a competition with a required reason and notifies every registered
  * player. Entrants keep their records; the competition leaves the public list.
  */
-export async function cancelTournament(tournamentId: string, rawReason: string): Promise<void> {
+async function cancelTournamentWrite(tournamentId: string, rawReason: string): Promise<void> {
   const parsed = tournamentCancelReasonSchema.safeParse(rawReason);
 
   if (!parsed.success) {
@@ -267,7 +268,7 @@ export async function cancelTournament(tournamentId: string, rawReason: string):
  * Hard-deletes a never-published draft and releases its slug. Draft is the
  * only pre-publish status, so status `draft` is itself the proof.
  */
-export async function deleteTournamentDraft(tournamentId: string): Promise<void> {
+async function deleteTournamentDraftWrite(tournamentId: string): Promise<void> {
   const access = await requireTournamentOwnerOrSuperAdmin(tournamentId);
   const firestore = getFirebaseAdminFirestore();
   const reference = firestore.doc(paths.tournament(tournamentId));
@@ -309,3 +310,9 @@ export async function deleteTournamentDraft(tournamentId: string): Promise<void>
     after: null,
   });
 }
+
+export const publishTournament = withPublicInvalidation(publishTournamentWrite);
+export const closeRegistration = withPublicInvalidation(closeRegistrationWrite);
+export const reopenRegistration = withPublicInvalidation(reopenRegistrationWrite);
+export const cancelTournament = withPublicInvalidation(cancelTournamentWrite);
+export const deleteTournamentDraft = withPublicInvalidation(deleteTournamentDraftWrite);

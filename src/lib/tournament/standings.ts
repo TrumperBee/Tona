@@ -22,6 +22,7 @@ import {
 } from "firebase-admin/firestore";
 
 import { writeAuditLog } from "@/lib/audit/log";
+import { withPublicInvalidation } from "@/lib/cache/public-data";
 import { requireTournamentOwnerOrSuperAdmin } from "@/lib/auth/guards";
 import {
   computeStandings,
@@ -583,7 +584,7 @@ export async function getOrganiserStandings(tournamentId: string): Promise<Stand
  * Rebuilds every standing document from scratch and records the repair in the
  * audit log. This is the only manual trigger; it never accepts table values.
  */
-export async function recalculateStandings(tournamentId: string): Promise<{
+async function recalculateStandingsWrite(tournamentId: string): Promise<{
   readonly players: number;
   readonly completedMatches: number;
   readonly profile: TiebreakerProfile;
@@ -623,6 +624,8 @@ export async function recalculateStandings(tournamentId: string): Promise<{
 
   return summary;
 }
+
+export const recalculateStandings = withPublicInvalidation(recalculateStandingsWrite);
 
 const VERIFIED_FIELDS = [
   "tournamentId",

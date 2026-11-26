@@ -10,6 +10,7 @@ import "server-only";
 import { Timestamp } from "firebase-admin/firestore";
 
 import { writeAuditLog } from "@/lib/audit/log";
+import { cachePublicData, withPublicInvalidation } from "@/lib/cache/public-data";
 import type { SessionUser } from "@/lib/auth/session";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
@@ -78,7 +79,7 @@ function toView(uid: string, data: Record<string, unknown>): OrganiserProfileVie
  * Never throws: a missing or unreadable profile degrades to an honest empty
  * state on public pages.
  */
-export async function getOrganiserProfile(uid: string): Promise<OrganiserProfileView | null> {
+async function getOrganiserProfileUncached(uid: string): Promise<OrganiserProfileView | null> {
   if (uid.trim().length === 0) {
     return null;
   }
@@ -91,6 +92,10 @@ export async function getOrganiserProfile(uid: string): Promise<OrganiserProfile
     return null;
   }
 }
+
+export const getOrganiserProfile = cachePublicData(getOrganiserProfileUncached, [
+  "public-organiser-profile",
+]);
 
 /**
  * Resolves the initial organisation name for a first-time organiser: the
@@ -151,7 +156,7 @@ async function resolveInitialOrganisationName(uid: string): Promise<string | nul
  * `prefill` lets the approval path pass the application's community name
  * directly instead of re-querying for it.
  */
-export async function ensureOrganiserProfile(
+async function ensureOrganiserProfileWrite(
   uid: string,
   prefill?: { readonly organisationName: string },
 ): Promise<OrganiserProfileView | null> {
@@ -194,7 +199,7 @@ export async function ensureOrganiserProfile(
  * Applies a strict, partial profile edit. `undefined` fields keep their current
  * value, `null` clears them, and the first save creates the document.
  */
-export async function updateOrganiserProfile(
+async function updateOrganiserProfileWrite(
   uid: string,
   input: OrganiserProfileEditInput,
 ): Promise<OrganiserProfileView> {
@@ -236,11 +241,14 @@ export interface OrganiserLogoReference {
   readonly publicId: string;
 }
 
-/** Writes the server-built logo URL and public id onto the profile. */
-export async function storeOrganiserLogoReference(
+/**
+ * Writes the server-built logo URL and public id onto the profile. Returns the
+ * previous public id so a legacy asset with a different id can be removed.
+ */
+async function storeOrganiserLogoReferenceWrite(
   uid: string,
   logo: OrganiserLogoReference,
-): Promise<void> {
+): Promise<string | null> {
   const firestore = getFirebaseAdminFirestore();
   const reference = firestore.doc(paths.organiserProfile(uid));
   const snapshot = await reference.get();
@@ -252,14 +260,18 @@ export async function storeOrganiserLogoReference(
     );
   }
 
+  const previousPublicId = toView(uid, snapshot.data() as Record<string, unknown>).logoPublicId;
+
   await reference.set(
     { logoUrl: logo.url, logoPublicId: logo.publicId, updatedAt: Timestamp.now() },
     { merge: true },
   );
+
+  return previousPublicId;
 }
 
 /** Clears the logo reference and returns the old public id, if any. */
-export async function clearOrganiserLogoReference(uid: string): Promise<string | null> {
+async function clearOrganiserLogoReferenceWrite(uid: string): Promise<string | null> {
   const firestore = getFirebaseAdminFirestore();
   const reference = firestore.doc(paths.organiserProfile(uid));
   const snapshot = await reference.get();
@@ -288,3 +300,8 @@ export async function auditOrganiserProfileUpdate(actor: SessionUser): Promise<v
     tournamentId: null,
   });
 }
+
+export const ensureOrganiserProfile = withPublicInvalidation(ensureOrganiserProfileWrite);
+export const updateOrganiserProfile = withPublicInvalidation(updateOrganiserProfileWrite);
+export const storeOrganiserLogoReference = withPublicInvalidation(storeOrganiserLogoReferenceWrite);
+export const clearOrganiserLogoReference = withPublicInvalidation(clearOrganiserLogoReferenceWrite);

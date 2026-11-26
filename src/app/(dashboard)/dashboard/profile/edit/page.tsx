@@ -2,6 +2,7 @@
 import { UserRound } from "lucide-react";
 import Link from "next/link";
 
+import { DeleteAccountPanel } from "@/components/profile/delete-account-panel";
 import { ProfileForm } from "@/components/profile/profile-form";
 import { PageHeader } from "@/components/shared/page-header";
 import { buttonStyles } from "@/components/ui/button-styles";
@@ -59,6 +60,8 @@ export default async function EditProfilePage() {
           platform: privateProfile.platform,
         }}
       />
+
+      <DeleteAccountPanel gamerTag={privateProfile.gamerTag} />
     </div>
   );
 }

@@ -57,6 +57,9 @@ const serverEnvSchema = z.object({
   // Daily hard limit and the monthly reference used for the 80% warning.
   EMAIL_DAILY_LIMIT: z.coerce.number().int().min(1).max(100000).default(100),
   EMAIL_MONTHLY_LIMIT: z.coerce.number().int().min(1).max(1000000).default(3000),
+  // Cloudflare Turnstile secret. Optional so the app still boots; production
+  // rejects protected form submissions when it is missing (fail closed).
+  TURNSTILE_SECRET_KEY: z.preprocess(blankToUndefined, z.string().trim().min(1).optional()),
 });
 
 const serverOnlySchemaKeys = [
@@ -75,6 +78,7 @@ const serverOnlySchemaKeys = [
   "EMAIL_UNSUBSCRIBE_SECRET",
   "EMAIL_DAILY_LIMIT",
   "EMAIL_MONTHLY_LIMIT",
+  "TURNSTILE_SECRET_KEY",
 ] as const;
 
 export type ServerEnv = PublicEnv & z.infer<typeof serverEnvSchema>;
@@ -107,6 +111,7 @@ export function getServerEnv(): ServerEnv {
     EMAIL_UNSUBSCRIBE_SECRET: process.env.EMAIL_UNSUBSCRIBE_SECRET,
     EMAIL_DAILY_LIMIT: process.env.EMAIL_DAILY_LIMIT,
     EMAIL_MONTHLY_LIMIT: process.env.EMAIL_MONTHLY_LIMIT,
+    TURNSTILE_SECRET_KEY: process.env.TURNSTILE_SECRET_KEY,
   });
 
   if (!parsed.success) {
