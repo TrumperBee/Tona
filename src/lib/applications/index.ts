@@ -15,7 +15,7 @@ import { getServerEnv } from "@/lib/config/env.server";
 import { getFirebaseAdminAuth, getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 import { ensureOrganiserProfile } from "@/lib/organiser/profile";
-import { createNotification } from "@/lib/notifications";
+import { notify } from "@/lib/notifications/service";
 import { getPlatformSettings } from "@/lib/platform/settings";
 import type { AdminApplicationSubmitInput } from "@/lib/validation/admin-application";
 import type {
@@ -303,11 +303,16 @@ async function notifySuperAdminOfSubmission(
   }
 
   try {
-    await createNotification(uid, {
-      type: "application",
+    await notify({
+      recipients: uid,
+      type: "admin_new_application",
       title: "New organiser application",
       body: `@${gamerTag} applied to organise ${communityName}.`,
       link: `/super-admin/applications/${id}`,
+      email: {
+        bullets: [`Applicant: @${gamerTag}`, `Community: ${communityName}`],
+        buttonLabel: "Review the application",
+      },
     });
   } catch {
     // The application is already saved. A notification failure must not make
@@ -636,13 +641,23 @@ export async function approveApplication(
     organisationName: initial.communityName,
   }).catch(() => null);
 
-  await createNotification(initial.uid, {
-    type: "application",
+  await notify({
+    recipients: initial.uid,
+    type: "organiser_approved",
     title: "Organiser application approved",
     body: note
       ? `The Super Admin approved your application: ${note}`
       : "You can now create and run competitions. Sign in again to activate your organiser workspace.",
     link: "/dashboard/apply-admin",
+    email: {
+      paragraphs: [
+        note
+          ? `The Super Admin approved your application: ${note}`
+          : "The Super Admin approved your organiser application.",
+        "Sign in again to activate your organiser workspace, then create your first competition.",
+      ],
+      buttonLabel: "Open your dashboard",
+    },
   });
 
   return { uid: initial.uid, alreadyReviewed: false };
@@ -729,11 +744,19 @@ export async function rejectApplication(
     reason: note,
   });
 
-  await createNotification(initial.uid, {
-    type: "application",
+  await notify({
+    recipients: initial.uid,
+    type: "organiser_rejected",
     title: "Organiser application not approved",
     body: note,
     link: "/dashboard/apply-admin",
+    email: {
+      paragraphs: [
+        `The Super Admin reviewed your organiser application and it was not approved: ${note}`,
+        "You can apply again after the cooldown period shown on the application page.",
+      ],
+      buttonLabel: "Open your dashboard",
+    },
   });
 
   return { uid: initial.uid, alreadyReviewed: false };

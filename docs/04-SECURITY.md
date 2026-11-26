@@ -411,6 +411,53 @@ contact details.
   `guardSuperAdminMutation()` and are audited; transferring ownership updates
   the document and the audit trail, never the registrations.
 
+### 2.16 Email delivery, bounces and unsubscribe abuse
+
+**Threat:** the platform is used to send unsolicited mail, a bug drains the
+Resend quota, a forged webhook or unsubscribe token changes an account, a link
+scanner unsubscribes a user, an address is written to logs, or a stolen session
+quietly moves an account to another address.
+
+**Controls:**
+
+- `notify()` is the only feature-facing entry point. It always writes the in-app
+  notification and defers email through `after()`, so a mail failure can never
+  undo the action that triggered it. The typed registry in
+  `src/lib/notifications/types.ts` decides whether a kind may email: critical
+  kinds ignore preferences, important kinds follow `notificationPrefs.important`
+  and optional kinds follow their stream flag.
+- Resend is called with `fetch` only (no SDK). A batch request is capped at 100
+  messages, every request has a timeout, a single 429 is retried after a delay,
+  and failures are returned rather than thrown.
+- The daily and monthly counters are reserved in a Firestore transaction before
+  the network call. Normal mail stops at 80% of the daily limit; critical mail
+  may use the remainder; the monthly limit is also a hard send cap. A failed
+  send releases its reservation. In-app notifications are written regardless.
+- `emailSuppressions` stores only the SHA-256 of a lowercased address. A
+  permanent bounce or complaint suppresses it and sets
+  `users/{uid}.emailDeliverable = false`; the dashboard shows a banner and the
+  notification settings page explains the fix. A transient bounce is ignored.
+- The Resend webhook verifies the Svix HMAC in constant time and rejects a
+  timestamp outside a five-minute window, so a captured request cannot be
+  replayed. An unsigned or forged request returns 401 and writes nothing.
+- Unsubscribe tokens are HMAC-SHA256 over `{uid, category, expiry}`, expire after
+  60 days and are compared in constant time. A GET only renders a confirmation;
+  the preference changes on POST from the confirmation button, which stops link
+  scanners and prefetchers. The route is same-origin checked and rate limited.
+  Non-critical delivery fails closed when `EMAIL_UNSUBSCRIBE_SECRET` is missing;
+  critical mail does not need a token.
+- Addresses are shown masked (`a***@example.com`) in settings and never written
+  to failure logs. Failure records keep only the kind, a short reason and the
+  HTTP status. The `/dev/email-preview` route returns 404 in production.
+- Changing email requires a sign-in from the last ten minutes, a same-origin
+  request and at most three attempts a day. The server rejects an address already
+  in use, updates Firebase Auth and the private mirror, revokes every session,
+  clears any suppression for the new address, audits the change and emails the
+  old address. The pinned Super Admin account is refused with a clear message.
+- Platform announcement email is behind a Super Admin switch and a monthly
+  quota pre-check. One broadcast is capped at 900 opted-in active recipients and
+  writes one in-app record per recipient.
+
 ## 3. Authentication and sessions
 
 - Firebase Authentication owns password hashing and credential verification.
@@ -518,6 +565,12 @@ contact details.
   `SESSION_COOKIE_MAX_AGE_DAYS`, `CLOUDINARY_CLOUD_NAME`,
   `CLOUDINARY_API_KEY` and `CLOUDINARY_API_SECRET` are server-only and validated
   by `src/lib/config/env.server.ts`.
+- `RESEND_API_KEY`, `RESEND_FROM`, `RESEND_WEBHOOK_SECRET`,
+  `EMAIL_UNSUBSCRIBE_SECRET`, `EMAIL_DAILY_LIMIT` (default 100) and
+  `EMAIL_MONTHLY_LIMIT` (default 3000) are server-only for the same reason. A
+  missing Resend key disables real sending while in-app notifications continue;
+  a missing unsubscribe secret disables non-critical email rather than sending a
+  link that cannot be honoured.
 - The private key keeps escaped `\n` sequences and is normalised only in server
   memory.
 - `.env.local` is git-ignored; `.env.example` contains no real values.
@@ -540,6 +593,10 @@ contact details.
 - Platform-settings input is strict: boolean flags, maintenance message ≤ 300
   characters (required when maintenance is on), 1–20 active tournaments, 0–90
   cooldown days and a 5–300 character reason.
+- Email payloads are strict: a preference update names exactly the three boolean
+  streams, the unsubscribe body carries only a token, and an email change carries
+  only an address (trimmed, lowercased, ≤ 254 characters). The Super Admin test
+  email has no body at all.
 - Announcement input is strict: title ≤ 100, body ≤ 2000 plain text, severity
   `info` or `important`, optional expiry, and an explicit publish decision.
 - Tournament input is strict: name 3–80, season 2–40, description 1–1000,
@@ -589,7 +646,9 @@ contact details.
   settings saves, contact reveal and analytics refresh, admin result entry
   (30 per minute), bulk entry (10 per minute), corrections and clears (20 per
   minute each), result-report creation (5 per minute) and resolution (30 per
-  minute).
+  minute), unsubscribe (10 per minute per IP), notification preferences
+  (20 per 10 minutes), email change (3 per day) and the Super Admin test email
+  (5 per hour).
 - Limitations: fixed windows allow boundary bursts; transactions add latency;
   counter documents need eventual cleanup; keys must be scoped carefully.
 - Rate limiting is abuse control, not a WAF or a replacement for Firebase Auth
@@ -603,7 +662,8 @@ contact details.
   draws/shuffles, fixture generation, fixture publication, reset and matchday
   window changes, admin result entry/correction/clearing, result-report creation
   and decisions, WhatsApp contact link issuance (player and organiser), platform
-  settings updates, contact reveals and announcement
+  settings updates, contact reveals, email address changes, the announcement
+  email switch, Super Admin test email and announcement
   transitions.
 - Each entry records actor UID, actor role, action, target type/id, optional
   tournament id, before/after values, reason and server timestamp.

@@ -15,7 +15,7 @@ import type { SessionUser } from "@/lib/auth/session";
 import type { GameId } from "@/lib/config/games";
 import { getFirebaseAdminAuth, getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
-import { createNotifications } from "@/lib/notifications";
+import { notify } from "@/lib/notifications/service";
 import { parsePageSize } from "@/lib/super-admin/query";
 import { TournamentMutationError } from "@/lib/tournament/errors";
 import { reasonSchema } from "@/lib/validation/super-admin";
@@ -137,12 +137,6 @@ function parseReason(raw: unknown): string {
   return parsed.data;
 }
 
-async function notify(uid: string, title: string, body: string, link: string): Promise<void> {
-  await createNotifications([uid], { type: "tournament", title, body, link }).catch(
-    () => undefined,
-  );
-}
-
 /**
  * Suspends a competition. Only live stages can be suspended — completed,
  * archived and cancelled competitions are terminal and a suspended competition
@@ -205,12 +199,20 @@ export async function suspendTournament(
     reason,
   });
 
-  await notify(
-    result.tournament.ownerUid,
-    `${result.tournament.name} was suspended`,
-    `The platform suspended this competition pending review: ${reason}`,
-    `/organiser/tournaments/${tournamentId}`,
-  );
+  await notify({
+    recipients: result.tournament.ownerUid,
+    type: "tournament_suspended",
+    title: `${result.tournament.name} was suspended`,
+    body: `The platform suspended this competition pending review: ${reason}`,
+    link: `/organiser/tournaments/${tournamentId}`,
+    email: {
+      paragraphs: [
+        `${result.tournament.name} was suspended by the platform pending review.`,
+        `Reason: ${reason}`,
+      ],
+      buttonLabel: "Open the organiser console",
+    },
+  }).catch(() => undefined);
 }
 
 /** Restores a suspended competition to the exact stage it was suspended from. */
@@ -269,12 +271,20 @@ export async function unsuspendTournament(
     reason,
   });
 
-  await notify(
-    result.tournament.ownerUid,
-    `${result.tournament.name} was restored`,
-    `The platform restored this competition to its previous stage: ${reason}`,
-    `/organiser/tournaments/${tournamentId}`,
-  );
+  await notify({
+    recipients: result.tournament.ownerUid,
+    type: "tournament_restored",
+    title: `${result.tournament.name} was restored`,
+    body: `The platform restored this competition to its previous stage: ${reason}`,
+    link: `/organiser/tournaments/${tournamentId}`,
+    email: {
+      paragraphs: [
+        `${result.tournament.name} was restored to its previous stage.`,
+        `Reason: ${reason}`,
+      ],
+      buttonLabel: "Open the organiser console",
+    },
+  }).catch(() => undefined);
 }
 
 /**
@@ -367,11 +377,20 @@ export async function transferTournamentOwnership(
     reason,
   });
 
-  await createNotifications([result.tournament.ownerUid, newOwnerUid], {
-    type: "tournament",
+  await notify({
+    recipients: [result.tournament.ownerUid, newOwnerUid],
+    type: "tournament_ownership_changed",
     title: `Ownership of ${result.tournament.name} changed`,
     body: `The platform transferred this competition to a new organiser: ${reason}`,
     link: `/organiser/tournaments/${tournamentId}`,
+    email: {
+      paragraphs: [
+        `The platform transferred ${result.tournament.name} to a new organiser.`,
+        `Reason: ${reason}`,
+        "If you are the new owner, open the organiser console to manage it.",
+      ],
+      buttonLabel: "Open the organiser console",
+    },
   }).catch(() => undefined);
 }
 

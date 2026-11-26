@@ -27,7 +27,7 @@ import {
 } from "@/lib/engine";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
-import { createNotifications } from "@/lib/notifications";
+import { notify } from "@/lib/notifications/service";
 import { TournamentMutationError } from "@/lib/tournament/errors";
 import {
   buildStandingsPlan,
@@ -965,6 +965,24 @@ export async function publishFixtures(
       ...readSnapshotMap(drawSnapshot.data()?.playersSnapshot),
     };
     const playerIds = Object.values(draw.pots).flat();
+    const fixturesByPlayer: Record<string, string[]> = {};
+
+    for (const fixture of draft.fixtures) {
+      const homeTag = snapshots[fixture.homeUid]?.gamerTag ?? fixture.homeTag;
+      const awayTag = snapshots[fixture.awayUid]?.gamerTag ?? fixture.awayTag;
+      const line = `Matchday ${fixture.matchday}: vs @${awayTag}`;
+      const reverse = `Matchday ${fixture.matchday}: vs @${homeTag}`;
+      (fixturesByPlayer[fixture.homeUid] ??= []).push(line);
+      (fixturesByPlayer[fixture.awayUid] ??= []).push(reverse);
+    }
+
+    for (const fixtures of Object.values(fixturesByPlayer)) {
+      fixtures.sort((left, right) => {
+        const a = Number(left.match(/^Matchday (\d+)/)?.[1] ?? 0);
+        const b = Number(right.match(/^Matchday (\d+)/)?.[1] ?? 0);
+        return a - b;
+      });
+    }
 
     for (const fixture of draft.fixtures) {
       const window = windowByMatchday.get(fixture.matchday);
@@ -1023,6 +1041,7 @@ export async function publishFixtures(
       slug: tournament.slug,
       name: tournament.name,
       playerIds,
+      fixturesByPlayer,
     };
   });
 
@@ -1048,13 +1067,26 @@ export async function publishFixtures(
     },
   });
 
-  // Small chunks keep each notification batch far below the 500-operation cap.
-  for (let index = 0; index < result.playerIds.length; index += 18) {
-    await createNotifications(result.playerIds.slice(index, index + 18), {
-      type: "fixture",
-      title: "Fixtures are published",
+  // One email per player listing all eight of their fixtures. Each call writes
+  // one in-app row and sends a single-recipient message.
+  for (const uid of result.playerIds) {
+    const bullets = result.fixturesByPlayer[uid] ?? [];
+
+    await notify({
+      recipients: uid,
+      type: "fixtures_published",
+      title: "Your fixtures are published",
       body: `The eight-matchday league phase for ${result.name} is now available. Check your first match.`,
       link: `/tournaments/${result.slug}`,
+      email: {
+        heading: `Your fixtures - ${result.name}`,
+        paragraphs: [
+          `The eight-matchday league phase for ${result.name} is now available.`,
+          "Your first match is listed below. Contact your opponent from the match page to agree a time.",
+        ],
+        bullets,
+        buttonLabel: "View your fixtures",
+      },
     }).catch(() => undefined);
   }
 

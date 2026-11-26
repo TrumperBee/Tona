@@ -76,6 +76,8 @@ async function seed(): Promise<void> {
         platform: "android",
         photoUrl: null,
         status: "active",
+        notificationPrefs: { important: true, resultEmails: false, announcementEmails: false },
+        emailDeliverable: true,
         createdAt: now,
         updatedAt: now,
       }),
@@ -558,6 +560,22 @@ async function seed(): Promise<void> {
         expiresAt: 1,
         updatedAt: 0,
       }),
+      setDoc(doc(db, "emailUsage/20261117"), {
+        sent: 4,
+        skipped: 0,
+        failed: 0,
+        updatedAt: now,
+      }),
+      setDoc(doc(db, "emailSuppressions/bounced-hash"), {
+        reason: "bounced",
+        createdAt: now,
+      }),
+      setDoc(doc(db, "emailFailures/f1"), {
+        kind: "welcome",
+        reason: "resend_500",
+        status: 500,
+        createdAt: now,
+      }),
       setDoc(doc(db, "contactEvents/evt1"), {
         tournamentId: "public",
         matchId: "m1",
@@ -609,6 +627,9 @@ describe("private collections", () => {
       "contactEvents/evt1",
       "adminApplications/app1",
       "applicationState/alice",
+      "emailUsage/20261117",
+      "emailSuppressions/bounced-hash",
+      "emailFailures/f1",
     ]) {
       await assertFails(getDoc(doc(db, path)));
     }
@@ -923,6 +944,34 @@ describe("audit and platform operations", () => {
   });
 });
 
+describe("email delivery internals", () => {
+  it("keeps usage counters, suppression hashes and failure logs server-only", async () => {
+    const pathsToCheck = [
+      "emailUsage/20261117",
+      "emailSuppressions/bounced-hash",
+      "emailFailures/f1",
+    ];
+
+    for (const db of [
+      anonymous(),
+      user("alice"),
+      user("organiser-a", "organiser"),
+      user("root", "super_admin"),
+    ]) {
+      for (const path of pathsToCheck) {
+        await assertFails(getDoc(doc(db, path)));
+      }
+    }
+  });
+
+  it("lets the owner read notification preferences but not another account's", async () => {
+    await assertSucceeds(getDoc(doc(user("alice"), "users/alice")));
+    await assertFails(getDoc(doc(user("bob"), "users/alice")));
+    await assertSucceeds(getDoc(doc(user("root", "super_admin"), "users/alice")));
+    await assertFails(getDoc(doc(anonymous(), "users/alice")));
+  });
+});
+
 describe("client writes", () => {
   it("denies every client write for users, organisers and Super Admins", async () => {
     const writePaths = [
@@ -958,6 +1007,9 @@ describe("client writes", () => {
       "contactEvents/evt1",
       "platformStats/summary",
       "platformSettings/main",
+      "emailUsage/20261117",
+      "emailSuppressions/bounced-hash",
+      "emailFailures/f1",
     ];
 
     for (const db of [

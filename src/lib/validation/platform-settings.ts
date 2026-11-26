@@ -25,6 +25,7 @@ export const platformSettingsSchema = z
       .int("Use a whole number.")
       .min(0, "The cooldown cannot be negative.")
       .max(90, "The cooldown cannot exceed 90 days."),
+    emailAnnouncements: z.boolean().optional(),
     reason: z
       .string()
       .trim()

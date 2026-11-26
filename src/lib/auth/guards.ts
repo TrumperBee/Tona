@@ -120,6 +120,51 @@ export async function requireUser(): Promise<SessionUser> {
   return user;
 }
 
+/** How recently the user must have signed in for sensitive account changes. */
+export const FRESH_SIGN_IN_MAX_AGE_SECONDS = 10 * 60;
+
+/**
+ * Requires a session whose Firebase sign-in happened within `maxAgeSeconds`.
+ * A long-lived cookie alone is not enough for an email change, so a stolen
+ * session cannot quietly move an account to another address.
+ */
+export async function requireFreshSession(
+  maxAgeSeconds = FRESH_SIGN_IN_MAX_AGE_SECONDS,
+): Promise<SessionUser> {
+  const user = await requireUser();
+  let cookieValue: string | undefined;
+
+  try {
+    const cookieStore = await cookies();
+    cookieValue = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  } catch {
+    throw new AuthenticationError("Sign in again to change your email address.");
+  }
+
+  if (!cookieValue) {
+    throw new AuthenticationError("Sign in again to change your email address.");
+  }
+
+  let authTime = 0;
+
+  try {
+    const decoded = await getFirebaseAdminAuth().verifySessionCookie(cookieValue, true);
+    authTime = typeof decoded.auth_time === "number" ? decoded.auth_time : 0;
+  } catch {
+    throw new AuthenticationError("Sign in again to change your email address.");
+  }
+
+  const ageSeconds = Date.now() / 1000 - authTime;
+
+  if (authTime === 0 || ageSeconds > maxAgeSeconds) {
+    throw new AuthenticationError(
+      "For your security, sign in again before changing your email address.",
+    );
+  }
+
+  return user;
+}
+
 /**
  * Requires the user's role to grant at least the requested role.
  * The hierarchy is user < organiser < super_admin.

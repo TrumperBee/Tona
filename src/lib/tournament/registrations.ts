@@ -16,7 +16,7 @@ import type { SessionUser } from "@/lib/auth/session";
 import type { PlatformId } from "@/lib/config/games";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
-import { createNotification } from "@/lib/notifications";
+import { notify } from "@/lib/notifications/service";
 import { assertPlatformWritable } from "@/lib/platform/settings";
 import { TournamentMutationError } from "@/lib/tournament/errors";
 import { getRegistrationState, isFieldFull } from "@/lib/tournament/registration-state";
@@ -226,11 +226,20 @@ export async function registerPlayerForUser(
     after: { gamerTag: player.gamerTag, platform: player.platform, country: player.country },
   });
 
-  await createNotification(user.userId, {
-    type: "tournament",
+  await notify({
+    recipients: user.userId,
+    type: "registration_confirmed",
     title: "Entry confirmed",
     body: `Your entry into ${outcome.tournament.name} is confirmed. Good luck!`,
     link: `/tournaments/${outcome.tournament.slug}`,
+    email: {
+      paragraphs: [
+        `Your entry into ${outcome.tournament.name} is confirmed.`,
+        "We will email you when the draw is complete and your fixtures are published.",
+      ],
+      bullets: [`Game: ${outcome.tournament.gameId}`, `Season: ${outcome.tournament.season}`],
+      buttonLabel: "View the tournament",
+    },
   }).catch(() => undefined);
 
   if (
@@ -239,11 +248,19 @@ export async function registerPlayerForUser(
       maxParticipants: outcome.tournament.maxParticipants,
     })
   ) {
-    await createNotification(outcome.tournament.ownerUid, {
-      type: "tournament",
+    await notify({
+      recipients: outcome.tournament.ownerUid,
+      type: "field_full",
       title: "The field is full",
       body: `${outcome.tournament.name} has reached ${outcome.tournament.maxParticipants} / ${outcome.tournament.maxParticipants} registered players.`,
       link: `/organiser/tournaments/${tournamentId}/registrations`,
+      email: {
+        paragraphs: [
+          `${outcome.tournament.name} has reached its full field of ${outcome.tournament.maxParticipants} players.`,
+          "Close registration or prepare the draw when you are ready.",
+        ],
+        buttonLabel: "View registrations",
+      },
     }).catch(() => undefined);
   }
 }
@@ -331,11 +348,16 @@ export async function withdrawPlayer(tournamentId: string): Promise<void> {
     after: { status: "withdrawn" },
   });
 
-  await createNotification(user.userId, {
-    type: "tournament",
+  await notify({
+    recipients: user.userId,
+    type: "registration_withdrawn",
     title: "Entry withdrawn",
     body: `Your entry into ${tournament.name} was withdrawn.`,
     link: `/tournaments/${tournament.slug}`,
+    email: {
+      paragraphs: [`Your entry into ${tournament.name} was withdrawn.`],
+      buttonLabel: "View the tournament",
+    },
   }).catch(() => undefined);
 }
 
@@ -432,11 +454,16 @@ export async function removePlayer(
     reason,
   });
 
-  await createNotification(uid, {
-    type: "tournament",
+  await notify({
+    recipients: uid,
+    type: "registration_removed",
     title: `Removed from ${player.name}`,
     body: `The organiser removed your entry: ${reason}`,
     link: "/dashboard",
+    email: {
+      paragraphs: [`The organiser removed your entry from ${player.name}.`, `Reason: ${reason}`],
+      buttonLabel: "Open your dashboard",
+    },
   }).catch(() => undefined);
 }
 
@@ -524,10 +551,18 @@ export async function addPlayer(tournamentId: string, uid: string): Promise<void
     after: { gamerTag: player.gamerTag, platform: player.platform, country: player.country },
   });
 
-  await createNotification(uid, {
-    type: "tournament",
+  await notify({
+    recipients: uid,
+    type: "registration_confirmed",
     title: "Added to a tournament",
     body: `The organiser entered you into ${tournament.name}. Good luck!`,
     link: `/tournaments/${tournament.slug}`,
+    email: {
+      paragraphs: [
+        `The organiser entered you into ${tournament.name}.`,
+        "Your place is confirmed. We will email you when the draw is complete.",
+      ],
+      buttonLabel: "View the tournament",
+    },
   }).catch(() => undefined);
 }

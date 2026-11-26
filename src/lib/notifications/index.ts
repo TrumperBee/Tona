@@ -23,6 +23,7 @@ export const FIRESTORE_BATCH_LIMIT = 500;
 
 export interface CreateNotificationInput {
   readonly type: NotificationType;
+  readonly kind?: string | null;
   readonly title: string;
   readonly body: string;
   readonly link?: string | null;
@@ -31,6 +32,7 @@ export interface CreateNotificationInput {
 function normaliseContent(input: CreateNotificationInput) {
   return {
     type: input.type,
+    kind: input.kind ?? null,
     title: input.title.trim().slice(0, 120),
     body: input.body.trim().slice(0, 1000),
     link: input.link ? safeRedirectPath(input.link) : null,
@@ -96,6 +98,7 @@ function toRow(document: DocumentSnapshot): NotificationRow {
   return {
     id: document.id,
     type: data.type,
+    kind: data.kind ?? null,
     title: data.title,
     body: data.body,
     link: data.link ?? null,

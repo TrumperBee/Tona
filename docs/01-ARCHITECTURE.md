@@ -142,20 +142,21 @@ No component writes data. Read hooks are added later.
 
 ### `src/lib/`
 
-| Folder           | Responsibility                                            |
-| ---------------- | --------------------------------------------------------- |
-| `engine/`        | Pure competition logic — no framework, no I/O             |
-| `firebase/`      | Browser SDK, Admin SDK, collection path constants         |
-| `auth/`          | Roles, session cookie, guards, role/status administration |
-| `validation/`    | Zod schemas                                               |
-| `whatsapp/`      | E.164 helpers, templates, click-to-chat links             |
-| `contact/`       | Opponent/organiser contact rules, message builder         |
-| `graphics/`      | PNG export helpers                                        |
-| `audit/`         | Audit log writer                                          |
-| `notifications/` | Notification domain                                       |
-| `rate-limit/`    | Rate limiting policies                                    |
-| `config/`        | Validated env, site identity, games, formats              |
-| `utils/`         | Small pure utilities (`cn`, `dates`, `slug`)              |
+| Folder           | Responsibility                                                            |
+| ---------------- | ------------------------------------------------------------------------- |
+| `engine/`        | Pure competition logic — no framework, no I/O                             |
+| `firebase/`      | Browser SDK, Admin SDK, collection path constants                         |
+| `auth/`          | Roles, session cookie, guards, role/status administration                 |
+| `validation/`    | Zod schemas                                                               |
+| `whatsapp/`      | E.164 helpers, templates, click-to-chat links                             |
+| `contact/`       | Opponent/organiser contact rules, message builder                         |
+| `graphics/`      | PNG export helpers                                                        |
+| `audit/`         | Audit log writer                                                          |
+| `notifications/` | Notification domain, typed registry and the single `notify()` entry point |
+| `email/`         | Resend client, quota, templates, preferences, unsubscribe, webhooks       |
+| `rate-limit/`    | Rate limiting policies                                                    |
+| `config/`        | Validated env, site identity, games, formats                              |
+| `utils/`         | Small pure utilities (`cn`, `dates`, `slug`)                              |
 
 ### Other files and folders
 

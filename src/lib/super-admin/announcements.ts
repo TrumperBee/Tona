@@ -9,6 +9,7 @@ import { Timestamp } from "firebase-admin/firestore";
 
 import { writeAuditLog } from "@/lib/audit/log";
 import type { SessionUser } from "@/lib/auth/session";
+import { broadcastPlatformAnnouncement } from "@/lib/email/announcements";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 import type {
@@ -215,6 +216,12 @@ export async function createAnnouncement(
       targetId: reference.id,
       after: { published: true },
     });
+
+    await broadcastPlatformAnnouncement({
+      title: input.title,
+      body: input.body,
+      link: "/announcements",
+    });
   }
 
   return { id: reference.id };
@@ -292,6 +299,12 @@ export async function publishAnnouncement(actor: SessionUser, id: string): Promi
     targetId: id,
     before: { published: false },
     after: { published: true },
+  });
+
+  await broadcastPlatformAnnouncement({
+    title: before.title,
+    body: before.body,
+    link: "/announcements",
   });
 }
 

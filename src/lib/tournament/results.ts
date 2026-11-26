@@ -13,7 +13,7 @@ import { writeAuditLog } from "@/lib/audit/log";
 import { requireTournamentOwnerOrSuperAdmin } from "@/lib/auth/guards";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
-import { createNotification } from "@/lib/notifications";
+import { notify } from "@/lib/notifications/service";
 import {
   clearKnockoutMatchResult,
   correctKnockoutMatchResult,
@@ -279,27 +279,31 @@ interface MatchNotificationInput {
 
 function notifyMatchPlayers(input: MatchNotificationInput): Promise<void> {
   const link = `/tournaments/${input.tournament.slug}/matches/${input.match.id}`;
+  const base = {
+    type: "result_recorded" as const,
+    body: input.body,
+    link,
+    email: { paragraphs: [input.body], buttonLabel: "View the match" },
+  };
 
   return Promise.all([
-    createNotification(input.match.homeUid, {
-      type: "result",
+    notify({
+      ...base,
+      recipients: input.match.homeUid,
       title: input.title(
         input.match.awayTag,
         input.scores?.homeGoals ?? null,
         input.scores?.awayGoals ?? null,
       ),
-      body: input.body,
-      link,
     }),
-    createNotification(input.match.awayUid, {
-      type: "result",
+    notify({
+      ...base,
+      recipients: input.match.awayUid,
       title: input.title(
         input.match.homeTag,
         input.scores?.awayGoals ?? null,
         input.scores?.homeGoals ?? null,
       ),
-      body: input.body,
-      link,
     }),
   ])
     .then(() => undefined)

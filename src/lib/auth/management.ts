@@ -17,7 +17,7 @@ import {
 import { getServerEnv } from "@/lib/config/env.server";
 import { getFirebaseAdminAuth, getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
-import { createNotification } from "@/lib/notifications";
+import { notify } from "@/lib/notifications/service";
 import {
   isAccountStatus,
   isUserRole,
@@ -134,13 +134,23 @@ export async function setUserRole(
       });
 
       try {
-        await createNotification(targetUid, {
-          type: "application",
+        await notify({
+          recipients: targetUid,
+          type: "organiser_revoked",
           title: "Organiser permissions revoked",
           body: reason?.trim()
             ? `Your organiser role was revoked: ${reason.trim()}`
             : "Your organiser role was revoked by the Super Admin.",
           link: "/dashboard/apply-admin",
+          email: {
+            paragraphs: [
+              reason?.trim()
+                ? `Your organiser role was revoked: ${reason.trim()}`
+                : "Your organiser role was revoked by the Super Admin.",
+              "You can apply again once the review period has passed.",
+            ],
+            buttonLabel: "Open your dashboard",
+          },
         });
       } catch {
         // The role change is already complete; notification failure must not
@@ -235,6 +245,43 @@ export async function setAccountStatus(
     after: { status, disabled: status !== "active" },
     reason: reason ?? null,
   });
+
+  if (status !== beforeStatus) {
+    const kind =
+      status === "suspended"
+        ? "account_suspended"
+        : status === "banned"
+          ? "account_banned"
+          : "account_restored";
+    const title =
+      status === "suspended"
+        ? "Your account was suspended"
+        : status === "banned"
+          ? "Your account was banned"
+          : "Your account was restored";
+    const body =
+      status === "active"
+        ? "Your GCC account is active again. Sign in with your usual email address."
+        : reason?.trim()
+          ? `A Super Admin changed your account status: ${reason.trim()}`
+          : "A Super Admin changed your account status. Contact the platform team if you need help.";
+
+    try {
+      await notify({
+        recipients: targetUid,
+        type: kind,
+        title,
+        body,
+        link: status === "active" ? "/login" : "/contact",
+        email: {
+          paragraphs: [body, "This is a critical account email and cannot be turned off."],
+          buttonLabel: status === "active" ? "Sign in again" : "Contact the platform team",
+        },
+      });
+    } catch {
+      // The status change is already committed and audited.
+    }
+  }
 
   return { uid: targetUid, status };
 }

@@ -40,8 +40,8 @@
 
 | Path                                          | Contents                                                                                                                                                                                                                                                     | Read access                                                                 |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| `users/{uid}`                                 | Private profile: fullName, gamerTag, gamerTagLower, email, whatsappE164, country, preferredGame, platform, community, favouriteClub, photoUrl, avatarUrl, avatarPublicId, status, createdAt, updatedAt                                                       | Owner, Super Admin                                                          |
-| `users/{uid}/notifications/{id}`              | type, title, body, link, read, createdAt                                                                                                                                                                                                                     | Owner                                                                       |
+| `users/{uid}`                                 | Private profile: fullName, gamerTag, gamerTagLower, email, whatsappE164, country, preferredGame, platform, community, favouriteClub, photoUrl, avatarUrl, avatarPublicId, status, notificationPrefs, emailDeliverable, createdAt, updatedAt                  | Owner, Super Admin                                                          |
+| `users/{uid}/notifications/{id}`              | type, kind, title, body, link, read, createdAt                                                                                                                                                                                                               | Owner                                                                       |
 | `users/{uid}/memberships/{tournamentId}`      | tournamentId, slug, name, gameId, status, registeredAt                                                                                                                                                                                                       | Owner                                                                       |
 | `publicProfiles/{uid}`                        | gamerTag, gamerTagLower, country, preferredGame, platform, community, favouriteClub, photoUrl, avatarUrl, avatarPublicId, status, typed stats                                                                                                                | Anyone                                                                      |
 | `publicProfiles/{uid}/history/{tournamentId}` | tournamentName, slug, season, gameId, finalPosition, played, wins, draws, losses, goalsFor, goalsAgainst, wonTitle, completedAt                                                                                                                              | Anyone                                                                      |
@@ -63,8 +63,11 @@
 | `hallOfFame/{id}`                             | tournamentId, season, championUid/tag, finalistUid/tag, thirdPlace, stats                                                                                                                                                                                    | Anyone                                                                      |
 | `auditLogs/{id}`                              | actorUid, actorRole, action, targetType, targetId, tournamentId, before, after, reason, createdAt                                                                                                                                                            | Super Admin only                                                            |
 | `rateLimits/{key}`                            | key, count, windowStart, expiresAt, updatedAt                                                                                                                                                                                                                | Nobody (server only)                                                        |
+| `emailUsage/{yyyymmdd}` and `month-{yyyymm}`  | sent, skipped, failed, updatedAt — transactional daily and monthly send counters                                                                                                                                                                             | Nobody (server only)                                                        |
+| `emailSuppressions/{sha256}`                  | reason (`bounced`/`complained`), createdAt — SHA-256 of the lowercased address, never the address                                                                                                                                                            | Nobody (server only)                                                        |
+| `emailFailures/{id}`                          | kind, reason, status, createdAt — recent send failures without an address or a body                                                                                                                                                                          | Nobody (server only)                                                        |
 | `contactEvents/{id}`                          | tournamentId, matchId, fromUid, toUid, templateId, createdAt                                                                                                                                                                                                 | Super Admin only                                                            |
-| `platformSettings/main`                       | maintenanceMode, maintenanceMessage, registrationsOpen, maxActiveTournamentsPerOrganiser, applicationCooldownDays, updatedBy, updatedAt                                                                                                                      | Super Admin only (public fields served by a server helper)                  |
+| `platformSettings/main`                       | maintenanceMode, maintenanceMessage, registrationsOpen, maxActiveTournamentsPerOrganiser, applicationCooldownDays, emailAnnouncements, updatedBy, updatedAt                                                                                                  | Super Admin only (public fields served by a server helper)                  |
 | `platformStats/summary`                       | totalUsers, totalTournaments, totalMatches, activeTournaments plus Phase 5 analytics fields, updatedAt                                                                                                                                                       | Super Admin only                                                            |
 
 The canonical path builders are in `src/lib/firebase/paths.ts`. Server code must
@@ -433,9 +436,10 @@ publicly readable once the tournament is in a knockout/public status.
 ### 3.15 `users/{uid}/notifications/{id}` — notifications
 
 Fields: `type` (`system`, `tournament`, `fixture`, `result`, `result_report`,
-`announcement`, `application`), `title` (≤ 120), `body` (≤ 1000), `link`
-(sanitised same-origin relative path or null), `read`, `createdAt`. Only the
-owner can read them.
+`announcement`, `application`), `kind` (the typed registry entry, or null for an
+older document), `title` (≤ 120), `body` (≤ 1000), `link` (sanitised
+same-origin relative path or null), `read`, `createdAt`. Only the owner can read
+them.
 
 Implemented in Phase 6: `createNotification(uid, input)` writes one document,
 `createNotifications(uids, input)` batches the same message for many recipients
@@ -444,7 +448,17 @@ paginated owner inbox; `POST /api/notifications/read` marks up to 50 named ids
 or all unread notifications as read, owner-only. The header bell renders the
 five newest plus an exact unread count from a `count()` aggregation, computed
 per request only for signed-in users (React `cache()` deduplicates it within a
-render). Email delivery arrives in Phase 16.
+render).
+
+Phase 16 adds `notify()` in `src/lib/notifications/service.ts` as the single
+feature-facing entry point. It always writes the in-app document and then defers
+email delivery through `after()`. `src/lib/notifications/types.ts` declares every
+kind once with a category (`critical`, `important`, `optional`), a default and a
+batchable flag; the delivery module reads the same registry. The owner controls
+three streams on `/dashboard/notifications/settings`
+(`notificationPrefs.important`, `resultEmails`, `announcementEmails`). Critical
+mail cannot be disabled. `emailDeliverable` is set to false after a hard bounce
+or complaint and the dashboard shows a banner until the address is changed.
 
 ### 3.16 `hallOfFame/{id}` — permanent champions
 
@@ -521,15 +535,16 @@ a repair is idempotent. Public read, never deleted.
 
 The single settings document. Document id is always `main`.
 
-| Field                              | Type      | Notes                                                        |
-| ---------------------------------- | --------- | ------------------------------------------------------------ |
-| `maintenanceMode`                  | boolean   | When true, non-Super-Admin writes return 503                 |
-| `maintenanceMessage`               | string    | Max 300 characters; shown on the banner and in 503 responses |
-| `registrationsOpen`                | boolean   | Default `true`; when false, registration is rejected clearly |
-| `maxActiveTournamentsPerOrganiser` | number    | Integer 1–20, default 3                                      |
-| `applicationCooldownDays`          | number    | Integer 0–90, default 7                                      |
-| `updatedBy`                        | string    | UID of the acting Super Admin                                |
-| `updatedAt`                        | Timestamp | Server-written                                               |
+| Field                              | Type      | Notes                                                             |
+| ---------------------------------- | --------- | ----------------------------------------------------------------- |
+| `maintenanceMode`                  | boolean   | When true, non-Super-Admin writes return 503                      |
+| `maintenanceMessage`               | string    | Max 300 characters; shown on the banner and in 503 responses      |
+| `registrationsOpen`                | boolean   | Default `true`; when false, registration is rejected clearly      |
+| `maxActiveTournamentsPerOrganiser` | number    | Integer 1–20, default 3                                           |
+| `applicationCooldownDays`          | number    | Integer 0–90, default 7                                           |
+| `emailAnnouncements`               | boolean   | Default `false`; when true, publishing also emails opted-in users |
+| `updatedBy`                        | string    | UID of the acting Super Admin                                     |
+| `updatedAt`                        | Timestamp | Server-written                                                    |
 
 **Writer:** `PATCH /api/super-admin/settings` only, after the shared guard.
 **Readers:** Super Admin only by Security Rules. Public pages never read the
@@ -600,6 +615,40 @@ E.164 number; it is rate-limited to 30 per hour per user. The organiser route
 in `auditLogs` instead, because it is a different relationship.
 
 **Writer:** server only. **Readers:** Super Admin only.
+
+### 3.26 `emailUsage/{yyyymmdd}` and `emailUsage/month-{yyyymm}` — send counters
+
+Two documents per period: the UTC day (`20261117`) and the UTC month
+(`month-202611`). Fields: `sent`, `skipped`, `failed`, `updatedAt`. The counters
+are updated in one Firestore transaction **before** the network call, so two
+concurrent requests cannot both spend the last unit. Normal (important and
+optional) mail may use the first 80% of `EMAIL_DAILY_LIMIT`; critical mail may
+use the remainder. The monthly counter is both the Super Admin warning point
+(80%) and a hard cap. A failed send releases its reservation and increments
+`failed`.
+
+**Writer:** server only. **Readers:** nobody. The Super Admin console reads the
+counters through the Admin SDK.
+
+### 3.27 `emailSuppressions/{sha256}` — hard bounce and complaint list
+
+Document id is the SHA-256 hex digest of the trimmed, lowercased address, so the
+collection never contains a readable address. Fields: `reason` (`bounced` or
+`complained`) and `createdAt`. A permanent bounce or complaint suppresses the
+address permanently and also sets `users/{uid}.emailDeliverable = false` when
+the address belongs to an account. A transient bounce is ignored. Changing the
+account email clears the suppression for the new address and marks the account
+deliverable again.
+
+**Writer:** server only. **Readers:** nobody.
+
+### 3.28 `emailFailures/{id}` — recent send failures
+
+One document per failed send: `kind`, `reason` (short code), `status` (HTTP
+status or null) and `createdAt`. No address, subject or body is stored. The
+Super Admin email page lists the twenty newest failures.
+
+**Writer:** server only. **Readers:** nobody.
 
 ## 4. Relationships
 
@@ -705,9 +754,11 @@ Add an index only with the query that needs it. Deploy rules and indexes with
 - Private reads: `users` (owner/Super Admin), notifications and memberships
   (owner), `adminApplications` (applicant/Super Admin), `auditLogs`,
   `platformStats` and `platformSettings` (Super Admin).
-- `gamerTags`, `rateLimits`, `applicationState` and `tournamentSlugs` have no
-  client read at all. `contactEvents` is server-written and readable only by the
-  Super Admin.
+- `gamerTags`, `rateLimits`, `applicationState`, `tournamentSlugs`, `emailUsage`,
+  `emailSuppressions` and `emailFailures` have no client read at all.
+  `contactEvents` is server-written and readable only by the Super Admin.
+- `users` includes server-written `notificationPrefs` and `emailDeliverable`; the
+  owner reads them on their settings page but cannot write them from a client.
 - Tournaments and their subcollections are hidden while `draft`, `suspended` or
   `cancelled` (ADR-044). Memberships are owner-read only.
 - Fixture drafts are owner/Super Admin only.

@@ -189,6 +189,12 @@ export const superAdminNavigation: readonly NavigationItem[] = [
     icon: BarChart3,
   },
   {
+    href: "/super-admin/email",
+    label: "Email",
+    description: "Delivery health, quota and announcements",
+    icon: Mail,
+  },
+  {
     href: "/super-admin/audit-log",
     label: "Audit log",
     description: "Privileged action history",

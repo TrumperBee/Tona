@@ -9,6 +9,15 @@ import { z } from "zod";
 
 import { EnvironmentError, getPublicEnv, type PublicEnv } from "./env";
 
+/** Treats blank or whitespace-only values as unset. */
+function blankToUndefined(value: unknown): unknown {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  return value.trim().length > 0 ? value.trim() : undefined;
+}
+
 const serverEnvSchema = z.object({
   FIREBASE_ADMIN_PROJECT_ID: z.string().min(1),
   FIREBASE_ADMIN_CLIENT_EMAIL: z.email(),
@@ -39,6 +48,15 @@ const serverEnvSchema = z.object({
     (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
     z.string().trim().min(1).optional(),
   ),
+  // Resend and email delivery. Optional so the app still boots (and the in-app
+  // notification centre still works) when email has not been configured yet.
+  RESEND_API_KEY: z.preprocess(blankToUndefined, z.string().trim().min(1).optional()),
+  RESEND_FROM: z.preprocess(blankToUndefined, z.string().trim().min(3).optional()),
+  RESEND_WEBHOOK_SECRET: z.preprocess(blankToUndefined, z.string().trim().min(1).optional()),
+  EMAIL_UNSUBSCRIBE_SECRET: z.preprocess(blankToUndefined, z.string().trim().min(1).optional()),
+  // Daily hard limit and the monthly reference used for the 80% warning.
+  EMAIL_DAILY_LIMIT: z.coerce.number().int().min(1).max(100000).default(100),
+  EMAIL_MONTHLY_LIMIT: z.coerce.number().int().min(1).max(1000000).default(3000),
 });
 
 const serverOnlySchemaKeys = [
@@ -51,6 +69,12 @@ const serverOnlySchemaKeys = [
   "CLOUDINARY_CLOUD_NAME",
   "CLOUDINARY_API_KEY",
   "CLOUDINARY_API_SECRET",
+  "RESEND_API_KEY",
+  "RESEND_FROM",
+  "RESEND_WEBHOOK_SECRET",
+  "EMAIL_UNSUBSCRIBE_SECRET",
+  "EMAIL_DAILY_LIMIT",
+  "EMAIL_MONTHLY_LIMIT",
 ] as const;
 
 export type ServerEnv = PublicEnv & z.infer<typeof serverEnvSchema>;
@@ -77,6 +101,12 @@ export function getServerEnv(): ServerEnv {
     CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME,
     CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY,
     CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET,
+    RESEND_API_KEY: process.env.RESEND_API_KEY,
+    RESEND_FROM: process.env.RESEND_FROM,
+    RESEND_WEBHOOK_SECRET: process.env.RESEND_WEBHOOK_SECRET,
+    EMAIL_UNSUBSCRIBE_SECRET: process.env.EMAIL_UNSUBSCRIBE_SECRET,
+    EMAIL_DAILY_LIMIT: process.env.EMAIL_DAILY_LIMIT,
+    EMAIL_MONTHLY_LIMIT: process.env.EMAIL_MONTHLY_LIMIT,
   });
 
   if (!parsed.success) {

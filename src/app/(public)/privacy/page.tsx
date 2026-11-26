@@ -54,6 +54,12 @@ const sections: readonly LegalSection[] = [
             needed to serve pages, keep a session secure and protect the platform from abuse, such
             as request logs and an http-only session cookie.
           </li>
+          <li>
+            <strong className="text-grey-100">Email delivery data:</strong> your notification
+            preferences, whether your address is currently deliverable, and a one-way hash of an
+            address that must not be emailed after a hard bounce or spam complaint. The suppression
+            list never stores the readable address.
+          </li>
         </ul>
         <p>
           We do not run advertising trackers, sell personal data or collect payment details on this
@@ -111,6 +117,37 @@ const sections: readonly LegalSection[] = [
     ),
   },
   {
+    id: "email",
+    heading: "Email we send",
+    body: (
+      <>
+        <p>
+          We email you about your account and the competitions you enter. Critical email, such as an
+          approval decision, an account status change, a cancelled competition you entered or a
+          notice that your email address changed, is always sent and cannot be turned off.
+        </p>
+        <p>
+          Important competition email is on by default: a confirmed entry, a completed draw,
+          published fixtures, knockout qualification, the next knockout tie and tournament
+          completion. You can turn it off in notification settings. Optional email, such as
+          individual results and announcements, is off by default and only sent if you opt in.
+          Everything is also shown in your notification centre.
+        </p>
+        <p>
+          Every non-critical email carries a one-click unsubscribe link. Confirming an unsubscribe
+          changes only that stream and never affects critical account mail. You can re-enable any
+          stream from the notification settings page while signed in.
+        </p>
+        <p>
+          Resend delivers our email and reports bounces and spam complaints back to us. A hard
+          bounce or complaint pauses email to that address and shows a banner on your dashboard
+          until you change it. We do not use email for advertising and we do not sell or share your
+          address for marketing.
+        </p>
+      </>
+    ),
+  },
+  {
     id: "cookies",
     heading: "Cookies and sessions",
     body: (
@@ -133,8 +170,9 @@ const sections: readonly LegalSection[] = [
       <>
         <p>
           Firebase (a Google service) provides authentication and the database that stores accounts
-          and competition records. Our hosting provider serves the site. These providers process
-          data on our instructions and under their own security and data protection commitments.
+          and competition records. Our hosting provider serves the site. Resend delivers account and
+          competition email and returns delivery events. These providers process data on our
+          instructions and under their own security and data protection commitments.
         </p>
         <p>
           eHubMarket is an independent marketplace partner. GCC does not send your account data to

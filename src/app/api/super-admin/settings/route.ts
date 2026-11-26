@@ -66,6 +66,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       registrationsOpen: input.registrationsOpen,
       maxActiveTournamentsPerOrganiser: input.maxActiveTournamentsPerOrganiser,
       applicationCooldownDays: input.applicationCooldownDays,
+      emailAnnouncements: input.emailAnnouncements ?? false,
     },
     guard.user.userId,
   );
@@ -82,6 +83,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       registrationsOpen: before.registrationsOpen,
       maxActiveTournamentsPerOrganiser: before.maxActiveTournamentsPerOrganiser,
       applicationCooldownDays: before.applicationCooldownDays,
+      emailAnnouncements: before.emailAnnouncements,
     },
     after: {
       maintenanceMode: after.maintenanceMode,
@@ -89,6 +91,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       registrationsOpen: after.registrationsOpen,
       maxActiveTournamentsPerOrganiser: after.maxActiveTournamentsPerOrganiser,
       applicationCooldownDays: after.applicationCooldownDays,
+      emailAnnouncements: after.emailAnnouncements,
     },
     reason: input.reason ?? null,
   });

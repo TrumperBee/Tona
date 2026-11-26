@@ -69,7 +69,9 @@ service cloud.firestore {
         tournamentData(tournamentId).ownerUid == request.auth.uid;
     }
 
-    // Private profile: owner or Super Admin.
+    // Private profile: owner or Super Admin. `notificationPrefs` and
+    // `emailDeliverable` live here, are written only by the server and are read
+    // back by the owner on the settings page.
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isSuperAdmin());
 
@@ -235,6 +237,20 @@ service cloud.firestore {
 
     // Rate-limit counters are server-only.
     match /rateLimits/{key} {
+      allow read: if false;
+    }
+
+    // Email delivery internals are server-only. Usage counters, suppression
+    // hashes and failure logs must never be readable from a client.
+    match /emailUsage/{documentId} {
+      allow read: if false;
+    }
+
+    match /emailSuppressions/{hash} {
+      allow read: if false;
+    }
+
+    match /emailFailures/{failureId} {
       allow read: if false;
     }
 

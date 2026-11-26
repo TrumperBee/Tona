@@ -50,6 +50,7 @@ export default async function SettingsPage() {
           registrationsOpen: settings.registrationsOpen,
           maxActiveTournamentsPerOrganiser: settings.maxActiveTournamentsPerOrganiser,
           applicationCooldownDays: settings.applicationCooldownDays,
+          emailAnnouncements: settings.emailAnnouncements,
         }}
       />
     </div>

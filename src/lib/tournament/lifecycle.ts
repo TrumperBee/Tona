@@ -13,7 +13,7 @@ import { writeAuditLog } from "@/lib/audit/log";
 import { requireTournamentOwnerOrSuperAdmin, type TournamentAccess } from "@/lib/auth/guards";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
-import { createNotifications } from "@/lib/notifications";
+import { notify } from "@/lib/notifications/service";
 import { TournamentMutationError } from "@/lib/tournament/errors";
 import { canTransition, type TournamentDocument, type TournamentStatus } from "@/types/domain";
 import { tournamentCancelReasonSchema } from "@/lib/validation/tournament";
@@ -242,11 +242,20 @@ export async function cancelTournament(tournamentId: string, rawReason: string):
     const uids = registrations.docs.map((document) => document.id);
 
     if (uids.length > 0) {
-      await createNotifications(uids, {
-        type: "tournament",
+      await notify({
+        recipients: uids,
+        type: "tournament_cancelled",
         title: `${write.after.name} was cancelled`,
         body: `The organiser cancelled this competition: ${reason}`,
         link: `/tournaments/${write.after.slug}`,
+        email: {
+          paragraphs: [
+            `${write.after.name} was cancelled by the organiser.`,
+            `Reason: ${reason}`,
+            "This is a critical competition email and cannot be turned off.",
+          ],
+          buttonLabel: "View the tournament",
+        },
       });
     }
   } catch {

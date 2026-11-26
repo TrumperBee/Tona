@@ -18,7 +18,7 @@ import type { TournamentAccess } from "@/lib/auth/guards";
 import { resolveTie, type KnockoutPlayer } from "@/lib/engine";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
-import { createNotification } from "@/lib/notifications";
+import { notify } from "@/lib/notifications/service";
 import { TournamentMutationError } from "@/lib/tournament/errors";
 import { finaliseTournamentCompletion } from "@/lib/stats/completion";
 import { refreshPlayersStats } from "@/lib/stats/server";
@@ -76,6 +76,15 @@ interface KnockoutCommit {
   readonly editCount: number;
   readonly completion: CompletionSummary | null;
   readonly reopened: boolean;
+  /** The winner's next tie, once both of its players are known. */
+  readonly readyForWinner: {
+    readonly tieId: string;
+    readonly round: string;
+    readonly opponentUid: string;
+    readonly opponentTag: string;
+  } | null;
+  /** Resolved winner of the changed tie, or null when it is undecided. */
+  readonly winnerUid: string | null;
 }
 
 async function applyKnockoutMatchChange(
@@ -284,6 +293,8 @@ async function applyKnockoutMatchChange(
           : 1,
       completion,
       reopened,
+      readyForWinner: advanced.readyForWinner,
+      winnerUid: resolution.winnerUid,
     };
   });
 
@@ -345,20 +356,41 @@ async function applyKnockoutMatchChange(
         ? "Knockout result corrected"
         : "Knockout result recorded";
 
-  await Promise.all([
-    createNotification(committed.homeUid, {
-      type: "result",
-      title,
-      body: `${committed.tournament.name}: ${scoreText} Your tie is now ${committed.status.replace("_", " ")}.`,
-      link,
-    }),
-    createNotification(committed.awayUid, {
-      type: "result",
-      title,
-      body: `${committed.tournament.name}: ${scoreText} Your tie is now ${committed.status.replace("_", " ")}.`,
-      link,
-    }),
-  ]).catch(() => undefined);
+  await notify({
+    recipients: [committed.homeUid, committed.awayUid],
+    type: "result_recorded",
+    title,
+    body: `${committed.tournament.name}: ${scoreText} Your tie is now ${committed.status.replace("_", " ")}.`,
+    link,
+    email: {
+      paragraphs: [
+        `${committed.tournament.name}: ${scoreText}`,
+        `Your tie is now ${committed.status.replace("_", " ")}.`,
+      ],
+      buttonLabel: "View your tie",
+    },
+  }).catch(() => undefined);
+
+  if (change.action !== "clear" && committed.readyForWinner && committed.winnerUid) {
+    const next = committed.readyForWinner;
+
+    await notify({
+      recipients: committed.winnerUid,
+      type: "knockout_tie_ready",
+      title: "Your next knockout tie is ready",
+      body: `${committed.tournament.name}: your next tie is ready against @${next.opponentTag}.`,
+      link: `/tournaments/${committed.tournament.slug}`,
+      email: {
+        heading: "Your next knockout tie is ready",
+        paragraphs: [
+          `${committed.tournament.name}: your next tie is ready.`,
+          `Opponent: @${next.opponentTag}`,
+        ],
+        bullets: [`Round: ${next.round.replace("_", " ")}`],
+        buttonLabel: "View your tie",
+      },
+    }).catch(() => undefined);
+  }
 
   if (committed.completion) {
     await announceCompletion(access, tournamentId, committed.tournament, committed.completion);

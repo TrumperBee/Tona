@@ -51,7 +51,7 @@ import {
 } from "@/lib/engine";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
-import { createNotifications } from "@/lib/notifications";
+import { notify } from "@/lib/notifications/service";
 import { finaliseTournamentCompletion } from "@/lib/stats/completion";
 import { TournamentMutationError } from "@/lib/tournament/errors";
 import {
@@ -462,6 +462,13 @@ export interface BracketAdvanceResult {
   readonly finalWinner: KnockoutPlayer | null;
   readonly createdMatches: number;
   readonly deletedMatches: number;
+  /** The winner's next tie, once both of its players are known. */
+  readonly readyForWinner: {
+    readonly tieId: string;
+    readonly round: string;
+    readonly opponentUid: string;
+    readonly opponentTag: string;
+  } | null;
 }
 
 /**
@@ -572,11 +579,38 @@ export function stageBracketAdvance(input: {
 
   const finalTie = after.ties.find((tie) => tie.round === "final") ?? null;
 
+  const winnerId = input.winner?.playerId ?? null;
+  const nextTie =
+    winnerId === null
+      ? null
+      : (after.ties.find(
+          (tie) =>
+            tie.tieId !== input.changedTieId &&
+            tie.higher.player &&
+            tie.lower.player &&
+            (tie.higher.player.playerId === winnerId || tie.lower.player.playerId === winnerId),
+        ) ?? null);
+  const opponent =
+    nextTie && winnerId
+      ? nextTie.higher.player?.playerId === winnerId
+        ? nextTie.lower.player
+        : nextTie.higher.player
+      : null;
+
   return {
     bracket: after,
     finalWinner: finalTie?.winner ?? null,
     createdMatches,
     deletedMatches,
+    readyForWinner:
+      nextTie && opponent
+        ? {
+            tieId: nextTie.tieId,
+            round: nextTie.round,
+            opponentUid: opponent.playerId,
+            opponentTag: opponent.gamerTag ?? "your opponent",
+          }
+        : null,
   };
 }
 
@@ -1026,11 +1060,20 @@ export async function generateKnockoutStage(
 
     const link = `/tournaments/${result.slug}`;
 
-    await createNotifications(result.playerIds, {
-      type: "tournament",
+    await notify({
+      recipients: result.playerIds,
+      type: "knockout_qualified",
       title: "The knockout bracket is live",
       body: `${result.tournamentName}: the league table is frozen and every knockout tie is published. Check your path to the final.`,
       link,
+      email: {
+        heading: "The knockout bracket is live",
+        paragraphs: [
+          `${result.tournamentName}: the league table is frozen and every knockout tie is published.`,
+          "Check your path to the final and your first knockout opponent.",
+        ],
+        buttonLabel: "View the bracket",
+      },
     }).catch(() => undefined);
   }
 
@@ -1415,13 +1458,20 @@ export async function announceCompletion(
     .where("status", "==", "registered")
     .get();
 
-  await createNotifications(
-    registrations.docs.map((document) => document.id),
-    {
-      type: "tournament",
-      title: `${tournament.name} is complete`,
-      body: `${summary.championTag} is the champion. The final result and the frozen league table are on the tournament page.`,
-      link: `/tournaments/${tournament.slug}`,
+  await notify({
+    recipients: registrations.docs.map((document) => document.id),
+    type: "tournament_completed",
+    title: `${tournament.name} is complete`,
+    body: `${summary.championTag} is the champion. The final result and the frozen league table are on the tournament page.`,
+    link: `/tournaments/${tournament.slug}`,
+    email: {
+      heading: `${tournament.name} is complete`,
+      paragraphs: [
+        `${summary.championTag} is the champion.`,
+        "The final result, the frozen league table and your tournament record are on the tournament page.",
+      ],
+      bullets: [`Champion: ${summary.championTag}`],
+      buttonLabel: "View the final standings",
     },
-  ).catch(() => undefined);
+  }).catch(() => undefined);
 }

@@ -3,6 +3,7 @@
 // email-verification gate: an active account may view its own profile and enter
 // tournaments.
 import { DashboardShell } from "@/components/layout/dashboard-shell";
+import { EmailDeliverabilityBanner } from "@/components/notifications/email-deliverability-banner";
 import { SiteNotices } from "@/components/shared/site-notices";
 import { requirePageSignedIn } from "@/lib/auth/page-access";
 import type { Viewer } from "@/lib/auth/viewer";
@@ -32,7 +33,18 @@ export default async function DashboardLayout({
   };
 
   return (
-    <DashboardShell viewer={viewer} notificationBell={notificationBell} notices={notices}>
+    <DashboardShell
+      viewer={viewer}
+      notificationBell={notificationBell}
+      notices={
+        <>
+          {notices}
+          {profile && profile.user.emailDeliverable === false ? (
+            <EmailDeliverabilityBanner />
+          ) : null}
+        </>
+      }
+    >
       {children}
     </DashboardShell>
   );

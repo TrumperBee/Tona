@@ -100,6 +100,17 @@ export const NOTIFICATION_TYPES = [
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
 /**
+ * Owner-controlled email preferences. `important` defaults to true (register,
+ * draw, fixtures, knockout); the optional streams default to false. Critical
+ * mail is never controlled by these flags.
+ */
+export interface NotificationPrefs {
+  readonly important: boolean;
+  readonly resultEmails: boolean;
+  readonly announcementEmails: boolean;
+}
+
+/**
  * Allowed tournament status transitions. `completed`, `archived` and `cancelled`
  * are terminal. A competition that has not reached a terminal status may be
  * cancelled at any time; it may also be suspended for a Super Admin review.
@@ -161,6 +172,13 @@ export interface UserDocument {
   readonly avatarPublicId: string | null;
   readonly role?: UserRole;
   readonly status: AccountStatus;
+  /**
+   * Server-written email preferences. Missing means the defaults apply
+   * (important on, result/announcement off). Read by the owner and the server.
+   */
+  readonly notificationPrefs?: NotificationPrefs;
+  /** False after a hard bounce or complaint; the dashboard prompts a fix. */
+  readonly emailDeliverable?: boolean;
   readonly createdAt: Timestamp;
   readonly updatedAt: Timestamp;
 }
@@ -756,6 +774,8 @@ export interface PlatformAnnouncementDocument {
 
 export interface NotificationDocument {
   readonly type: NotificationType;
+  /** Typed email-policy kind; older documents may not have one. */
+  readonly kind?: string;
   readonly title: string;
   readonly body: string;
   readonly link: string | null;
@@ -880,8 +900,32 @@ export interface PlatformSettingsDocument {
   readonly registrationsOpen: boolean;
   readonly maxActiveTournamentsPerOrganiser: number;
   readonly applicationCooldownDays: number;
+  /** When true, publishing a platform announcement also emails opted-in users. */
+  readonly emailAnnouncements?: boolean;
   readonly updatedBy: string;
   readonly updatedAt: Timestamp;
+}
+
+/** One calendar day or month of email delivery counters. Server-only. */
+export interface EmailUsageDocument {
+  readonly sent: number;
+  readonly skipped: number;
+  readonly failed: number;
+  readonly updatedAt: Timestamp;
+}
+
+/** A suppressed address (hard bounce or complaint), keyed by its SHA-256 hash. */
+export interface EmailSuppressionDocument {
+  readonly reason: "bounced" | "complained";
+  readonly createdAt: Timestamp;
+}
+
+/** A failed send, without the address or the message body. Server-only. */
+export interface EmailFailureDocument {
+  readonly kind: string;
+  readonly reason: string;
+  readonly status: number | null;
+  readonly createdAt: Timestamp;
 }
 
 export function isUserRole(value: unknown): value is UserRole {

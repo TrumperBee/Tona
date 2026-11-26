@@ -59,13 +59,14 @@ export default async function NotificationsPage({ searchParams }: NotificationsP
             items={result.rows.map((row) => ({
               id: row.id,
               type: row.type,
+              kind: row.kind,
               title: row.title,
               body: row.body,
               link: row.link,
               read: row.read,
               createdAt: row.createdAt ? row.createdAt.toISOString() : null,
             }))}
-            unread={result.unread}
+            today={new Date().toISOString().slice(0, 10)}
           />
           <CursorNav
             previousHref={

@@ -18,7 +18,7 @@ import type { SessionUser } from "@/lib/auth/session";
 import { isFixturesPublicStatus } from "@/lib/data/public-fixtures";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
-import { createNotification } from "@/lib/notifications";
+import { notify } from "@/lib/notifications/service";
 import { TournamentMutationError } from "@/lib/tournament/errors";
 import type { ResultReportResolveInput } from "@/lib/validation/match";
 import type { ResultReportStatus, TournamentDocument } from "@/types/domain";
@@ -204,14 +204,22 @@ export async function createResultReport(
     after: { matchId, status: "open" },
   });
 
-  await createNotification(tournament.ownerUid, {
-    type: "result_report",
+  await notify({
+    recipients: tournament.ownerUid,
+    type: "result_report_received",
     title: `Result problem reported by ${reportedByTag}`.slice(0, 120),
     body: `${reportedByTag} reported a problem with a result in ${tournament.name}: ${reason}`.slice(
       0,
       1000,
     ),
     link: `/organiser/tournaments/${tournamentId}/result-reports`,
+    email: {
+      paragraphs: [
+        `${reportedByTag} reported a problem with a result in ${tournament.name}.`,
+        `Reason: ${reason}`,
+      ],
+      buttonLabel: "Review the report",
+    },
   }).catch(() => undefined);
 
   return { reportId: reference.id };
@@ -502,8 +510,9 @@ export async function resolveResultReport(
     ? `/tournaments/${access.tournament.slug}/matches/${matchId}`
     : `/dashboard/fixtures`;
 
-  await createNotification(readText(report.reportedBy, ""), {
-    type: "result_report",
+  await notify({
+    recipients: readText(report.reportedBy, ""),
+    type: "result_report_outcome",
     title:
       input.decision === "resolved"
         ? "Your result report was resolved"
@@ -513,6 +522,13 @@ export async function resolveResultReport(
       1000,
     ),
     link,
+    email: {
+      paragraphs: [
+        `The organiser reviewed your report in ${access.tournament.name}.`,
+        `Note: ${input.adminNote}`,
+      ],
+      buttonLabel: "View the match",
+    },
   }).catch(() => undefined);
 }
 

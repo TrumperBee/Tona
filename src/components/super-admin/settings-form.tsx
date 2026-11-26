@@ -22,6 +22,7 @@ export interface SettingsFormValues {
   readonly registrationsOpen: boolean;
   readonly maxActiveTournamentsPerOrganiser: number;
   readonly applicationCooldownDays: number;
+  readonly emailAnnouncements: boolean;
 }
 
 export interface SettingsFormProps {
@@ -246,6 +247,20 @@ export function SettingsForm({ initial }: SettingsFormProps) {
                 }
               />
             </FormField>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Email</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <Switch
+              label="Email platform announcements"
+              description="When on, publishing a platform announcement also emails users who opted in to announcement email. Critical account mail is unaffected."
+              checked={values.emailAnnouncements}
+              onCheckedChange={(checked) => update("emailAnnouncements", checked)}
+            />
           </CardContent>
         </Card>
 

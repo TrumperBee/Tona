@@ -22,6 +22,9 @@ export const COLLECTIONS = {
   contactEvents: "contactEvents",
   platformStats: "platformStats",
   platformSettings: "platformSettings",
+  emailUsage: "emailUsage",
+  emailSuppressions: "emailSuppressions",
+  emailFailures: "emailFailures",
 } as const;
 
 export const SUBCOLLECTIONS = {
@@ -179,6 +182,13 @@ export const paths = {
 
   platformSettings: () => COLLECTIONS.platformSettings,
   platformSettingsMain: () => documentPath(COLLECTIONS.platformSettings, DOCUMENTS.main),
+
+  emailUsage: () => COLLECTIONS.emailUsage,
+  emailUsageDay: (dayKey: string) => documentPath(COLLECTIONS.emailUsage, dayKey),
+  emailSuppressions: () => COLLECTIONS.emailSuppressions,
+  emailSuppression: (hash: string) => documentPath(COLLECTIONS.emailSuppressions, hash),
+  emailFailures: () => COLLECTIONS.emailFailures,
+  emailFailure: (failureId: string) => documentPath(COLLECTIONS.emailFailures, failureId),
 } as const;
 
 /** Returns a stable document path for a user notification. */

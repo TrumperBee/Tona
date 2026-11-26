@@ -17,7 +17,7 @@ import { FieldValue, Timestamp, type QuerySnapshot } from "firebase-admin/firest
 
 import { writeAuditLog } from "@/lib/audit/log";
 import { requireTournamentOwnerOrSuperAdmin } from "@/lib/auth/guards";
-import { createNotifications } from "@/lib/notifications";
+import { notify } from "@/lib/notifications/service";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
 import {
@@ -763,11 +763,21 @@ export async function confirmDraw(tournamentId: string): Promise<StoredDraw> {
 
   // Nine recipients per pot: four small batches, well inside the 500 limit.
   for (const [pot, uids] of groupByPot(result.draw)) {
-    await createNotifications(uids, {
-      type: "tournament",
+    await notify({
+      recipients: uids,
+      type: "draw_complete",
       title: "The draw is complete",
       body: `The draw is complete: you are in Pot ${pot}.`,
       link: `/tournaments/${result.slug}`,
+      email: {
+        heading: `The draw is complete - Pot ${pot}`,
+        paragraphs: [
+          `${result.name}: the draw is complete and you are in Pot ${pot}.`,
+          "Your league fixtures will be published next. We will email you when they are ready.",
+        ],
+        bullets: [`Pot ${pot}`],
+        buttonLabel: "View your pot",
+      },
     }).catch(() => undefined);
   }
 
@@ -1093,19 +1103,34 @@ export async function replaceDrawPlayer(
     reason,
   });
 
-  await createNotifications([outUid], {
-    type: "tournament",
+  await notify({
+    recipients: outUid,
+    type: "registration_removed",
     title: "Removed from the draw",
     body: `The organiser removed you from the draw: ${reason}`,
     link: `/tournaments/${result.slug}`,
+    email: {
+      paragraphs: [`The organiser removed you from the draw: ${reason}`],
+      buttonLabel: "View the tournament",
+    },
   }).catch(() => undefined);
 
-  await createNotifications([inUid], {
-    type: "tournament",
-    title: result.pot ? `The draw is complete — Pot ${result.pot}` : "Added to the draw",
+  await notify({
+    recipients: inUid,
+    type: "draw_complete",
+    title: result.pot ? `The draw is complete - Pot ${result.pot}` : "Added to the draw",
     body: result.pot
       ? `The organiser entered you into ${result.name} and placed you in Pot ${result.pot}.`
       : `The organiser entered you into ${result.name}.`,
     link: `/tournaments/${result.slug}`,
+    email: {
+      paragraphs: [
+        result.pot
+          ? `The organiser entered you into ${result.name} and placed you in Pot ${result.pot}.`
+          : `The organiser entered you into ${result.name}.`,
+      ],
+      bullets: result.pot ? [`Pot ${result.pot}`] : undefined,
+      buttonLabel: "View your pot",
+    },
   }).catch(() => undefined);
 }

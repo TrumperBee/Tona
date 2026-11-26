@@ -2016,3 +2016,67 @@ record that survives for abuse handling.
   checked, rate-limited, audited route, not a bare field.
 - `docs/04-SECURITY.md` §2.3, Terms, Privacy and the registration consent state this
   model explicitly, so the promise matches the implementation.
+
+## ADR-077 - One notification service owns email delivery through a typed registry
+
+**Date:** 2026-11-26
+**Status:** Accepted
+
+**Context.** Phase 6 wrote in-app notifications directly from every feature and
+left email to Phase 16. Adding email at each call site would duplicate preference
+checks, quota logic and unsubscribe links, and a new notification could silently
+skip a policy. The platform also needs to work with no email credentials while
+still showing every notification in-app.
+
+**Decision.**
+
+- `notify()` in `src/lib/notifications/service.ts` is the single feature-facing
+  entry point. It always writes the in-app document (one or a chunked batch) and
+  defers email delivery with `runAfterResponse()` (`after()` in a request, a
+  detached promise elsewhere). Mail work never runs inside a Firestore
+  transaction and never throws into the triggering action.
+- `src/lib/notifications/types.ts` declares every kind once with a category, an
+  email default, a batchable flag and a legacy `type`. CRITICAL kinds ignore
+  preferences; IMPORTANT kinds follow `notificationPrefs.important`; OPTIONAL
+  kinds follow their stream flag. The legacy `NotificationType` is still stored
+  so older indexes and UI keep working, and the new `kind` is stored beside it.
+- Resend is called with `fetch`, without an SDK. `sendEmailBatch` uses the batch
+  endpoint with at most 100 messages per request, one delayed retry on 429 and a
+  timeout. Failures return an outcome; they never reject. Missing credentials
+  log the rendered message in development and send nothing in production.
+- `emailUsage/{yyyymmdd}` and `emailUsage/month-{yyyymm}` are reserved in one
+  transaction before the network call. Normal mail stops at 80% of the daily
+  limit, critical mail may use the remainder, and the monthly limit is a hard
+  cap as well as the Super Admin warning point. A failed send releases its
+  reservation and writes one `emailFailures` document without an address or body.
+- `emailSuppressions/{sha256(lowercased address)}` is server-only and stores no
+  readable address. A permanent bounce or complaint also sets
+  `users.emailDeliverable = false`; transient bounces are ignored. A suppression
+  is cleared and deliverability restored only when the owner changes address.
+- Non-critical email carries a signed 60-day unsubscribe token
+  (HMAC-SHA256 over uid, stream and expiry, constant-time compare),
+  `List-Unsubscribe` and `List-Unsubscribe-Post`. `GET /unsubscribe` only shows a
+  confirmation; `POST /api/unsubscribe` applies the change. Non-critical
+  delivery fails closed without `EMAIL_UNSUBSCRIBE_SECRET`.
+- Changing email requires a sign-in from the last ten minutes, same-origin, at
+  most three attempts a day and an address that is not already in use. It updates
+  Firebase Auth and the private mirror, clears suppression, audits, emails the OLD
+  address and revokes every session (Firebase cannot revoke only the others).
+  The pinned Super Admin UID is refused because the role is tied to the configured
+  email and uid pair (ADR-047).
+- Platform announcement email is behind `platformSettings.emailAnnouncements`
+  and a monthly quota pre-check. One broadcast is capped at 900 opted-in active
+  recipients.
+- The notification centre groups by UTC day, renders a type icon, uses client
+  links for deep navigation and keeps the count-based unread badge.
+
+**Consequences.**
+
+- Every existing `createNotification`/`createNotifications` call site was
+  converted; only `src/lib/notifications/*` writes in-app documents now.
+- Email policy is testable without Firebase: preference resolution is a pure
+  function and the Resend boundary is mocked in integration tests.
+- A missing secret can only reduce mail, never bypass a preference or send a link
+  that cannot be honoured.
+- Delivery is best effort. An outage delays or drops email; the in-app record is
+  already written and remains the source of truth.

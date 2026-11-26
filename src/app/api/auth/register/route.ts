@@ -5,6 +5,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { RegistrationError, registerPlayer } from "@/lib/auth/registration";
+import { runAfterResponse } from "@/lib/email/after";
+import { deliverTransactionalEmail } from "@/lib/email/deliver";
+import { renderWelcomeEmail } from "@/lib/email/templates/welcome";
 import { clientIdentifier, jsonError } from "@/lib/http/respond";
 import {
   assertPlatformWritable,
@@ -93,6 +96,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   try {
     const player = await registerPlayer(parsed.data);
+
+    // The account already exists. A welcome-email failure must never turn a
+    // successful registration into an error the player would retry.
+    runAfterResponse(() =>
+      deliverTransactionalEmail({
+        to: player.email,
+        kind: "welcome",
+        subject: "Welcome to GCC",
+        rendered: renderWelcomeEmail({ gamerTag: player.gamerTag }),
+        critical: true,
+      }),
+    );
+
     return NextResponse.json({ ok: true, gamerTag: player.gamerTag }, { status: 201 });
   } catch (error) {
     if (error instanceof RegistrationError) {

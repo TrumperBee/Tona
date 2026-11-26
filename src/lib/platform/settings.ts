@@ -23,6 +23,7 @@ export const DEFAULT_PLATFORM_SETTINGS = {
   registrationsOpen: true,
   maxActiveTournamentsPerOrganiser: 3,
   applicationCooldownDays: 7,
+  emailAnnouncements: false,
 } as const;
 
 export interface PlatformSettingsValues {
@@ -31,6 +32,8 @@ export interface PlatformSettingsValues {
   readonly registrationsOpen: boolean;
   readonly maxActiveTournamentsPerOrganiser: number;
   readonly applicationCooldownDays: number;
+  /** When true, publishing an announcement also emails opted-in users. */
+  readonly emailAnnouncements: boolean;
   readonly updatedBy: string | null;
   readonly updatedAt: Date | null;
 }
@@ -88,6 +91,7 @@ function toValues(document: PlatformSettingsDocument | undefined): PlatformSetti
       DEFAULT_PLATFORM_SETTINGS.maxActiveTournamentsPerOrganiser,
     applicationCooldownDays:
       document.applicationCooldownDays ?? DEFAULT_PLATFORM_SETTINGS.applicationCooldownDays,
+    emailAnnouncements: document.emailAnnouncements ?? DEFAULT_PLATFORM_SETTINGS.emailAnnouncements,
     updatedBy: document.updatedBy ?? null,
     updatedAt: document.updatedAt?.toDate() ?? null,
   };
@@ -148,6 +152,7 @@ export async function writePlatformSettings(
       registrationsOpen: values.registrationsOpen,
       maxActiveTournamentsPerOrganiser: values.maxActiveTournamentsPerOrganiser,
       applicationCooldownDays: values.applicationCooldownDays,
+      emailAnnouncements: values.emailAnnouncements,
       updatedBy,
       updatedAt: Timestamp.now(),
     },
