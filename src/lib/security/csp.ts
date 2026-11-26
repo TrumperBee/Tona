@@ -40,6 +40,11 @@ export interface CspOptions {
 
 export function buildContentSecurityPolicy({ nonce, isProduction }: CspOptions): string {
   void ({} as Pick<CspOptions, "mode">);
+  const isE2E = process.env.GCC_E2E === "1" || process.env.NEXT_PUBLIC_GCC_E2E === "1";
+  const localConnect =
+    isE2E || !isProduction
+      ? ["http://127.0.0.1:*", "http://localhost:*", "ws://127.0.0.1:*", "ws://localhost:*"]
+      : [];
   const directives: Record<string, string[]> = {
     "default-src": ["'self'"],
     "script-src": [
@@ -50,19 +55,25 @@ export function buildContentSecurityPolicy({ nonce, isProduction }: CspOptions):
       "https://www.google.com/recaptcha/",
       "https://www.gstatic.com/recaptcha/",
       // Next's dev overlay uses inline eval. Production never receives this.
-      ...(isProduction ? [] : ["'unsafe-eval'"]),
+      ...(isProduction && !isE2E ? [] : ["'unsafe-eval'"]),
     ],
     "script-src-attr": ["'none'"],
-    // React style attributes need 'unsafe-inline'; nonce covers style tags.
-    "style-src": ["'self'", `'nonce-${nonce}'`, "'unsafe-inline'"],
+    // React/Next inline style attributes and style tags need unsafe-inline.
+    // A nonce in style-src causes browsers to ignore unsafe-inline, which breaks
+    // inline styles. style-src-attr handles attributes; keep style-src permissive
+    // enough for framework/runtime style elements.
+    "style-src": ["'self'", "'unsafe-inline'"],
+    "style-src-attr": ["'unsafe-inline'"],
     "img-src": ["'self'", "data:", "blob:", "https://res.cloudinary.com"],
     "font-src": ["'self'", "data:"],
-    "connect-src": [...FIREBASE_CONNECT, TURNSTILE_SCRIPT, ...RECAPTCHA_CONNECT],
+    "connect-src": [...FIREBASE_CONNECT, TURNSTILE_SCRIPT, ...RECAPTCHA_CONNECT, ...localConnect],
     "frame-src": [
+      "'self'",
       TURNSTILE_SCRIPT,
       "https://www.google.com/recaptcha/",
       "https://www.gstatic.com/recaptcha/",
       "https://recaptcha.google.com/recaptcha/",
+      ...(isE2E || !isProduction ? ["http://127.0.0.1:*", "http://localhost:*"] : []),
     ],
     "worker-src": ["'self'", "blob:"],
     "manifest-src": ["'self'"],
@@ -72,7 +83,7 @@ export function buildContentSecurityPolicy({ nonce, isProduction }: CspOptions):
     "form-action": ["'self'"],
     "frame-ancestors": ["'none'"],
     "report-uri": [CSP_REPORT_PATH],
-    ...(isProduction ? { "upgrade-insecure-requests": [] } : {}),
+    ...(isProduction && !isE2E ? { "upgrade-insecure-requests": [] } : {}),
   };
 
   const body = Object.entries(directives)
@@ -92,8 +103,12 @@ export function resolveCspMode(raw: string | undefined, isProduction: boolean): 
   const value = raw?.trim().toLowerCase();
 
   if (value === "report-only" || value === "enforce") {
+    // E2E harness keeps CSP active but report-only so tests can fail on violations.
+    if (process.env.GCC_E2E === "1") return "report-only";
     return value;
   }
+
+  if (process.env.GCC_E2E === "1") return "report-only";
 
   // Production defaults to enforcement. A deployment can start in report-only
   // by setting CSP_MODE=report-only, observe /api/csp-report, then remove it.

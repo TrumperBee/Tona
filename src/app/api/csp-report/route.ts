@@ -8,6 +8,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { clientIdentifier, jsonError } from "@/lib/http/respond";
+import { logger } from "@/lib/observability/logger";
 import { checkRateLimit, rateLimitPolicy } from "@/lib/rate-limit";
 
 const reportBodySchema = z
@@ -102,46 +103,59 @@ function normaliseReport(payload: unknown): NormalisedReport[] {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  const limit = await checkRateLimit(
-    rateLimitPolicy("csp-report", clientIdentifier(request), 60, 60),
-  );
-
-  if (!limit.allowed) {
-    return jsonError("Too many reports.", 429, {
-      "Retry-After": String(limit.retryAfterSeconds),
-    });
-  }
-
-  const declaredLength = Number(request.headers.get("content-length") ?? "0");
-
-  if (Number.isFinite(declaredLength) && declaredLength > MAX_REPORT_BYTES) {
-    return jsonError("Report too large.", 413);
-  }
-
-  const text = await request.text();
-
-  if (text.length > MAX_REPORT_BYTES) {
-    return jsonError("Report too large.", 413);
-  }
-
-  let payload: unknown;
-
   try {
-    payload = JSON.parse(text);
+    const limit = await checkRateLimit(
+      rateLimitPolicy("csp-report", clientIdentifier(request), 60, 60),
+    ).catch(() => ({ allowed: true as const, remaining: 1 }));
+
+    if (!limit.allowed) {
+      return jsonError("Too many reports.", 429, {
+        "Retry-After": String(limit.retryAfterSeconds),
+      });
+    }
+
+    const declaredLength = Number(request.headers.get("content-length") ?? "0");
+
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_REPORT_BYTES) {
+      return jsonError("Report too large.", 413);
+    }
+
+    const text = await request.text();
+
+    if (text.length > MAX_REPORT_BYTES) {
+      return jsonError("Report too large.", 413);
+    }
+
+    let payload: unknown;
+
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      return jsonError("Invalid report.", 400);
+    }
+
+    const parsed = reportSchema.safeParse(payload);
+
+    if (!parsed.success) {
+      return jsonError("Invalid report.", 400);
+    }
+
+    for (const report of normaliseReport(parsed.data)) {
+      // No PII: no document URL query, no blocked URL, no user agent.
+      try {
+        logger.warn("csp.report", {
+          route: "/api/csp-report",
+          directive: report.directive ?? "unknown-directive",
+          documentPath: report.documentPath ?? "-",
+        });
+      } catch {
+        // Report ingestion must never fail the response.
+      }
+    }
+
+    return new NextResponse(null, { status: 204 });
   } catch {
-    return jsonError("Invalid report.", 400);
+    // Never return 500 for CSP reports; browsers may retry and create noise.
+    return new NextResponse(null, { status: 204 });
   }
-
-  const parsed = reportSchema.safeParse(payload);
-
-  if (!parsed.success) {
-    return jsonError("Invalid report.", 400);
-  }
-
-  for (const report of normaliseReport(parsed.data)) {
-    // No PII: no document URL query, no blocked URL, no user agent.
-    console.warn("[csp]", report.directive ?? "unknown-directive", report.documentPath ?? "-");
-  }
-
-  return new NextResponse(null, { status: 204 });
 }
