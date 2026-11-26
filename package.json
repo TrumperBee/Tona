@@ -21,6 +21,11 @@
     "test:security": "vitest run --config vitest.security.config.ts",
     "simulate": "firebase emulators:exec --only firestore,auth \"vitest run --config vitest.simulate.config.ts\"",
     "dev:seed": "tsx --tsconfig scripts/dev/tsconfig.json scripts/dev/seed/index.ts",
+    "backup": "tsx --tsconfig scripts/ops/tsconfig.json scripts/ops/backup.ts",
+    "e2e": "node scripts/e2e/run-e2e-emulator.mjs",
+    "e2e:ui": "playwright test --ui",
+    "e2e:raw": "playwright test",
+    "qa:seed": "tsx --tsconfig scripts/qa/tsconfig.json scripts/qa/seed-world.ts",
     "rules:deploy": "firebase deploy --only firestore:rules,firestore:indexes",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
@@ -42,6 +47,7 @@
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^6.0.0",
+    "@playwright/test": "^1.65.1",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.10",
@@ -63,6 +69,9 @@
     "vitest": "^5.1.0"
   },
   "overrides": {
-    "@grpc/grpc-js": "1.14.7"
+    "@grpc/grpc-js": "1.14.7",
+    "jwks-rsa": {
+      "jose": "^5.10.0"
+    }
   }
 }
