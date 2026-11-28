@@ -6,6 +6,7 @@
 import "server-only";
 
 import { getServerEnv } from "@/lib/config/env.server";
+import { logger } from "@/lib/observability/logger";
 
 const VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 const TIMEOUT_MS = 5000;
@@ -44,6 +45,25 @@ export async function verifyTurnstile(options: {
   readonly ip: string;
   readonly action: TurnstileAction;
 }): Promise<TurnstileResult> {
+  // Safe E2E-only bypass: only when GCC_E2E=1, emulator hosts configured, and
+  // demo project. Never allowed in production.
+  if (process.env.GCC_E2E === "1" && process.env.GCC_E2E_TURNSTILE_BYPASS === "1") {
+    const hasEmulators = Boolean(
+      process.env.FIRESTORE_EMULATOR_HOST && process.env.FIREBASE_AUTH_EMULATOR_HOST,
+    );
+    const projectId = (process.env.FIREBASE_ADMIN_PROJECT_ID ?? "").trim();
+    const safeProject =
+      projectId.startsWith("demo-") ||
+      ["gcc-e2e", "tona-d6f56-e2e", "demo-gcc-e2e"].includes(projectId);
+    if (!hasEmulators || !safeProject) {
+      logger.error("turnstile.e2e_bypass_refused", new Error("Unsafe E2E bypass"), {
+        route: "turnstile.verify",
+      });
+      return { ok: false, reason: "missing-secret" };
+    }
+    return { ok: true };
+  }
+
   const secret = turnstileSecret();
 
   if (!secret) {
@@ -53,9 +73,7 @@ export async function verifyTurnstile(options: {
 
     if (!warnedMissingSecret) {
       warnedMissingSecret = true;
-      console.info(
-        "[turnstile] TURNSTILE_SECRET_KEY is not set; skipping bot checks in development.",
-      );
+      logger.info("turnstile.secret_missing_dev_skip", { route: "turnstile.verify" });
     }
 
     return { ok: true };

@@ -102,3 +102,7 @@ jobs:
 
       - name: Registration and role integration tests
         run: npm run test:integration
+
+  # E2E smoke is intentionally manual/optional (workflow_dispatch in e2e.yml).
+  # Reason: requires Firebase emulators + production build + Playwright browsers,
+  # which is slower/flakier than unit/rules/integration gates. Run before release.

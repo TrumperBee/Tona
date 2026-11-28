@@ -6,8 +6,8 @@
 // Analytics is deliberately NOT initialised. Storage is not used on the Spark plan.
 import { getApp, getApps, initializeApp, type FirebaseApp } from "firebase/app";
 import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
-import { getAuth, type Auth } from "firebase/auth";
-import { getFirestore, type Firestore } from "firebase/firestore";
+import { connectAuthEmulator, getAuth, type Auth } from "firebase/auth";
+import { connectFirestoreEmulator, getFirestore, type Firestore } from "firebase/firestore";
 
 import { getPublicEnv, type PublicEnv } from "@/lib/config/env";
 
@@ -99,14 +99,14 @@ function initialiseAppCheck(app: FirebaseApp): void {
   const siteKey = env.NEXT_PUBLIC_APPCHECK_SITE_KEY;
 
   if (!siteKey) {
-    if (isProduction) {
+    if (isProduction && process.env.NEXT_PUBLIC_GCC_E2E !== "1") {
       throw new FirebaseClientConfigError(
         "NEXT_PUBLIC_APPCHECK_SITE_KEY is required in production so browser Firebase calls carry App Check tokens.",
       );
     }
 
     console.info(
-      "[app-check] NEXT_PUBLIC_APPCHECK_SITE_KEY is not set; skipping App Check in development.",
+      "[app-check] NEXT_PUBLIC_APPCHECK_SITE_KEY is not set; skipping App Check in development/E2E.",
     );
     appCheckInitialised = true;
     return;
@@ -126,12 +126,33 @@ function initialiseAppCheck(app: FirebaseApp): void {
   appCheckInitialised = true;
 }
 
+function maybeConnectEmulators(auth: Auth, db: Firestore): void {
+  if (process.env.NEXT_PUBLIC_GCC_E2E !== "1") return;
+  // Safety: only demo projects. This runs in browser; server-side harness guards also apply.
+  const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? "";
+  if (!projectId.startsWith("demo-")) return;
+  const g = globalThis as typeof globalThis & { __gccEmulatorsConnected?: boolean };
+  if (g.__gccEmulatorsConnected) return;
+  try {
+    connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+    connectFirestoreEmulator(db, "127.0.0.1", 8080);
+    g.__gccEmulatorsConnected = true;
+  } catch {
+    // already connected
+    g.__gccEmulatorsConnected = true;
+  }
+}
+
 /** Returns the singleton browser Firebase Auth instance. */
 export function getFirebaseClientAuth(): Auth {
   if (!clientAuth) {
     const app = getFirebaseClientApp();
     initialiseAppCheck(app);
     clientAuth = getAuth(app);
+    if (!clientFirestore) {
+      clientFirestore = getFirestore(app);
+    }
+    maybeConnectEmulators(clientAuth, clientFirestore);
   }
 
   return clientAuth;
@@ -146,6 +167,7 @@ export function getFirebaseClientFirestore(): Firestore {
     const app = getFirebaseClientApp();
     initialiseAppCheck(app);
     clientFirestore = getFirestore(app);
+    if (clientAuth) maybeConnectEmulators(clientAuth, clientFirestore);
   }
 
   return clientFirestore;

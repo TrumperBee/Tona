@@ -7,6 +7,8 @@ import "server-only";
 
 import { CONTACT_EMAIL } from "@/lib/config/site";
 import { getEmailConfig, isEmailConfigured } from "@/lib/email/config";
+import { logger } from "@/lib/observability/logger";
+import { captureEmail, isEmailCaptureEnabled } from "@/lib/test-harness";
 
 export const RESEND_ENDPOINT = "https://api.resend.com/emails";
 export const RESEND_BATCH_ENDPOINT = "https://api.resend.com/emails/batch";
@@ -98,18 +100,20 @@ function logSimulated(message: EmailMessage): void {
 
   // Development only: show enough to verify the template without storing a
   // full address or a full body in a shared log.
-  console.info(
-    `[email] simulated send to ${maskEmail(message.to)} | ${message.subject}\n${message.text}`,
-  );
+  logger.info("email.simulated", {
+    to: maskEmail(message.to),
+    subject: message.subject,
+    kind: message.kind ?? null,
+  });
 }
 
 function missingConfig(): EmailSendOutcome {
   if (process.env.NODE_ENV === "production") {
     if (!missingConfigLogged) {
       missingConfigLogged = true;
-      console.error(
-        "[email] RESEND_API_KEY or RESEND_FROM is missing. Email is disabled; in-app notifications continue.",
-      );
+      logger.error("email.config_missing", new Error("RESEND_API_KEY or RESEND_FROM is missing"), {
+        route: "email.client",
+      });
     }
 
     return { ok: false, reason: "email_not_configured", status: null };
@@ -119,6 +123,19 @@ function missingConfig(): EmailSendOutcome {
 }
 
 async function requestOne(message: EmailMessage): Promise<EmailSendOutcome> {
+  if (isEmailCaptureEnabled()) {
+    captureEmail({
+      to: message.to,
+      subject: message.subject,
+      html: message.html,
+      text: message.text,
+      kind: message.kind,
+      headers: message.headers,
+      capturedAt: new Date().toISOString(),
+    });
+    return { ok: true, simulated: true };
+  }
+
   const config = getEmailConfig();
 
   if (!isEmailConfigured(config) || !config.apiKey || !config.from) {
@@ -172,6 +189,21 @@ export async function sendEmailBatch(
 ): Promise<readonly EmailSendOutcome[]> {
   if (messages.length === 0) return [];
   if (messages.length === 1) return [await requestOne(messages[0])];
+
+  if (isEmailCaptureEnabled()) {
+    for (const message of messages) {
+      captureEmail({
+        to: message.to,
+        subject: message.subject,
+        html: message.html,
+        text: message.text,
+        kind: message.kind,
+        headers: message.headers,
+        capturedAt: new Date().toISOString(),
+      });
+    }
+    return messages.map(() => ({ ok: true as const, simulated: true }));
+  }
 
   const config = getEmailConfig();
   const outcomes: EmailSendOutcome[] = [];

@@ -41,16 +41,18 @@ export function TurnstileWidget({ action, onToken, className }: TurnstileWidgetP
   const onTokenRef = useRef(onToken);
   const [scriptLoaded, setScriptLoaded] = useState(false);
   const elementId = useId();
-  // Read only this public key. Going through getPublicEnv() would make the
-  // widget depend on the whole Firebase configuration, which is unrelated to
-  // the challenge and absent from component tests.
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() || null;
+  const e2eBypass = process.env.NEXT_PUBLIC_GCC_E2E === "1";
 
   useEffect(() => {
     onTokenRef.current = onToken;
   }, [onToken]);
 
   useEffect(() => {
+    if (e2eBypass) {
+      onTokenRef.current("e2e-turnstile-bypass");
+      return;
+    }
     if (!siteKey) {
       onTokenRef.current(null);
       return;
@@ -78,7 +80,11 @@ export function TurnstileWidget({ action, onToken, className }: TurnstileWidgetP
         widgetId.current = null;
       }
     };
-  }, [action, scriptLoaded, siteKey]);
+  }, [action, e2eBypass, scriptLoaded, siteKey]);
+
+  if (e2eBypass) {
+    return <div data-testid="turnstile-e2e-bypass" className={className} />;
+  }
 
   if (!siteKey) {
     if (process.env.NODE_ENV === "production") {

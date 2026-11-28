@@ -57,3 +57,16 @@ firebase-adminsdk-*.json
 
 # local dev-seeder state (manifest contains the batch password)
 .seed/
+
+# local ops backups
+/backups/
+
+# QA / Playwright artifacts
+/.qa/
+/e2e/screenshots/
+/e2e/results/
+/playwright-report/
+/test-results/
+/blob-report/
+/playwright/.cache/
+

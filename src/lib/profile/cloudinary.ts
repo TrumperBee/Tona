@@ -9,6 +9,8 @@ import "server-only";
 import { v2 as cloudinary, type UploadApiResponse } from "cloudinary";
 
 import { getServerEnv } from "@/lib/config/env.server";
+import { isMockCloudinaryEnabled } from "@/lib/test-harness";
+import { mockDestroy, mockUpload } from "@/lib/test-harness/mock-cloudinary";
 
 let configured = false;
 
@@ -91,10 +93,10 @@ export async function uploadAvatar(
   bytes: Buffer,
   mimeType: string,
 ): Promise<StoredAvatar> {
-  const client = getCloudinary();
   const publicId = `gcc/avatars/${uid}`;
+  if (isMockCloudinaryEnabled()) return mockUpload(publicId, bytes, mimeType);
+  const client = getCloudinary();
   const result = await uploadImage(client, publicId, bytes, mimeType);
-
   return { publicId: result.public_id, url: deliveryUrl(client, result.public_id) };
 }
 
@@ -107,10 +109,10 @@ export async function uploadOrganiserLogo(
   bytes: Buffer,
   mimeType: string,
 ): Promise<StoredAvatar> {
-  const client = getCloudinary();
   const publicId = `gcc/organisers/${uid}`;
+  if (isMockCloudinaryEnabled()) return mockUpload(publicId, bytes, mimeType);
+  const client = getCloudinary();
   const result = await uploadImage(client, publicId, bytes, mimeType);
-
   return { publicId: result.public_id, url: deliveryUrl(client, result.public_id) };
 }
 
@@ -124,10 +126,10 @@ export async function uploadTournamentCover(
   bytes: Buffer,
   mimeType: string,
 ): Promise<StoredAvatar> {
-  const client = getCloudinary();
   const publicId = `gcc/tournaments/${tournamentId}/cover`;
+  if (isMockCloudinaryEnabled()) return mockUpload(publicId, bytes, mimeType);
+  const client = getCloudinary();
   const result = await uploadImage(client, publicId, bytes, mimeType);
-
   return { publicId: result.public_id, url: deliveryUrl(client, result.public_id) };
 }
 
@@ -140,15 +142,19 @@ export async function uploadTournamentLogo(
   bytes: Buffer,
   mimeType: string,
 ): Promise<StoredAvatar> {
-  const client = getCloudinary();
   const publicId = `gcc/tournaments/${tournamentId}/logo`;
+  if (isMockCloudinaryEnabled()) return mockUpload(publicId, bytes, mimeType);
+  const client = getCloudinary();
   const result = await uploadImage(client, publicId, bytes, mimeType);
-
   return { publicId: result.public_id, url: deliveryUrl(client, result.public_id) };
 }
 
 /** Best-effort removal. A missing asset is treated as success. */
 export async function destroyAvatar(publicId: string): Promise<void> {
+  if (isMockCloudinaryEnabled()) {
+    mockDestroy(publicId);
+    return;
+  }
   const client = getCloudinary();
 
   try {

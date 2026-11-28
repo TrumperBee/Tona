@@ -60,6 +60,11 @@ const serverEnvSchema = z.object({
   // Cloudflare Turnstile secret. Optional so the app still boots; production
   // rejects protected form submissions when it is missing (fail closed).
   TURNSTILE_SECRET_KEY: z.preprocess(blankToUndefined, z.string().trim().min(1).optional()),
+  // E2E harness switches. Refused unless GCC_E2E=1, emulator hosts, and demo project.
+  GCC_E2E: z.preprocess(blankToUndefined, z.enum(["1"]).optional()),
+  CLOUDINARY_MODE: z.preprocess(blankToUndefined, z.enum(["mock"]).optional()),
+  GCC_E2E_CAPTURE_EMAIL: z.preprocess(blankToUndefined, z.enum(["1"]).optional()),
+  GCC_E2E_TURNSTILE_BYPASS: z.preprocess(blankToUndefined, z.enum(["1"]).optional()),
 });
 
 const serverOnlySchemaKeys = [
@@ -79,6 +84,10 @@ const serverOnlySchemaKeys = [
   "EMAIL_DAILY_LIMIT",
   "EMAIL_MONTHLY_LIMIT",
   "TURNSTILE_SECRET_KEY",
+  "GCC_E2E",
+  "CLOUDINARY_MODE",
+  "GCC_E2E_CAPTURE_EMAIL",
+  "GCC_E2E_TURNSTILE_BYPASS",
 ] as const;
 
 export type ServerEnv = PublicEnv & z.infer<typeof serverEnvSchema>;
@@ -112,6 +121,10 @@ export function getServerEnv(): ServerEnv {
     EMAIL_DAILY_LIMIT: process.env.EMAIL_DAILY_LIMIT,
     EMAIL_MONTHLY_LIMIT: process.env.EMAIL_MONTHLY_LIMIT,
     TURNSTILE_SECRET_KEY: process.env.TURNSTILE_SECRET_KEY,
+    GCC_E2E: process.env.GCC_E2E,
+    CLOUDINARY_MODE: process.env.CLOUDINARY_MODE,
+    GCC_E2E_CAPTURE_EMAIL: process.env.GCC_E2E_CAPTURE_EMAIL,
+    GCC_E2E_TURNSTILE_BYPASS: process.env.GCC_E2E_TURNSTILE_BYPASS,
   });
 
   if (!parsed.success) {
@@ -119,6 +132,22 @@ export function getServerEnv(): ServerEnv {
   }
 
   cachedServerEnv = { ...getPublicEnv(), ...parsed.data };
+
+  // E2E harness guard: refuse unsafe activation early.
+  if (cachedServerEnv.GCC_E2E === "1") {
+    const hasEmulators = Boolean(
+      process.env.FIRESTORE_EMULATOR_HOST && process.env.FIREBASE_AUTH_EMULATOR_HOST,
+    );
+    const projectId = cachedServerEnv.FIREBASE_ADMIN_PROJECT_ID;
+    const safeProject =
+      projectId.startsWith("demo-") || ["gcc-e2e", "tona-d6f56-e2e"].includes(projectId);
+    if (!hasEmulators || !safeProject) {
+      throw new Error(
+        "GCC_E2E refused: requires FIRESTORE_EMULATOR_HOST, FIREBASE_AUTH_EMULATOR_HOST, and an approved demo Firebase project id.",
+      );
+    }
+  }
+
   return cachedServerEnv;
 }
 

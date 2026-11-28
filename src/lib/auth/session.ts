@@ -34,11 +34,16 @@ export function getSessionMaxAgeSeconds(): number {
 }
 
 export function getSessionCookieOptions(maxAgeSeconds: number) {
+  const e2eLocalHttp =
+    process.env.GCC_E2E === "1" &&
+    (process.env.NEXT_PUBLIC_SITE_URL ?? "").startsWith("http://127.0.0.1");
   return {
     httpOnly: true,
     // Never send the cookie over plain HTTP in a deployed environment. The
     // explicit check also covers builds where NODE_ENV is set late.
-    secure: process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production",
+    secure:
+      !e2eLocalHttp &&
+      (process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production"),
     sameSite: "lax" as const,
     path: SESSION_COOKIE_PATH,
     maxAge: maxAgeSeconds,

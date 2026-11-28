@@ -55,6 +55,8 @@ const publicEnvSchema = z
       blankToUndefined,
       z.string().trim().min(1).optional(),
     ),
+    // Safe E2E harness switch. Refused unless emulator hosts + approved demo project.
+    NEXT_PUBLIC_GCC_E2E: z.preprocess(blankToUndefined, z.enum(["1"]).optional()),
   })
   .transform((value) => ({
     ...value,
@@ -122,6 +124,7 @@ export function getPublicEnv(): PublicEnv {
     NEXT_PUBLIC_TURNSTILE_SITE_KEY: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
     NEXT_PUBLIC_APPCHECK_SITE_KEY: process.env.NEXT_PUBLIC_APPCHECK_SITE_KEY,
     NEXT_PUBLIC_APPCHECK_DEBUG_TOKEN: process.env.NEXT_PUBLIC_APPCHECK_DEBUG_TOKEN,
+    NEXT_PUBLIC_GCC_E2E: process.env.NEXT_PUBLIC_GCC_E2E,
   });
 
   if (!parsed.success) {
