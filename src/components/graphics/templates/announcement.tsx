@@ -1,7 +1,14 @@
 "use client";
 
 // GCC - tournament announcement poster for organisers.
-import { GraphicChip, GraphicFrame, GraphicQr } from "@/components/graphics/graphic-primitives";
+import {
+  GraphicChip,
+  GraphicFrame,
+  GraphicPanel,
+  GraphicQr,
+  GraphicSectionTitle,
+  GraphicStat,
+} from "@/components/graphics/graphic-primitives";
 import { announcementDateLabel } from "@/lib/graphics/data";
 import type { AnnouncementGraphicData, GraphicBranding, GraphicSizeId } from "@/lib/graphics/types";
 
@@ -19,68 +26,58 @@ export function AnnouncementTemplate({
 
   return (
     <GraphicFrame branding={branding} size={size} footerNote="Register through GCC">
-      <div className="flex min-h-0 flex-1 flex-col justify-center">
-        <p className="text-[17px] font-semibold uppercase tracking-[0.24em] text-gold-300">
-          Registration open
-        </p>
-        <h2 className="mt-3 max-w-[860px] font-display text-[54px] font-semibold uppercase leading-[1.02] tracking-display text-white">
-          Claim your place
-        </h2>
-        <p className="mt-4 max-w-[760px] text-[19px] leading-7 text-grey-300">
-          {branding.gameName}
-          {branding.season ? ` · ${branding.season}` : ""}. Enter through GCC and every result is
-          recorded, verified and kept in your permanent player record.
-        </p>
+      <GraphicSectionTitle
+        eyebrow="Registration open"
+        title="Claim your place"
+        description={`${branding.gameName}${branding.season ? ` · ${branding.season}` : ""}. Every result is recorded, verified and kept in your permanent player record.`}
+        meta={<GraphicChip tone="gold">{data.slots} player field</GraphicChip>}
+      />
 
-        <div className="mt-7 flex flex-wrap gap-2.5">
-          <GraphicChip tone="electric">{data.slots} player field</GraphicChip>
-          <GraphicChip>{placesLeft} places remaining</GraphicChip>
-          <GraphicChip tone="gold">Registration open</GraphicChip>
+      <GraphicPanel className="flex min-h-0 flex-1 flex-col gap-5">
+        <div className="grid shrink-0 grid-cols-3 gap-3">
+          <GraphicStat label="Starts" value={announcementDateLabel(data.startsAt)} />
+          <GraphicStat label="Registered" value={`${data.registered} / ${data.slots}`} />
+          <GraphicStat
+            label="Organiser"
+            value={data.organiserName ?? branding.organiserName ?? "GCC"}
+          />
         </div>
 
-        <div className="mt-8 grid grid-cols-3 gap-3">
-          <div className="border-white/12 rounded-xl border bg-navy-900/70 p-4">
-            <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-grey-500">
-              Starts
-            </p>
-            <p className="mt-1 text-[20px] font-semibold text-white">
-              {announcementDateLabel(data.startsAt)}
-            </p>
-          </div>
-          <div className="border-white/12 rounded-xl border bg-navy-900/70 p-4">
-            <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-grey-500">
-              Field
-            </p>
-            <p className="mt-1 text-[20px] font-semibold text-white">
-              {data.registered} / {data.slots} registered
-            </p>
-          </div>
-          <div className="border-white/12 rounded-xl border bg-navy-900/70 p-4">
-            <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-grey-500">
-              Organiser
-            </p>
-            <p className="mt-1 truncate text-[20px] font-semibold text-white">
-              {data.organiserName ?? branding.organiserName ?? "GCC"}
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-8 flex items-center gap-6 rounded-2xl border border-electric-400/25 bg-electric-500/[0.06] p-5">
-          <GraphicQr src={data.qrSvg} size={portrait ? 136 : 156} />
-          <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-semibold uppercase tracking-[0.18em] text-electric-300">
+        <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_260px] gap-5">
+          <div className="flex min-w-0 flex-col justify-center">
+            <div className="flex flex-wrap gap-2">
+              <GraphicChip tone="electric" dot="#2E9BFF">
+                {placesLeft} places remaining
+              </GraphicChip>
+              <GraphicChip tone="gold" dot="#F5C443">
+                Entries open
+              </GraphicChip>
+            </div>
+            <h3 className="mt-5 font-display text-[38px] font-semibold uppercase leading-[1.05] tracking-display text-white">
               Enter from your phone
+            </h3>
+            <p className="mt-3 max-w-[640px] text-[17px] leading-7 text-grey-300">
+              Scan the code or open the link. Registration closes when the field is full or when the
+              organiser closes entries.
             </p>
-            <p className="mt-1 text-[18px] font-semibold text-white">Scan the code or open</p>
-            <p className="mt-2 break-all font-mono text-[15px] leading-5 text-grey-300">
-              {data.registrationUrl.replace(/^https?:\/\//, "")}
-            </p>
-            <p className="mt-3 text-[14px] leading-5 text-grey-500">
-              Registration closes when the field is full or when the organiser closes entries.
-            </p>
+            <div className="mt-6 rounded-2xl border border-electric-400/25 bg-electric-500/[0.07] px-5 py-4">
+              <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-electric-300">
+                Registration link
+              </p>
+              <p className="mt-2 truncate font-mono text-[15px] text-grey-200">
+                {data.registrationUrl.replace(/^https?:\/\//, "")}
+              </p>
+            </div>
           </div>
+
+          <GraphicPanel tone="electric" className="flex flex-col items-center justify-center gap-4">
+            <GraphicQr src={data.qrSvg} size={portrait ? 156 : 176} caption="Scan to register" />
+            <p className="text-center text-[13px] font-semibold uppercase tracking-[0.14em] text-grey-400">
+              GCC tournament entry
+            </p>
+          </GraphicPanel>
         </div>
-      </div>
+      </GraphicPanel>
     </GraphicFrame>
   );
 }

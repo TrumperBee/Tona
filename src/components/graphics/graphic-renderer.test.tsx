@@ -106,6 +106,15 @@ describe("GraphicRenderer", () => {
     expect(container.textContent).toContain("Final table");
   });
 
+  it("uses the shared fixed-size frame and panel system", () => {
+    const container = renderPayload({ template: "league-table", data: leagueTable });
+
+    expect(container.querySelector("[data-graphic-root]")).not.toBeNull();
+    expect(container.querySelector("[data-graphic-panel]")).not.toBeNull();
+    expect(container.textContent).toContain("Global Champions Circuit");
+    expect(container.textContent).toContain("gcc.example");
+  });
+
   it("truncates a long gamer tag and keeps the original in the title attribute", () => {
     const container = renderPayload({ template: "league-table", data: leagueTable });
     const fullTag = container.querySelector('[title="ABCDEFGHIJKLMNOPQ"]');
