@@ -124,6 +124,10 @@ export function resetFontEmbedCache(): void {
 /**
  * Captures one fixed-size node at 2x. Safari renders twice because its first
  * pass can run before webfonts and images are painted; the second pass is kept.
+ *
+ * A capture is retried without embedded fonts and finally at 1x. Both fallbacks
+ * still produce a valid PNG; losing webfont embedding or resolution is better
+ * than showing the user a failed generation.
  */
 export async function exportNodeAsPng(
   node: HTMLElement,
@@ -135,18 +139,35 @@ export async function exportNodeAsPng(
   const baseOptions = {
     width: options.width,
     height: options.height,
-    pixelRatio,
     backgroundColor: options.backgroundColor ?? DEFAULT_BACKGROUND,
     cacheBust: false,
-    fontEmbedCSS: await fontEmbedCss(node),
     skipAutoScale: false,
   };
+  const attempts = [
+    { ...baseOptions, pixelRatio, fontEmbedCSS: await fontEmbedCss(node) },
+    { ...baseOptions, pixelRatio, fontEmbedCSS: "" },
+    { ...baseOptions, pixelRatio: 1, fontEmbedCSS: "" },
+  ];
 
   if (isSafariLike()) {
-    await toPng(node, baseOptions);
+    try {
+      await toPng(node, attempts[0] ?? attempts[1]!);
+    } catch {
+      // The warm-up pass is best-effort; the real attempts below still run.
+    }
   }
 
-  return toPng(node, baseOptions);
+  let lastError: unknown;
+
+  for (const attempt of attempts) {
+    try {
+      return await toPng(node, attempt);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError ?? new Error("Image export failed");
 }
 
 /** Converts a PNG data URL to a Blob without another canvas round-trip. */

@@ -808,17 +808,30 @@ scaled with CSS; the captured node is a separate full-size copy rendered off-scr
 
 Shared rules for every template:
 
-- `GraphicFrame` owns the header (GCC mark or tournament logo, name, season, game,
-  organiser), the brand footer (tagline and domain) and the navy/electric/gold field.
+- `GraphicFrame` owns the compact masthead, the brand footer and the navy/electric/gold
+  field. Season, game and organiser appear as aligned pills instead of floating text.
+- `GraphicPanel` is the single card surface used by every template. It provides one
+  radius, border and elevation language; `GraphicStat` and `GraphicChip` provide the
+  shared metric and label vocabulary.
+- `GraphicSectionTitle` uses a gold rule, a bold uppercase headline and optional meta.
+  Templates put related information inside one panel rather than scattering chips and
+  badges across the canvas.
 - `GraphicTag` enforces the 3-16 character gamer-tag range with an ellipsis and CSS
   truncation as a second defence.
 - `GraphicAvatar` shows the player's Cloudinary photo with `crossOrigin="anonymous"` and
   falls back to initials when the photo is missing, blocked or fails to load.
 - `GraphicTrophy` is the original GCC cup silhouette. No UEFA logo, trophy, starball,
   competition name or typography is used.
+- Layouts use explicit pixel grids and equal-height rows so a 36-row table, 18 fixtures,
+  four pots or a 23-tie bracket keep one rhythm. Story fixtures use one column; portrait
+  fixtures use two. QR codes always sit in a dedicated panel beside the link or rating.
 - Empty or partial data is shown honestly: "No matches are listed for this matchday",
   "QR unavailable", or no template card at all. A template is never filled with sample
   data.
+
+`exportNodeAsPng` captures at 2x with embedded fonts, then retries without font embedding
+and finally at 1x if a browser rejects the first passes. The user still sees an honest
+error only when every attempt fails.
 
 The organiser gallery is at Organiser -> Tournament -> Graphics. Public pages expose a
 "Download image" control beside the league table, pots, each matchday of fixtures and
