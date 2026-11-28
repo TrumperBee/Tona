@@ -194,8 +194,10 @@ DENY`, a complete `Permissions-Policy`, preload-ready HSTS,
 - A per-request nonce CSP is built in `src/lib/security/csp.ts` and applied in
   `src/proxy.ts`. `script-src` uses `'strict-dynamic'`; styles are confined to
   self/nonce; images allow self, `data:`, `blob:` and Cloudinary only;
-  `connect-src` and `frame-src` list exact Firebase/Google/Turnstile endpoints;
-  `object-src`, `base-uri`, `form-action` and `frame-ancestors` are locked down.
+  `connect-src` lists the exact Firebase/Google/Turnstile endpoints plus
+  Cloudinary so `html-to-image` can inline tournament photos, while `frame-src`
+  lists only the exact challenge endpoints; `object-src`, `base-uri`,
+  `form-action` and `frame-ancestors` are locked down.
   Production defaults to `CSP_MODE=enforce`; deployments may start with
   `CSP_MODE=report-only` and roll back by restoring that value. Reports go to
   `/api/csp-report`, which is size-capped, rate-limited and PII-free.

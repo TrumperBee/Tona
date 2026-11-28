@@ -8,7 +8,8 @@
 // - style-src keeps 'unsafe-inline' because React style attributes and the
 //   graphics export cannot be nonced. Everything else is nonce or origin based.
 // - connect-src lists the exact Firebase/Google endpoints used by Auth,
-//   Firestore, App Check and the Turnstile/reCAPTCHA challenge.
+//   Firestore, App Check and the Turnstile/reCAPTCHA challenge, plus Cloudinary
+//   because html-to-image inlines tournament photos with fetch().
 // - img-src allows Cloudinary delivery and data:/blob: for avatar previews and
 //   html-to-image output.
 export type CspMode = "report-only" | "enforce";
@@ -66,7 +67,13 @@ export function buildContentSecurityPolicy({ nonce, isProduction }: CspOptions):
     "style-src-attr": ["'unsafe-inline'"],
     "img-src": ["'self'", "data:", "blob:", "https://res.cloudinary.com"],
     "font-src": ["'self'", "data:"],
-    "connect-src": [...FIREBASE_CONNECT, TURNSTILE_SCRIPT, ...RECAPTCHA_CONNECT, ...localConnect],
+    "connect-src": [
+      ...FIREBASE_CONNECT,
+      TURNSTILE_SCRIPT,
+      ...RECAPTCHA_CONNECT,
+      "https://res.cloudinary.com",
+      ...localConnect,
+    ],
     "frame-src": [
       "'self'",
       TURNSTILE_SCRIPT,

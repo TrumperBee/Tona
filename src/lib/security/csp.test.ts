@@ -39,6 +39,7 @@ describe("buildContentSecurityPolicy", () => {
 
   it("keeps media exports working without allowing arbitrary hosts", () => {
     expect(enforce).toContain("img-src 'self' data: blob: https://res.cloudinary.com");
+    expect(enforce).toMatch(/connect-src[^;]*https:\/\/res\.cloudinary\.com/);
     expect(enforce).toContain("style-src 'self'");
     expect(enforce).toContain(`'nonce-${nonce}'`);
     expect(enforce).toContain("worker-src 'self' blob:");
