@@ -4,7 +4,7 @@
 // Shows a neutral message; sensitive error details are never rendered.
 import { AlertTriangle, Home, RotateCcw } from "lucide-react";
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { BrandMark } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
@@ -17,9 +17,30 @@ export default function Error({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const [reference, setReference] = useState<string | null>(error.digest ?? null);
+
   useEffect(() => {
-    // Replace with structured server logging in Phase 18.
-    console.error(error);
+    let cancelled = false;
+    void fetch("/api/client-error", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        message: error.message?.slice(0, 500) ?? "Client error",
+        digest: error.digest,
+        name: error.name,
+        page: typeof window !== "undefined" ? window.location.pathname : undefined,
+      }),
+    })
+      .then(async (response) =>
+        response.ok ? ((await response.json()) as { reference?: string }) : null,
+      )
+      .then((body) => {
+        if (!cancelled && body?.reference) setReference(body.reference);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
   }, [error]);
 
   return (
@@ -43,8 +64,8 @@ export default function Error({
           changed. You can try again, or return to the home page.
         </p>
 
-        {error.digest ? (
-          <p className="mt-3 font-mono text-xs text-grey-500">Reference: {error.digest}</p>
+        {reference ? (
+          <p className="mt-3 font-mono text-xs text-grey-500">Reference: {reference}</p>
         ) : null}
 
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
