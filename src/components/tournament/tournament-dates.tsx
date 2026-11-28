@@ -6,11 +6,28 @@
 // renders in the competition's timezone (the one the organiser publishes);
 // the toggle re-renders the same instants in the viewer's device timezone so
 // nobody has to do timezone maths in their head.
-import { useMemo, useState } from "react";
+import { useSyncExternalStore, useState } from "react";
 
 import { cn } from "@/lib/utils/cn";
 
 type DateMode = "competition" | "local";
+
+/** The viewer's timezone is browser-only state, so it needs a server snapshot. */
+function subscribeToTimeZone(): () => void {
+  return () => {};
+}
+
+function getLocalTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "your device time";
+  } catch {
+    return "your device time";
+  }
+}
+
+function getServerTimeZone(): null {
+  return null;
+}
 
 export interface TournamentDatesProps {
   readonly opensAt: string | null;
@@ -52,13 +69,9 @@ export function TournamentDates({
 }: TournamentDatesProps) {
   const [mode, setMode] = useState<DateMode>("competition");
   const timeZone = mode === "competition" ? timezone : undefined;
-  const localLabel = useMemo(() => {
-    try {
-      return Intl.DateTimeFormat().resolvedOptions().timeZone;
-    } catch {
-      return "your device time";
-    }
-  }, []);
+  // SSR renders the stable label; React swaps in the device timezone after
+  // hydration without a text mismatch.
+  const localLabel = useSyncExternalStore(subscribeToTimeZone, getLocalTimeZone, getServerTimeZone);
 
   const rows = [
     { label: "Registration opens", value: opensAt },
@@ -91,7 +104,7 @@ export function TournamentDates({
                 : "text-grey-400 hover:text-grey-200",
             )}
           >
-            {option.id === "local" ? `Your local time (${localLabel})` : option.label}
+            {option.id === "local" && localLabel ? `Your local time (${localLabel})` : option.label}
           </button>
         ))}
       </div>
