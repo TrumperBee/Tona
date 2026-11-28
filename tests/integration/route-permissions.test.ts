@@ -36,6 +36,8 @@ import * as route5 from "@/app/api/auth/turnstile/route";
 import * as route6 from "@/app/api/csp-report/route";
 import * as route7 from "@/app/api/gamer-tags/check/route";
 import * as route8 from "@/app/api/health/route";
+import * as route8b from "@/app/api/health/deep/route";
+import * as route8c from "@/app/api/client-error/route";
 import * as route9 from "@/app/api/notifications/preferences/route";
 import * as route10 from "@/app/api/notifications/read/route";
 import * as route11 from "@/app/api/organiser/logo/route";
@@ -141,6 +143,8 @@ const ROUTES: readonly RouteEntry[] = [
   { path: "/api/csp-report", module: route6, methods: ["POST"], params: [] },
   { path: "/api/gamer-tags/check", module: route7, methods: ["GET"], params: [] },
   { path: "/api/health", module: route8, methods: ["GET"], params: [] },
+  { path: "/api/health/deep", module: route8b, methods: ["GET"], params: [] },
+  { path: "/api/client-error", module: route8c, methods: ["POST"], params: [] },
   { path: "/api/notifications/preferences", module: route9, methods: ["PATCH"], params: [] },
   { path: "/api/notifications/read", module: route10, methods: ["POST"], params: [] },
   { path: "/api/organiser/logo", module: route11, methods: ["POST", "DELETE"], params: [] },
@@ -564,11 +568,13 @@ function category(path: string): Category {
     path === "/api/csp-report" ||
     path === "/api/gamer-tags/check" ||
     path === "/api/health" ||
+    path === "/api/client-error" ||
     path === "/api/players/search" ||
     path === "/api/unsubscribe"
   ) {
     return "public";
   }
+  if (path === "/api/health/deep") return "super-admin";
 
   if (path.startsWith("/api/super-admin")) return "super-admin";
   if (path.startsWith("/api/organiser")) return "organiser";

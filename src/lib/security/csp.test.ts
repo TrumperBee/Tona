@@ -34,7 +34,7 @@ describe("buildContentSecurityPolicy", () => {
 
     expect(enforce).not.toContain("*.");
     expect(enforce).not.toContain("wss://");
-    expect(enforce).toContain("frame-src https://challenges.cloudflare.com");
+    expect(enforce).toMatch(/frame-src[^;]*https:\/\/challenges\.cloudflare\.com/);
   });
 
   it("keeps media exports working without allowing arbitrary hosts", () => {

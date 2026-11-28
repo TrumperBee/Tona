@@ -20,6 +20,11 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
+// Keep the Turnstile widget deterministic in jsdom: the real script never loads.
+vi.mock("@/components/auth/turnstile-field", () => ({
+  TurnstileField: () => null,
+}));
+
 beforeEach(() => {
   vi.stubGlobal(
     "fetch",
@@ -38,7 +43,10 @@ afterEach(() => {
 });
 
 async function assertStableTyping(label: RegExp): Promise<HTMLInputElement> {
-  const user = userEvent.setup();
+  // delay:null avoids the default per-keystroke delay, which can exceed the
+  // jsdom test timeout under full-suite load. The regression is node/focus
+  // stability, not human typing speed.
+  const user = userEvent.setup({ delay: null });
   const input = screen.getByLabelText(label) as HTMLInputElement;
   await user.click(input);
 
@@ -54,36 +62,40 @@ async function assertStableTyping(label: RegExp): Promise<HTMLInputElement> {
 }
 
 describe("registration form", () => {
-  it("keeps the full-name input node and focus for 25 characters", async () => {
+  it("keeps the full-name input node and focus for 25 characters", { timeout: 15000 }, async () => {
     render(<RegisterForm />);
 
     await assertStableTyping(/^Full name/);
   });
 
-  it("keeps the email input node and focus for 25 characters", async () => {
+  it("keeps the email input node and focus for 25 characters", { timeout: 15000 }, async () => {
     render(<RegisterForm />);
 
     await assertStableTyping(/^Email/);
   });
 
-  it("keeps focus on the gamer tag field while its availability check runs", async () => {
-    const user = userEvent.setup();
-    render(<RegisterForm />);
+  it(
+    "keeps focus on the gamer tag field while its availability check runs",
+    { timeout: 15000 },
+    async () => {
+      const user = userEvent.setup({ delay: null });
+      render(<RegisterForm />);
 
-    const input = screen.getByLabelText(/^Gamer tag/) as HTMLInputElement;
-    await user.click(input);
+      const input = screen.getByLabelText(/^Gamer tag/) as HTMLInputElement;
+      await user.click(input);
 
-    // The field caps at 16 characters by design, so type that many and assert
-    // the node survives the debounced availability state updates.
-    const tag = "abcdefghijklmnop";
+      // The field caps at 16 characters by design, so type that many and assert
+      // the node survives the debounced availability state updates.
+      const tag = "abcdefghijklmnop";
 
-    for (const character of tag) {
-      await user.keyboard(character);
+      for (const character of tag) {
+        await user.keyboard(character);
 
-      expect(screen.getByLabelText(/^Gamer tag/)).toBe(input);
-      expect(document.activeElement).toBe(input);
-    }
+        expect(screen.getByLabelText(/^Gamer tag/)).toBe(input);
+        expect(document.activeElement).toBe(input);
+      }
 
-    expect(input.value).toBe(tag);
-  });
+      expect(input.value).toBe(tag);
+    },
+  );
 });

@@ -125,12 +125,46 @@ describe("CSP reports", () => {
 
     expect(legacy.status).toBe(204);
     expect(reportingApi.status).toBe(204);
+
+    const events = warn.mock.calls
+      .map((call) => call.join(" "))
+      .flatMap((line) => {
+        try {
+          return [JSON.parse(line) as Record<string, unknown>];
+        } catch {
+          return [];
+        }
+      })
+      .filter((entry) => entry.event === "csp.report");
+
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          level: "warn",
+          event: "csp.report",
+          route: "/api/csp-report",
+          directive: "script-src-elem",
+          documentPath: "/dashboard",
+        }),
+        expect.objectContaining({
+          level: "warn",
+          event: "csp.report",
+          route: "/api/csp-report",
+          directive: "img-src",
+          documentPath: "/players/alice",
+        }),
+      ]),
+    );
+    for (const event of events) {
+      expect(typeof event.reference).toBe("string");
+      expect(String(event.reference).length).toBeGreaterThan(10);
+    }
+
     const logged = warn.mock.calls.map((call) => call.join(" ")).join("\n");
-    expect(logged).toContain("[csp] script-src-elem /dashboard");
-    expect(logged).toContain("[csp] img-src /players/alice");
     expect(logged).not.toContain("secret");
     expect(logged).not.toContain("private");
     expect(logged).not.toContain("evil.invalid");
+    expect(logged).not.toContain("token=");
     warn.mockRestore();
   });
 

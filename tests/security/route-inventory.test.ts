@@ -41,6 +41,41 @@ const ALLOW_LIST: Record<string, Partial<Record<CheckName, string>>> = {
     writable: "Reporting must stay available during maintenance.",
     role: "Reports are anonymous and intentionally unauthenticated.",
   },
+  "/api/health/deep": {
+    origin: "GET endpoint; no body.",
+    writable: "Read-only dependency checks.",
+    zod: "No request body is accepted by this endpoint.",
+  },
+  "/api/client-error": {
+    writable: "Client error reporting must be available during maintenance.",
+    role: "Any browser session or visitor may report a boundary error.",
+  },
+  "/api/test/emails": {
+    origin:
+      "Test-only endpoint; accessed by Playwright same-origin, but exempted as E2E harness control.",
+    writable:
+      "Test-only harness endpoint used during E2E; guarded by GCC_E2E + approved demo emulator project.",
+    zod: "No request body; endpoint is test-harness only and returns captured emails.",
+    rateLimit: "Test-only harness endpoint guarded by GCC_E2E + approved demo emulator project.",
+    role: "No user session; endpoint returns 404 unless GCC_E2E harness and capture mode are safely enabled.",
+  },
+  "/api/test/mock-cloudinary/[...path]": {
+    origin: "Same-origin image fetches in E2E; exempted as test-only harness endpoint.",
+    writable:
+      "Read-only in effect; serves in-memory mock assets only when GCC_E2E harness is safely enabled.",
+    zod: "No request body; path params identify mock asset and endpoint is test-harness only.",
+    rateLimit: "Test-only harness endpoint guarded by GCC_E2E + approved demo emulator project.",
+    role: "No session; endpoint returns 404 unless GCC_E2E harness is safely enabled.",
+  },
+  "/api/test/seed": {
+    origin:
+      "Test-only endpoint called by Playwright same-origin; guarded by GCC_E2E harness checks.",
+    writable:
+      "Test-only emulator seed/reset endpoint; requires GCC_E2E + approved demo emulator project.",
+    zod: "No request body; deterministic seed operation is test-harness only.",
+    rateLimit: "Test-only harness endpoint guarded by GCC_E2E + approved demo emulator project.",
+    role: "No user session; endpoint returns 404 unless GCC_E2E harness is safely enabled.",
+  },
   "/api/auth/session": {
     writable: "Session exchange reads state; it must work while writes are paused.",
     role: "This is the endpoint that establishes the session.",
@@ -168,7 +203,7 @@ function hasAny(code: string, tokens: string[]): boolean {
 function requiredRole(
   apiPath: string,
 ): "public" | "signed-in" | "applicant" | "organiser" | "super-admin" {
-  if (apiPath.startsWith("/api/super-admin")) {
+  if (apiPath.startsWith("/api/super-admin") || apiPath === "/api/health/deep") {
     return "super-admin";
   }
 
@@ -192,6 +227,7 @@ function requiredRole(
     apiPath === "/api/auth/session" ||
     apiPath.startsWith("/api/auth/") ||
     apiPath === "/api/health" ||
+    apiPath === "/api/client-error" ||
     apiPath === "/api/gamer-tags/check" ||
     apiPath === "/api/players/search" ||
     apiPath === "/api/csp-report" ||

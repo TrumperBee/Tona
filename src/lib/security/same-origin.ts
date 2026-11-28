@@ -38,23 +38,19 @@ function configuredOrigin(): string | null {
  */
 export function isSameOrigin(request: SameOriginRequest, expectedOrigin?: string): boolean {
   const method = (request.method ?? "GET").toUpperCase();
-
-  if (!STATE_CHANGING_METHODS.has(method)) {
-    return true;
-  }
+  if (!STATE_CHANGING_METHODS.has(method)) return true;
 
   let expectedValue = expectedOrigin ?? configuredOrigin();
-
-  if (!expectedValue) {
-    try {
-      expectedValue = new URL(request.url).origin;
-    } catch {
-      return false;
-    }
+  let requestUrl: URL | null = null;
+  try {
+    requestUrl = new URL(request.url);
+  } catch {
+    requestUrl = null;
   }
+  if (!expectedValue && requestUrl) expectedValue = requestUrl.origin;
+  if (!expectedValue) return false;
 
   let expectedUrl: URL;
-
   try {
     expectedUrl = new URL(expectedValue);
   } catch {
@@ -62,32 +58,21 @@ export function isSameOrigin(request: SameOriginRequest, expectedOrigin?: string
   }
 
   const source = request.headers.get("origin") ?? request.headers.get("referer");
-
-  if (!source) {
-    return false;
-  }
-
+  if (!source) return false;
   let sourceUrl: URL;
-
   try {
     sourceUrl = new URL(source);
   } catch {
     return false;
   }
 
-  if (sourceUrl.origin !== expectedUrl.origin) {
-    return false;
-  }
-
-  let requestUrl: URL;
-
-  try {
-    requestUrl = new URL(request.url);
-  } catch {
-    return false;
-  }
-
-  return requestUrl.host === expectedUrl.host;
+  // Trust only the configured site origin, and reject when the request target
+  // host is different. Normalize localhost/127.0.0.1 for local dev/E2E.
+  const norm = (o: string) => o.replace("://localhost", "://127.0.0.1");
+  const sourceOk = norm(sourceUrl.origin) === norm(expectedUrl.origin);
+  if (!sourceOk) return false;
+  if (requestUrl && norm(requestUrl.origin) !== norm(expectedUrl.origin)) return false;
+  return true;
 }
 
 /** Throws SameOriginError unless the request is same-origin. */
