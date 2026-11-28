@@ -1,8 +1,8 @@
 // GCC - privacy policy.
-// Describes the data model that exists in the repository; no analytics or
-// advertising services are present.
+// Draft policy copy for launch readiness. Review by a qualified lawyer before wide launch.
 import Link from "next/link";
 
+import { CONTACT_EMAIL, CONTACT_EMAIL_MAILTO } from "@/lib/config/site";
 import { LegalPage, type LegalSection } from "@/components/shared/legal-page";
 
 export const metadata = {
@@ -19,12 +19,12 @@ const sections: readonly LegalSection[] = [
       <>
         <p>
           This policy explains how Global Champions Circuit (&ldquo;GCC&rdquo;) handles personal
-          data when you visit the public site, hold an account or take part in a competition. It
-          applies to this deployment of the platform.
+          data when you visit the site, create an account, or take part in a competition.
         </p>
         <p>
-          The public site can be browsed without an account. Accounts are not open yet; when they
-          open, this policy will apply to the data described below.
+          GCC handles personal data in line with applicable law. Where relevant, this includes
+          Kenya&apos;s Data Protection Act, 2019. This page is a product privacy draft and should be
+          reviewed by a qualified lawyer before wide launch.
         </p>
       </>
     ),
@@ -34,37 +34,35 @@ const sections: readonly LegalSection[] = [
     heading: "Data we collect",
     body: (
       <>
-        <p>When accounts and competitions are active, we collect:</p>
+        <p>Depending on how you use GCC, we collect:</p>
         <ul className="list-disc space-y-2 pl-5">
           <li>
             <strong className="text-grey-100">Account data:</strong> full name, gamer tag, email
-            address, optional WhatsApp number, country, preferred game, platform and optional
-            profile photo.
+            address, password/authentication credentials handled through Firebase Auth, optional
+            WhatsApp number, country, preferred game, platform, optional community/favourite club,
+            and optional profile photo/avatar.
           </li>
           <li>
             <strong className="text-grey-100">Competition data:</strong> registrations, pot and
-            fixture assignments, admin-entered results, standings, result reports and announcements.
+            fixture assignments, admin-entered results, standings, knockout progression, result
+            reports, and announcements.
           </li>
           <li>
             <strong className="text-grey-100">Organiser data:</strong> application details such as
-            community name, experience, motivation, expected player count and contact channels.
+            community name, experience, motivation, expected player count, and contact channels.
           </li>
           <li>
-            <strong className="text-grey-100">Technical data:</strong> the minimum information
-            needed to serve pages, keep a session secure and protect the platform from abuse, such
-            as request logs and an http-only session cookie.
+            <strong className="text-grey-100">Technical data:</strong> minimum information needed to
+            serve pages, keep sessions secure, and protect the platform from abuse, such as request
+            metadata, rate-limit counters, and http-only session cookies.
           </li>
           <li>
-            <strong className="text-grey-100">Email delivery data:</strong> your notification
-            preferences, whether your address is currently deliverable, and a one-way hash of an
-            address that must not be emailed after a hard bounce or spam complaint. The suppression
-            list never stores the readable address.
+            <strong className="text-grey-100">Email delivery data:</strong> notification
+            preferences, deliverability state, and a one-way hash of an address that must not be
+            emailed after a hard bounce or spam complaint.
           </li>
         </ul>
-        <p>
-          We do not run advertising trackers, sell personal data or collect payment details on this
-          site.
-        </p>
+        <p>We do not sell personal data and do not run advertising trackers on the public site.</p>
       </>
     ),
   },
@@ -72,77 +70,51 @@ const sections: readonly LegalSection[] = [
     id: "why-we-use-data",
     heading: "Why we use your data",
     body: (
-      <>
-        <ul className="list-disc space-y-2 pl-5">
-          <li>To create and secure your account.</li>
-          <li>To enter you in competitions, generate fixtures and record results.</li>
-          <li>To display public competition records and career statistics.</li>
-          <li>To review organiser applications and administer roles.</li>
-          <li>To investigate result reports, fair-play concerns and security incidents.</li>
-          <li>To meet legal obligations and enforce our terms.</li>
-        </ul>
-        <p>
-          We rely on performance of our agreement with you, our legitimate interests in running a
-          fair and secure competition platform, consent where it is required, and legal obligation.
-          You can withdraw consent for an optional feature at any time.
-        </p>
-      </>
+      <ul className="list-disc space-y-2 pl-5">
+        <li>To create, secure, and manage your account.</li>
+        <li>To enter you in competitions, generate fixtures, record results, and show records.</li>
+        <li>To let opponents/organisers arrange matches through controlled WhatsApp links.</li>
+        <li>To review organiser applications and administer roles.</li>
+        <li>To investigate result reports, fair-play concerns, and security incidents.</li>
+        <li>To send account/competition emails through Resend according to preferences.</li>
+        <li>To meet legal obligations and enforce our terms.</li>
+      </ul>
     ),
   },
   {
     id: "what-is-public",
-    heading: "What is public",
+    heading: "What is public and what is shared",
     body: (
       <>
         <p>
-          A public player profile may show your gamer tag, country, preferred game, platform, photo
-          and competitive record: tournaments entered, matches played, wins, draws, losses, goals
-          and titles.
+          Public profiles may show gamer tag, country, preferred game, platform, photo, and
+          competitive record. Your email address and WhatsApp number are never shown on a public
+          profile or public tournament document.
         </p>
         <p>
-          Your email address and WhatsApp number are never shown on a public profile or in a public
-          tournament document. Organisers receive only the contact details needed to run their
-          competition, and those details are not published.
-        </p>
-        <p>
-          If you add a WhatsApp number, the other player in one of your scheduled matches can ask
-          the platform for a WhatsApp link to you, and an organiser of a competition you entered can
-          do the same. A WhatsApp link necessarily contains your number, so the number leaves our
-          servers only inside that link: it is never displayed as text, it is issued only to a
-          signed-in account with a real relationship to you, it is rate limited, and every issuance
-          is recorded. You can remove your number at any time from your profile, which stops new
-          links immediately.
+          If you add a WhatsApp number, GCC may issue a WhatsApp link to a signed-in opponent in a
+          scheduled match or to the relevant tournament organiser. A WhatsApp link necessarily
+          contains your number; it is never displayed as plain text by GCC, is issued only under
+          product rules/rate limits, and issuance is recorded for abuse handling. You can remove
+          your number from your profile at any time, which stops new links.
         </p>
       </>
     ),
   },
   {
     id: "email",
-    heading: "Email we send",
+    heading: "Email and notifications",
     body: (
       <>
         <p>
-          We email you about your account and the competitions you enter. Critical email, such as an
-          approval decision, an account status change, a cancelled competition you entered or a
-          notice that your email address changed, is always sent and cannot be turned off.
+          GCC sends account and competition email through Resend. Critical email (security/account
+          status, email-change notice, cancelled competition you entered, or similar critical
+          notices) may be sent regardless of optional preferences. Important competition emails are
+          on by default where applicable; optional emails are opt-in.
         </p>
         <p>
-          Important competition email is on by default: a confirmed entry, a completed draw,
-          published fixtures, knockout qualification, the next knockout tie and tournament
-          completion. You can turn it off in notification settings. Optional email, such as
-          individual results and announcements, is off by default and only sent if you opt in.
-          Everything is also shown in your notification centre.
-        </p>
-        <p>
-          Every non-critical email carries a one-click unsubscribe link. Confirming an unsubscribe
-          changes only that stream and never affects critical account mail. You can re-enable any
-          stream from the notification settings page while signed in.
-        </p>
-        <p>
-          Resend delivers our email and reports bounces and spam complaints back to us. A hard
-          bounce or complaint pauses email to that address and shows a banner on your dashboard
-          until you change it. We do not use email for advertising and we do not sell or share your
-          address for marketing.
+          Non-critical emails include unsubscribe controls. A hard bounce or complaint may pause
+          email to that address. In-app notifications remain available where applicable.
         </p>
       </>
     ),
@@ -151,66 +123,44 @@ const sections: readonly LegalSection[] = [
     id: "cookies",
     heading: "Cookies and sessions",
     body: (
-      <>
-        <p>
-          GCC uses a single http-only session cookie when you sign in. It is used to keep you signed
-          in, is not readable by page scripts and is cleared when you sign out or when it expires.
-        </p>
-        <p>
-          We do not use advertising cookies, cross-site trackers or third-party analytics on the
-          public site. If that changes, this policy will be updated before the change takes effect.
-        </p>
-      </>
-    ),
-  },
-  {
-    id: "service-providers",
-    heading: "Service providers",
-    body: (
-      <>
-        <p>
-          Firebase (a Google service) provides authentication and the database that stores accounts
-          and competition records. Our hosting provider serves the site. Resend delivers account and
-          competition email and returns delivery events. These providers process data on our
-          instructions and under their own security and data protection commitments.
-        </p>
-        <p>
-          eHubMarket is an independent marketplace partner. GCC does not send your account data to
-          eHubMarket. If you follow the link, your browser makes a normal request to that site and
-          its own privacy policy applies.
-        </p>
-        <p>
-          We may disclose data where required by law, to protect a person&rsquo;s safety, or to
-          investigate fraud or a serious breach of our terms.
-        </p>
-      </>
-    ),
-  },
-  {
-    id: "international-transfers",
-    heading: "International transfers",
-    body: (
       <p>
-        Our service providers may process data in countries other than yours. Where that happens, we
-        rely on the transfer safeguards offered by those providers and applicable data protection
-        law. You can ask us for more information about the safeguards used for your data.
+        GCC uses an http-only session cookie when you sign in. It keeps you signed in, is not
+        readable by page scripts, and is cleared on sign-out or expiry. GCC does not use advertising
+        cookies or cross-site trackers on the public site.
       </p>
     ),
   },
   {
-    id: "retention",
-    heading: "How long we keep data",
+    id: "service-providers",
+    heading: "Service providers and hosting",
     body: (
       <>
         <p>
-          Account data is kept while your account exists and for a short period afterwards where
-          needed for security, dispute resolution or legal obligations.
+          GCC uses third-party providers to operate: Firebase (Authentication and Firestore data
+          hosting), Cloudinary (image hosting for avatars/tournament logos/covers where configured),
+          Resend (email delivery), and Vercel/hosting infrastructure for serving the application.
+          These providers process data under their own terms/security commitments.
         </p>
         <p>
-          Competition records are designed to be permanent. Completed results, standings, champions
-          and Hall of Fame entries are preserved as part of the sporting record. If an account is
-          closed, we remove or minimise personal details that are not needed to maintain that
-          record.
+          eHubMarket is an independent partner link. GCC does not send your account data to
+          eHubMarket. If you follow an external link, that site&apos;s policy applies.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "retention",
+    heading: "Data retention",
+    body: (
+      <>
+        <p>
+          Account data is kept while your account exists and for a limited period afterwards where
+          needed for security, dispute resolution, or legal obligations.
+        </p>
+        <p>
+          Competition records are designed to be permanent. Completed results, standings, champions,
+          and Hall of Fame entries are preserved as sporting records. If an account is deleted, GCC
+          minimises/removes personal details not needed for that record.
         </p>
       </>
     ),
@@ -221,24 +171,16 @@ const sections: readonly LegalSection[] = [
     body: (
       <>
         <p>
-          You can delete your account from profile settings. We ask you to sign in again first: a
-          session older than ten minutes is not enough. The deletion removes your Firebase sign-in,
-          email address, full name, WhatsApp number, community, favourite club and profile
-          photo/avatar. The avatar file is also removed from Cloudinary on a best-effort basis.
-          Deletion attempts are limited to three per hour.
+          You can delete your account from profile settings after a recent sign-in. Deletion removes
+          your Firebase sign-in and personal profile data (email, full name, WhatsApp number,
+          community, favourite club, avatar/profile photo). Avatar files are removed from Cloudinary
+          on a best-effort basis.
         </p>
         <p>
-          Your public profile becomes &ldquo;Deleted player&rdquo; with no avatar. Completed
-          matches, tournament history, standings and titles are kept under your existing gamer tag
-          as part of the permanent sporting record. Your gamer tag stays reserved, and tournament
-          entries are neither withdrawn nor released: organisers see &ldquo;Deleted player&rdquo; in
-          their registration lists, with the same place in the field. Nothing is released silently.
-        </p>
-        <p>
-          The Super Admin account and organisers who still own an active tournament cannot use
-          self-service deletion. Contact us through the contact page if you need an exceptional
-          review. Every deletion is recorded in our audit log without storing the removed personal
-          details.
+          Match/tournament history is kept under the existing gamer tag as part of the permanent
+          sporting record. Your public profile becomes &ldquo;Deleted player&rdquo; with no avatar.
+          GCC does not silently release gamer tags or tournament registrations. Organisers may see
+          &ldquo;Deleted player&rdquo; where needed for the historical record.
         </p>
       </>
     ),
@@ -247,46 +189,42 @@ const sections: readonly LegalSection[] = [
     id: "security",
     heading: "Security",
     body: (
-      <>
-        <p>
-          Administrative credentials never reach the browser. Sessions are verified on the server,
-          database access is restricted by security rules, and privileged actions are audited. No
-          system is completely secure, but we work to limit access to personal data to the people
-          and processes that need it.
-        </p>
-        <p>
-          If you believe an account or a competition has been compromised, contact us immediately
-          and do not share your password or one-time codes.
-        </p>
-      </>
+      <p>
+        Admin credentials never reach the browser. Sessions are verified on the server, writes go
+        through Admin SDK routes with validation/authorisation/audit logging, and privileged actions
+        are audited. No system is completely secure, but GCC limits access to personal data to
+        people and processes that need it.
+      </p>
     ),
   },
   {
     id: "your-rights",
     heading: "Your rights",
     body: (
-      <>
-        <p>
-          Depending on where you live, you may have the right to access, correct, delete or restrict
-          the use of your personal data, to object to certain processing, to receive a portable
-          copy, and to complain to a data protection authority.
-        </p>
-        <p>
-          Some records may be exempt from deletion where they are needed for the permanent
-          competition record, to resolve a dispute, or to meet a legal obligation. If that applies,
-          we will explain what is retained and why. To make a request, use the contact page.
-        </p>
-      </>
+      <p>
+        Depending on where you live, you may have rights to access, correct, delete, restrict,
+        object, or receive a portable copy of personal data, and to complain to a data protection
+        authority. Some competition records may be retained where needed for the permanent sporting
+        record, dispute resolution, or legal obligation. To make a request, contact{" "}
+        <a
+          href={CONTACT_EMAIL_MAILTO}
+          className="font-semibold text-electric-300 underline-offset-4 hover:underline"
+        >
+          {CONTACT_EMAIL}
+        </a>
+        .
+      </p>
     ),
   },
   {
     id: "children",
-    heading: "Children",
+    heading: "Children and minimum age",
     body: (
       <p>
-        GCC is not intended for children below the age at which they can consent to online services
-        in their country. We do not knowingly collect data from a child below that age. If you
-        believe a child has created an account, contact us so it can be reviewed and removed.
+        GCC is not intended for children under 13. You must be at least 13 years old to create an
+        account. If local law requires a higher age or guardian consent for online services, that
+        higher requirement applies. If you believe a child under the applicable age has created an
+        account, contact us so it can be reviewed and removed.
       </p>
     ),
   },
@@ -296,8 +234,7 @@ const sections: readonly LegalSection[] = [
     body: (
       <p>
         We may update this policy as the platform develops. The date at the top of the page shows
-        the current version. A material change will be announced on the platform before it takes
-        effect.
+        the current version. Material changes should be announced before taking effect.
       </p>
     ),
   },
@@ -306,8 +243,21 @@ const sections: readonly LegalSection[] = [
     heading: "Contact",
     body: (
       <p>
-        Privacy questions and requests can be sent through the contact page. Please describe the
-        data or account concerned; do not send passwords, one-time codes or payment details.
+        Privacy questions and requests can be sent to{" "}
+        <a
+          href={CONTACT_EMAIL_MAILTO}
+          className="font-semibold text-electric-300 underline-offset-4 hover:underline"
+        >
+          {CONTACT_EMAIL}
+        </a>{" "}
+        or through the{" "}
+        <Link
+          href="/contact"
+          className="font-semibold text-electric-300 underline-offset-4 hover:underline"
+        >
+          contact page
+        </Link>
+        . Do not send passwords, one-time codes, or payment details.
       </p>
     ),
   },
@@ -319,23 +269,16 @@ export default function PrivacyPage() {
       eyebrow="Legal"
       title="Privacy policy"
       updated="26 November 2026"
-      summary="What GCC collects, why it is needed, who can see it, how account deletion works and how competition records are kept. Your email address and WhatsApp number are never public."
+      summary="How GCC handles account, competition, WhatsApp, email, image hosting, and retention data. Draft for launch readiness; review by a qualified lawyer before wide launch."
       sections={sections}
       contactNote={
         <p>
-          To make a privacy request, use the{" "}
-          <Link
-            href="/contact"
-            className="font-semibold text-electric-300 underline-offset-4 hover:underline"
-          >
-            contact page
-          </Link>
-          . For the rules of the platform, read the{" "}
+          For platform rules, read the{" "}
           <Link
             href="/terms"
             className="font-semibold text-electric-300 underline-offset-4 hover:underline"
           >
-            terms of use
+            Terms of Use
           </Link>
           .
         </p>

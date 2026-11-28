@@ -4,6 +4,7 @@
 // imports so it can be unit tested as pure logic and imported by shared types.
 // Server code is responsible for loading SUPER_ADMIN_EMAIL and SUPER_ADMIN_UID
 // and passing them in.
+import { logger } from "@/lib/observability/logger";
 import { isUserRole, USER_ROLES, type UserRole } from "@/types/domain";
 
 export const ROLES = {
@@ -68,7 +69,7 @@ export function warnMissingSuperAdminUid(): void {
   }
 
   warnedAboutMissingSuperAdminUid = true;
-  console.error(SUPER_ADMIN_UID_MISSING_MESSAGE);
+  logger.error("auth.super_admin_uid_missing", new Error(SUPER_ADMIN_UID_MISSING_MESSAGE));
 }
 
 /**

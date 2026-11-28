@@ -16,6 +16,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { writeAuditLog } from "@/lib/audit/log";
 import { withPublicInvalidation } from "@/lib/cache/public-data";
 import type { TournamentAccess } from "@/lib/auth/guards";
+import { logger } from "@/lib/observability/logger";
 import { resolveTie, type KnockoutPlayer } from "@/lib/engine";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
@@ -396,7 +397,10 @@ async function applyKnockoutMatchChange(
   if (committed.completion) {
     await announceCompletion(access, tournamentId, committed.tournament, committed.completion);
     await finaliseTournamentCompletion(tournamentId).catch((error) => {
-      console.error("finaliseTournamentCompletion failed", error);
+      logger.error("tournament.completion.finalise_failed", error, {
+        route: "tournament.knockout-results",
+        tournamentId,
+      });
     });
   } else {
     await refreshPlayersStats([committed.homeUid, committed.awayUid]).catch(() => undefined);

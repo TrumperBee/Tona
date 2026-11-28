@@ -1,4 +1,5 @@
 // GCC - organiser code of conduct.
+// Draft for launch readiness. Review by a qualified lawyer before wide launch.
 //
 // A public, permanent reference linked from the application form. It states the
 // standards GCC expects from organisers without making promises the platform
@@ -61,9 +62,16 @@ const commitments = [
     body: (
       <>
         <p>
-          Contact details are shared with you only so you can run the competition. Do not publish,
-          sell, scrape or reuse a player&rsquo;s email address, WhatsApp number or other private
-          data. Do not add players to unrelated groups or marketing lists.
+          Contact details are shared with you only so you can run the competition. GCC may provide a
+          controlled WhatsApp link to an opponent or organiser for match scheduling; a WhatsApp link
+          necessarily contains the recipient number. You must not publish, sell, scrape, or reuse a
+          player&rsquo;s email address, WhatsApp number, or other private data. Do not add players
+          to unrelated groups or marketing lists.
+        </p>
+        <p>
+          GCC stores competition data in Firebase and may host uploaded images on Cloudinary and
+          send account/competition emails through Resend. Treat any personal data you access as
+          confidential and use it only for running the competition.
         </p>
         <p>
           Use platform tools for communication where they exist. Share only the minimum information
@@ -100,6 +108,11 @@ const commitments = [
           GCC does not collect, hold, process or refund entry fees, prizes or any other payment for
           a tournament. If your community chooses to charge a fee outside GCC, that arrangement is
           entirely between you and the players involved.
+        </p>
+        <p>
+          GCC keeps competition records as part of the sporting record. Account deletion may remove
+          personal profile data, but match/tournament history can remain under the existing gamer
+          tag as &ldquo;Deleted player&rdquo; with no avatar.
         </p>
         <p>
           State any costs clearly before a player enters, keep your own records, and never describe
@@ -168,7 +181,8 @@ export default function OrganiserCodePage() {
               <Link href="/contact" className="font-semibold text-electric-300 hover:underline">
                 contact page
               </Link>
-              .
+              . GCC handles personal data in line with applicable law, including Kenya&apos;s Data
+              Protection Act, 2019, where applicable.
             </p>
           </div>
         </CardContent>

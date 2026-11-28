@@ -59,6 +59,7 @@ export const SITE_URL = safePublicUrl(process.env.NEXT_PUBLIC_SITE_URL, fallback
 
 /** Public contact channels. Unset values are omitted rather than invented. */
 export const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL?.trim() || null;
+export const CONTACT_EMAIL_MAILTO = CONTACT_EMAIL ? `mailto:${CONTACT_EMAIL}` : "/contact";
 export const CONTACT_WHATSAPP_E164 = process.env.NEXT_PUBLIC_CONTACT_WHATSAPP?.trim() || null;
 
 const contactWhatsAppDigits = CONTACT_WHATSAPP_E164?.replace(/\D/g, "") ?? "";

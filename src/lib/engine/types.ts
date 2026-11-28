@@ -3,7 +3,7 @@
 // PURE TypeScript: no database imports, no framework imports, no I/O.
 // These types are provisional and will be refined in Phase 10 alongside the
 // fixture generator and standings calculator.
-// TODO(phase 10): finalise types and add engine invariants.
+// Engine types are finalized; invariants enforced by engine modules/tests.
 
 export type ParticipantId = string;
 

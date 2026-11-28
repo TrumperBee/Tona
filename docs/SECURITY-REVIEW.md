@@ -102,15 +102,15 @@ All `fixed` findings have either an automated test, an executable command proof,
 
 ## Verification
 
-| Command | Result | Notes |
-| --- | --- | --- |
-| `npm run lint` | pass | 0 errors, 0 warnings after cleanup |
-| `npm run typecheck` | pass | After fixing pre-existing `createResultReport` export order and test typing |
-| `npm run build` | pass | Production build completed |
-| `npm test` | pass | 61 files, 539 tests |
-| `npm run test:rules` | pass | 1 file, 34 tests |
-| `npm run test:integration` | pass | 15 files, 194 tests |
-| `npm run format:check` | pass | Prettier clean |
-| `npm run test:security` | pass | 1 file, 5 tests |
-| `npm audit --omit=dev` | pass | 0 vulnerabilities |
-| `npm audit` | accepted | 14 moderate dev-only `firebase-tools` advisories; no non-breaking fix |
+| Command                    | Result   | Notes                                                                       |
+| -------------------------- | -------- | --------------------------------------------------------------------------- |
+| `npm run lint`             | pass     | 0 errors, 0 warnings after cleanup                                          |
+| `npm run typecheck`        | pass     | After fixing pre-existing `createResultReport` export order and test typing |
+| `npm run build`            | pass     | Production build completed                                                  |
+| `npm test`                 | pass     | 61 files, 539 tests                                                         |
+| `npm run test:rules`       | pass     | 1 file, 34 tests                                                            |
+| `npm run test:integration` | pass     | 15 files, 194 tests                                                         |
+| `npm run format:check`     | pass     | Prettier clean                                                              |
+| `npm run test:security`    | pass     | 1 file, 5 tests                                                             |
+| `npm audit --omit=dev`     | pass     | 0 vulnerabilities                                                           |
+| `npm audit`                | accepted | 14 moderate dev-only `firebase-tools` advisories; no non-breaking fix       |

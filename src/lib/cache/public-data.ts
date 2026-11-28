@@ -16,8 +16,7 @@ export const PUBLIC_DATA_REVALIDATE_SECONDS = 300;
 
 function isIncrementalCacheUnavailable(error: unknown): boolean {
   return (
-    error instanceof Error &&
-    error.message.includes("incrementalCache missing in unstable_cache")
+    error instanceof Error && error.message.includes("incrementalCache missing in unstable_cache")
   );
 }
 

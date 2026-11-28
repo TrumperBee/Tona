@@ -1,7 +1,7 @@
 // GCC — date formatting helpers.
 // Server renders in UTC by default so HTML is deterministic; user-facing
 // timezone selection arrives with the tournament settings in a later phase.
-// TODO(phase 8): support per-tournament timezones.
+// Dates use UTC/ISO formatting; per-tournament timezone support can be added post-launch if needed.
 
 const DEFAULT_LOCALE = "en-GB";
 

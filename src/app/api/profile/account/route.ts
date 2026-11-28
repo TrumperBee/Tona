@@ -10,6 +10,7 @@ import { AccountDeletionError, deleteOwnAccount } from "@/lib/account/delete-acc
 import { AuthenticationError, requireFreshSession } from "@/lib/auth/guards";
 import { clearSessionCookie } from "@/lib/auth/session";
 import { jsonError } from "@/lib/http/respond";
+import { logger } from "@/lib/observability/logger";
 import { assertPlatformWritable, PlatformWriteBlockedError } from "@/lib/platform/settings";
 import { checkRateLimit, rateLimitPolicy } from "@/lib/rate-limit";
 import { assertSameOrigin, SameOriginError } from "@/lib/security/same-origin";
@@ -79,7 +80,13 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
       return jsonError(error.message, error.status);
     }
 
-    console.error("Account deletion failed", error);
-    return jsonError("We could not delete your account. Try again or contact the GCC team.", 500);
+    const reference = logger.error("account.delete.failed", error, {
+      route: "/api/profile/account",
+      userId: user.userId,
+    });
+    return jsonError(
+      `We could not delete your account. Try again or contact the GCC team. Reference: ${reference}`,
+      500,
+    );
   }
 }

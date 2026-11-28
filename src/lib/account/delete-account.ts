@@ -23,6 +23,7 @@ import type { SessionUser } from "@/lib/auth/session";
 import { getServerEnv } from "@/lib/config/env.server";
 import { getFirebaseAdminAuth, getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { paths } from "@/lib/firebase/paths";
+import { logger } from "@/lib/observability/logger";
 import { destroyAvatar } from "@/lib/profile/cloudinary";
 import { isUserRole, type TournamentStatus, type UserRole } from "@/types/domain";
 
@@ -184,10 +185,14 @@ export async function deleteOwnAccount(user: SessionUser): Promise<DeletedAccoun
     try {
       await destroyAvatar(avatarPublicId);
       avatarDeleted = true;
-    } catch {
+    } catch (error) {
       // `destroyAvatar` already degrades gracefully; this guard keeps an
       // unexpected provider error from blocking the irreversible deletion.
-      console.warn("Account deletion: Cloudinary avatar cleanup failed for", user.userId);
+      logger.warn("account.delete.avatar_cleanup_failed", {
+        route: "account.delete",
+        userId: user.userId,
+        error,
+      });
     }
   }
 

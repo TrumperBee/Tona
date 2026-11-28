@@ -9,23 +9,8 @@ knockouts and preserves champions, player statistics and a Hall of Fame.
 
 GCC is **not affiliated with UEFA** and never uses UEFA logos or branding.
 
-> **Project status: Phase 7 - Organiser workspace.**
-> Phase 1 delivered the scaffold. Phase 1B migrated the database stack to Firebase.
-> Phase 2 implemented the Firestore data model, Security Rules, rules tests and server auth
-> infrastructure. Phase 3 delivered the public design system and site skeleton. Phase 3B
-> made result handling admin-only and hardened redirects, same-origin checks and headers.
-> Phase 4 implemented real registration, sign-in, password reset,
-> player profiles, avatar upload via Cloudinary and public player search. Phase 5 added a
-> guarded Super Admin console: platform settings and maintenance mode, overview, user
-> management, audit viewer, announcements, analytics and a read-only tournament list.
-> Phase 6 delivered the organiser application form and organiser code of conduct, the
-> Super Admin review queue with approve/reject/withdraw, a rejection cooldown, and real
-> in-app notifications with an inbox and header bell. Phase 7 delivers the organiser
-> workspace: a public organiser profile with logo upload, a public organiser page, the
-> organiser dashboard with active-slot counting, the owned-tournament list, and the
-> per-tournament workspace with its lifecycle stepper and a terminal `cancelled` status.
-> Tournament creation, fixtures and results remain later phases. There is no fake data
-> and no decorative functionality.
+> **Project status: Launch readiness (v1.0.0).**
+> Phases 1-18 are implemented. GCC includes public site, auth/profiles, Super Admin and organiser workspaces, tournament lifecycle, fixtures/results/standings/knockout, WhatsApp contact, graphics, notifications/email, stats/rankings/Hall of Fame, security hardening, ops docs, backups, and smoke E2E coverage. There is no fake data and no decorative functionality.
 
 ## Architecture principle: clients read, the server writes
 
@@ -249,3 +234,10 @@ Start with [`docs/00-PROJECT-VISION.md`](docs/00-PROJECT-VISION.md), then:
 8. Never hard-delete competition records.
 9. Do not use Cloud Functions, Firebase Storage or Analytics on the Spark plan.
 10. No fake data or placeholder features presented as working.
+
+## Operations
+
+- `docs/RUNBOOK.md` - deploy, rules/index deploy, key rotation, incidents, backups, quota handling.
+- `docs/LAUNCH-CHECKLIST.md` - manual pre-launch steps.
+- `scripts/ops/backup.ts` - free-plan JSON backup export; see `scripts/ops/restore-note.md`.
+- `/api/health` - fast liveness probe. `/api/health/deep` - Super Admin-only dependency/config check (no secrets).

@@ -1,7 +1,8 @@
 // GCC - terms of use.
-// Complete static policy copy. No accounts or paid services are open yet.
+// Draft policy copy for launch readiness. Review by a qualified lawyer before wide launch.
 import Link from "next/link";
 
+import { CONTACT_EMAIL, CONTACT_EMAIL_MAILTO } from "@/lib/config/site";
 import { LegalPage, type LegalSection } from "@/components/shared/legal-page";
 
 export const metadata = {
@@ -19,12 +20,11 @@ const sections: readonly LegalSection[] = [
         <p>
           These terms govern your use of the Global Champions Circuit (&ldquo;GCC&rdquo;,
           &ldquo;we&rdquo;, &ldquo;us&rdquo;) website and competition platform. By browsing the
-          public site you accept them. If you do not accept them, please do not use the site.
+          site, creating an account, or taking part in a competition, you accept them.
         </p>
         <p>
-          The platform is being introduced in stages. Sections that describe accounts, registrations
-          or organiser tools apply when those features open; until then, the relevant pages state
-          plainly that they are unavailable.
+          GCC is independent tournament infrastructure for football gaming communities. GCC is not a
+          game, publisher service, betting product, or league operated by a football governing body.
         </p>
       </>
     ),
@@ -35,31 +35,32 @@ const sections: readonly LegalSection[] = [
     body: (
       <>
         <p>
-          You may use GCC if you can form a binding agreement in your jurisdiction and are old
-          enough to consent to online services where you live. If you are below that age, you may
-          not create an account.
+          You may create a GCC account only if you are at least 13 years old. If you are under 13,
+          you may not create an account or submit personal information through account forms. If the
+          age at which you can consent to online services in your country is higher than 13, you may
+          only use GCC where you have the required consent or legal basis.
         </p>
         <p>
           You are responsible for complying with the age rating and online rules of the games you
-          play. GCC does not provide game software, accounts, in-game items or publisher services.
+          play. GCC does not provide game software, accounts, in-game items, or publisher services.
         </p>
       </>
     ),
   },
   {
     id: "your-account",
-    heading: "Your account",
+    heading: "Your account and passwords",
     body: (
       <>
         <p>
           One person may hold one GCC account. You must provide accurate information, keep your
-          sign-in credentials secure and keep your email address current for password reset. You
-          must not share, sell or transfer an account.
+          sign-in credentials secure, and use a password that meets GCC&apos;s password policy. You
+          are responsible for activity carried out through your account.
         </p>
         <p>
-          You are responsible for activity carried out through your account. Tell us promptly if you
-          believe it has been compromised. We may suspend an account while we investigate a credible
-          security or fair-play concern.
+          Do not share, sell, or transfer an account. Tell us promptly through the contact page if
+          you believe your account has been compromised. We may suspend an account while we
+          investigate a credible security, fraud, or fair-play concern.
         </p>
       </>
     ),
@@ -70,15 +71,15 @@ const sections: readonly LegalSection[] = [
     body: (
       <>
         <p>
-          Each tournament is run by an approved organiser and has its own rules, platform, schedule
-          and eligibility requirements. By entering, you agree to that tournament&rsquo;s rules in
+          Each tournament is run by an approved organiser and has its own rules, platform, schedule,
+          and eligibility requirements. By entering, you agree to that tournament&apos;s rules in
           addition to these terms. Where the two conflict, the tournament rules govern the sporting
           details of that competition.
         </p>
         <p>
           Entries are accepted through the platform only. A place is not secured until the platform
           records your registration and the organiser confirms the field. GCC may decline or remove
-          an entry that does not meet the published requirements.
+          an entry that does not meet published requirements.
         </p>
       </>
     ),
@@ -89,10 +90,9 @@ const sections: readonly LegalSection[] = [
     body: (
       <>
         <p>
-          Match results, standings, qualification and knockout progression are calculated and stored
-          by the platform. The tournament owner or a Super Admin enters every final score; players
-          do not submit or confirm results. The server record is authoritative, and screenshots or
-          chat messages do not replace it.
+          Match results, standings, qualification, and knockout progression are calculated and
+          stored by the platform. The tournament owner or a Super Admin enters every final score;
+          players do not submit or confirm official results. The server record is authoritative.
         </p>
         <p>
           A player who believes a recorded result is wrong can use the &ldquo;Report a
@@ -110,50 +110,42 @@ const sections: readonly LegalSection[] = [
       <>
         <p>You must not:</p>
         <ul className="list-disc space-y-2 pl-5">
+          <li>manipulate a result, collude, or play on behalf of someone else;</li>
+          <li>use cheats, unauthorised modifications, lag switches, or exploits;</li>
+          <li>submit false evidence, forged identity details, or misleading reports;</li>
+          <li>harass, threaten, or discriminate against another participant or organiser;</li>
           <li>
-            manipulate a result, collude with another participant or play on behalf of someone else;
-          </li>
-          <li>
-            use cheats, unauthorised modifications, lag switches or exploits that affect a match;
-          </li>
-          <li>submit a false result, forged evidence or a misleading identity;</li>
-          <li>harass, threaten or discriminate against another participant or organiser;</li>
-          <li>
-            attempt to access another account, the administration surface or data you are not
-            authorised to see.
+            attempt to access another account, admin surface, or data you are not authorised to see.
           </li>
         </ul>
         <p>
-          Sanctions include a warning, a result correction, forfeiture, removal from a tournament,
-          suspension or a permanent ban. Serious cases may be reported to the relevant game or
-          community operator where that is appropriate.
+          Sanctions include warning, result correction, forfeiture, removal from a tournament,
+          suspension, or permanent ban.
         </p>
       </>
     ),
   },
   {
     id: "whatsapp-contact",
-    heading: "WhatsApp contact with opponents",
+    heading: "WhatsApp contact with opponents and organisers",
     body: (
       <>
         <p>
-          When you enter a competition, the other player in each of your scheduled matches can ask
-          GCC for a WhatsApp link to you, and the organiser of that competition can do the same.
-          This is how match times are agreed. Your number is never published, never shown as text
-          and never included in a public tournament or profile document.
+          When you enter a competition, GCC may issue a WhatsApp contact link for a scheduled match
+          to the opponent in that match or to the tournament organiser, where needed to arrange the
+          match. Your WhatsApp number is never published as plain text and is never included in a
+          public tournament or profile document.
         </p>
         <p>
           A WhatsApp link necessarily contains the recipient&apos;s number. GCC therefore issues
-          links only to a signed-in account with a real relationship to you, only for a match that
-          has not yet been played, only while your account is active, under a rate limit, and
-          records every issuance for abuse handling. You always choose whether to reply, and the
-          person contacting you must press Send in WhatsApp themselves.
+          links only to signed-in users with a real relationship to the match/tournament, only where
+          allowed by product rules, under rate limits, and records issuance for abuse handling. You
+          can remove your WhatsApp number from your profile at any time; removal stops new links.
         </p>
         <p>
-          Contacting an opponent is for arranging a match. Using the number you receive for
-          harassment, marketing or anything unrelated to the competition is a breach of these terms.
-          You can remove your WhatsApp number from your profile at any time, which stops new links
-          immediately.
+          Contact received through GCC must be used only for competition-related communication.
+          Using a number for harassment, spam, marketing, or unrelated contact is a breach of these
+          terms.
         </p>
       </>
     ),
@@ -164,51 +156,64 @@ const sections: readonly LegalSection[] = [
     body: (
       <>
         <p>
-          Organisers are independent community operators. They apply, are reviewed and receive a
-          limited role that allows them to manage only the tournaments they own. They do not act as
-          GCC employees or agents and cannot make promises on GCC&rsquo;s behalf.
+          Organisers are independent community operators. They apply, are reviewed, and receive a
+          limited role for tournaments they own. They do not act as GCC employees or agents and
+          cannot make promises on GCC&apos;s behalf.
         </p>
         <p>
-          An organiser must publish clear rules, apply them consistently, protect participant data
-          and use the platform&rsquo;s result and result-report tools rather than private
-          side-agreements. Abuse of the role may result in removal.
-        </p>
-      </>
-    ),
-  },
-  {
-    id: "third-party-links",
-    heading: "Third-party links and eHubMarket",
-    body: (
-      <>
-        <p>
-          The site links to eHubMarket, an independent marketplace partner, and may link to other
-          third-party services. Those links open in a new tab and are provided for convenience. GCC
-          does not control their content, availability, prices or terms.
-        </p>
-        <p>
-          Any purchase or contract with a third party is between you and that third party. GCC does
-          not sell game accounts or in-game items and cannot refund, replace or recover a purchase
-          made elsewhere.
+          Organisers must follow the{" "}
+          <Link
+            href="/organiser-code"
+            className="font-semibold text-electric-300 underline-offset-4 hover:underline"
+          >
+            Organiser Code of Conduct
+          </Link>
+          , publish clear rules, protect participant data, and use platform result/report tools.
         </p>
       </>
     ),
   },
   {
-    id: "intellectual-property",
-    heading: "Intellectual property",
+    id: "third-party-services",
+    heading: "Third-party services and links",
     body: (
       <>
         <p>
-          The GCC name, logo, site design, written content and software are owned by or licensed to
-          GCC. You may view and share public pages for personal, non-commercial use. You may not
-          copy the platform, impersonate GCC or use its branding to suggest endorsement.
+          GCC uses third-party services to operate the platform. These include Firebase (Auth and
+          Firestore data hosting), Cloudinary (image hosting for avatars/logos/covers where
+          configured), Resend (transactional email delivery), and hosting/infrastructure providers
+          such as Vercel. Third-party services have their own terms and privacy practices.
         </p>
         <p>
-          Game titles, publisher marks and league names belong to their respective owners. They are
-          used only to describe supported titles or competitive structures. GCC is not affiliated
-          with, endorsed by or sponsored by UEFA, any football governing body, any game publisher or
-          any professional league.
+          The site may link to independent third parties such as eHubMarket. GCC does not control
+          their content, availability, prices, or terms. Any purchase or contract with a third party
+          is between you and that third party.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "data-and-privacy",
+    heading: "Data, privacy and retention",
+    body: (
+      <>
+        <p>
+          Our{" "}
+          <Link
+            href="/privacy"
+            className="font-semibold text-electric-300 underline-offset-4 hover:underline"
+          >
+            Privacy Policy
+          </Link>{" "}
+          explains what data GCC collects, why it is used, and how it is handled. Competition
+          records are designed to be permanent: completed results, standings, titles, and Hall of
+          Fame records may be kept as part of the sporting record.
+        </p>
+        <p>
+          If you delete your account, GCC removes account/personal profile data as described in the
+          Privacy Policy. Match/tournament history may be retained under the existing gamer tag,
+          with the public profile shown as &ldquo;Deleted player&rdquo; and no avatar. GCC does not
+          silently release gamer tags or tournament registrations.
         </p>
       </>
     ),
@@ -220,31 +225,12 @@ const sections: readonly LegalSection[] = [
       <>
         <p>
           We work to keep the platform available and accurate, but it is provided without a
-          guarantee of uninterrupted access. Maintenance, security work, third-party outages or a
+          guarantee of uninterrupted access. Maintenance, security work, third-party outages, or
           competition review may interrupt a feature.
         </p>
         <p>
-          We may add, change or retire features. We will not rewrite a completed result without an
-          auditable correction, and we will not present an unavailable feature as working.
-        </p>
-      </>
-    ),
-  },
-  {
-    id: "termination",
-    heading: "Suspension and termination",
-    body: (
-      <>
-        <p>
-          You may stop using GCC at any time. We may suspend or close an account for a breach of
-          these terms, a serious fair-play concern, fraud, or a legal or security requirement. Where
-          it is safe and lawful to do so, we will explain the reason and the route to challenge the
-          decision.
-        </p>
-        <p>
-          Competition records are designed to be permanent. Closing an account does not erase
-          completed results, standings or Hall of Fame entries, although we minimise personal
-          details that are not needed for the record.
+          We may add, change, or retire features. We will not rewrite a completed result without an
+          auditable correction.
         </p>
       </>
     ),
@@ -255,13 +241,12 @@ const sections: readonly LegalSection[] = [
     body: (
       <>
         <p>
-          Nothing in these terms excludes or limits a right that cannot lawfully be excluded,
-          including your statutory consumer rights. Subject to that, GCC is not liable for indirect
-          or consequential loss, lost opportunity, or loss arising from a third-party service, game
-          outage or a purchase made outside GCC.
+          Nothing in these terms excludes or limits a right that cannot lawfully be excluded.
+          Subject to that, GCC is not liable for indirect or consequential loss, lost opportunity,
+          or loss arising from a third-party service, game outage, or a purchase made outside GCC.
         </p>
         <p>
-          You are responsible for your own hardware, connection, game account and compliance with
+          You are responsible for your own hardware, connection, game account, and compliance with
           the rules of the game you play.
         </p>
       </>
@@ -269,17 +254,30 @@ const sections: readonly LegalSection[] = [
   },
   {
     id: "governing-law",
-    heading: "Governing law and disputes",
+    heading: "Governing law and contact",
     body: (
       <>
         <p>
-          These terms are governed by the laws that mandatorily apply to you and to the operator of
-          GCC. Before starting a formal dispute, please raise the issue through the contact channel
-          so we can try to resolve it directly.
+          These terms are intended to be read alongside applicable law. GCC operates with awareness
+          of Kenya&apos;s Data Protection Act, 2019, where applicable, and other mandatory legal
+          requirements that may apply to users or the operator.
         </p>
         <p>
-          The operating entity and its registered details will be published on this page before paid
-          services or public competition registration open.
+          Questions about these terms can be sent to{" "}
+          <a
+            href={CONTACT_EMAIL_MAILTO}
+            className="font-semibold text-electric-300 underline-offset-4 hover:underline"
+          >
+            {CONTACT_EMAIL}
+          </a>{" "}
+          or through the{" "}
+          <Link
+            href="/contact"
+            className="font-semibold text-electric-300 underline-offset-4 hover:underline"
+          >
+            contact page
+          </Link>
+          . Do not send passwords or payment details.
         </p>
       </>
     ),
@@ -289,19 +287,9 @@ const sections: readonly LegalSection[] = [
     heading: "Changes to these terms",
     body: (
       <p>
-        We may update these terms as the platform develops. The date at the top of the page always
-        shows the current version. A material change will be announced on the platform before it
-        takes effect. Continuing to use GCC after a change means you accept the updated terms.
-      </p>
-    ),
-  },
-  {
-    id: "contact",
-    heading: "Contact",
-    body: (
-      <p>
-        Questions about these terms can be sent through the contact page. Please include the page or
-        competition the question relates to, and do not send passwords or payment details.
+        We may update these terms as the platform develops. The date at the top of the page shows
+        the current version. A material change should be announced before it takes effect.
+        Continuing to use GCC after a change means you accept the updated terms.
       </p>
     ),
   },
@@ -312,12 +300,12 @@ export default function TermsPage() {
     <LegalPage
       eyebrow="Legal"
       title="Terms of use"
-      updated="7 November 2026"
-      summary="The rules for using the GCC public site, holding an account and taking part in a competition. Written to be read, not to hide behind."
+      updated="26 November 2026"
+      summary="Rules for using GCC, creating an account, entering competitions, and interacting with organisers and opponents. Draft for launch readiness; review by a qualified lawyer before wide launch."
       sections={sections}
       contactNote={
         <p>
-          Need to raise something specific?{" "}
+          Need help?{" "}
           <Link
             href="/contact"
             className="font-semibold text-electric-300 underline-offset-4 hover:underline"
@@ -329,7 +317,7 @@ export default function TermsPage() {
             href="/privacy"
             className="font-semibold text-electric-300 underline-offset-4 hover:underline"
           >
-            privacy policy
+            Privacy Policy
           </Link>
           .
         </p>

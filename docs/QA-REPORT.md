@@ -11,7 +11,8 @@
 **Pass/fail by area (high-level):** See coverage matrix. Automated: lint/build/typecheck/format/rules/security/simulate mostly pass; unit has 1 flaky timeout on first run/pass on rerun; integration has 1 failing CSP-log assertion (194 tests, 1 fail); E2E not executed end-to-end in this run. Many browser scenarios marked **Could not test**.
 
 **Top 5 problems:**
-1. **P1/Blocker for release confidence:** `tests/integration/security-controls.test.ts` fails because CSP report route now emits structured JSON logs, but test expects legacy `[csp] ...` strings. Indicates logging contract drift; either test or behavior needs intentional reconciliation before release. 
+
+1. **P1/Blocker for release confidence:** `tests/integration/security-controls.test.ts` fails because CSP report route now emits structured JSON logs, but test expects legacy `[csp] ...` strings. Indicates logging contract drift; either test or behavior needs intentional reconciliation before release.
 2. **P1:** Phase 18B required E2E smoke suite is incomplete vs spec (missing register/login/logout, tournament register, organiser result entry/focus regression, auth redirect coverage is partial, production-build+emulator harness not fully wired). Current `e2e/smoke.spec.ts` is minimal.
 3. **P1:** Browser QA requested (full A-U, mobile viewports, downloads, image export verification, WhatsApp/link crawls, axe, Lighthouse local+prod) could not be fully executed in this environment without risking incomplete/unsafe operation; production URL not provided. Many flows remain unverified by interactive browser evidence.
 4. **P2:** `.qa/` evidence directory was created but not added to `.gitignore` because audit forbade config changes; committing report may risk committing local artifacts unless handled carefully.
@@ -21,43 +22,43 @@
 
 - **Workspace:** `C:\Projects\Tona` (git repo, branch `main`, baseline `dad8d7d`, dirty worktree with Phase 18B uncommitted changes).
 - **Runtime:** Node v24.21.0, npm 11.12.1, Playwright 1.65.1 installed. Windows.
-- **Tests executed in this audit run:** `npm run lint` (pass), `npm run typecheck` (pass), `npm run build` (pass), `npm test` (1 failed: `register-form-focus` timeout 5000ms; rerun of that file passed 3/3), `npm run test:rules` (pass 34/34), `npm run test:security` (pass 5/5), `npm run simulate` (pass, full tournament summary), `npm run test:integration` (1 failed / 193 passed; CSP log expectation mismatch), `npm run format:check` initially failed on Phase 18B files then passed after formatting only those files? *No code/config modified by QA; formatting changes observed were from prior Phase 18B work in tree - QA did not run prettier write*. Static grep/read inspection performed.
+- **Tests executed in this audit run:** `npm run lint` (pass), `npm run typecheck` (pass), `npm run build` (pass), `npm test` (1 failed: `register-form-focus` timeout 5000ms; rerun of that file passed 3/3), `npm run test:rules` (pass 34/34), `npm run test:security` (pass 5/5), `npm run simulate` (pass, full tournament summary), `npm run test:integration` (1 failed / 193 passed; CSP log expectation mismatch), `npm run format:check` initially failed on Phase 18B files then passed after formatting only those files? _No code/config modified by QA; formatting changes observed were from prior Phase 18B work in tree - QA did not run prettier write_. Static grep/read inspection performed.
 - **Not executed / blocked:** Full interactive browser QA via built-in browser tool was not available in this agent session; Playwright E2E not run because it requires app+emulators running and browser deps; Lighthouse mobile not run; production read-only checks not run because `<PRODUCTION_URL>` placeholder was not provided. No writes to real Firebase/Cloudinary/Resend were attempted.
 - **Safety:** No app code/rules/config/deps modified. No destructive tests against production. No real emails sent.
 
 ## 3. Coverage Matrix
 
-| Area | Status | Evidence |
-|---|---|---|
-| A. Accounts | Could not test (browser) / Partial (code+integration evidence) | Integration suite includes auth/registration/account-deletion coverage; browser flows, redirects, suspended/banned UX, password reset, super-admin pin UX not interactively verified. |
-| B. Navigation | Could not test | No browser crawl/screenshots. Code has dashboard/public layouts; mobile bottom bar/profile reachability not verified. |
-| C. Input behaviour regression | Partial | Unit test `register-form-focus` passed on rerun; full-app every-field 30-char typing not tested. |
-| D. Profile | Could not test / Partial | Code/routes exist; stats recomputation/avatar/share/public 404/suspended hidden not browser-verified. |
-| E. Organiser | Partial | Integration/route inventory/security tests cover many routes; wizard/slot limits/logo/export/formula-injection/transfer not browser-verified. |
-| F. Registration as player | Partial | Integration registration tests exist; rapid 36-slot cap, countdown, state UX not browser-verified. |
-| G. Pots | Partial | Draw integration exists; UI shuffle/lock/manual move/public view not browser-verified. |
-| H. Fixtures | Partial | Fixtures integration exists; publish-no-date-prompt, mobile pager/scroll behavior not browser-verified. |
-| I. Results | Partial | Results integration exists; focus/scroll/grid UX, reports/notifications not browser-verified. |
-| J. League table | Partial | Standings engine/integration exist; tie-breaker crafted browser case, sticky column/mobile not verified. |
-| K. Knockout | Partial | Simulate passed (full knockout, legs=2, final=1, champion). UI single-generate button/decider/correction/reset/bracket mobile not verified. |
-| L. Stats/community | Partial | Stats/rankings code exists; browser filters/pagination/charts not verified. |
-| M. Image system | Could not test | No export/download/pixel verification performed. |
-| N. WhatsApp contact | Partial | Contact integration exists; link format/visibility/rate-limit UI not browser-verified. |
-| O. Notifications/email | Partial | Notifications-email integration exists; preferences/unsubscribe/webhook signed/unsigned behavior partially covered by code/tests, not browser-verified. |
-| P. Super admin | Partial | Super-admin integration exists; maintenance mode end-to-end, masked WhatsApp reveal audit, session revocation UX not browser-verified. |
-| Q. Public/SEO | Could not test / Partial | Public routes exist; metadata/sitemap/robots/favicons/manifest/link crawl not browser-verified. |
-| R. Security smoke | Partial | Security inventory/rules/integration mostly pass; CSP report test failing due log format; manual role/API smoke, headers, XSS rendering, cross-origin POST, cookie flags, public PII leak check not fully executed. |
-| S. Accessibility | Could not test | No keyboard/axe/reduced-motion audit run. |
-| T. Performance/robustness | Could not test | No Lighthouse/slow3G/offline/double-click/back-forward/refresh tests run. |
-| U. Data integrity/automated suites | Partial | simulate pass; lint/typecheck/build/format/rules/security pass; test has flaky first-run timeout; integration 1 fail/193 pass; e2e not run. |
+| Area                               | Status                                                         | Evidence                                                                                                                                                                                                            |
+| ---------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A. Accounts                        | Could not test (browser) / Partial (code+integration evidence) | Integration suite includes auth/registration/account-deletion coverage; browser flows, redirects, suspended/banned UX, password reset, super-admin pin UX not interactively verified.                               |
+| B. Navigation                      | Could not test                                                 | No browser crawl/screenshots. Code has dashboard/public layouts; mobile bottom bar/profile reachability not verified.                                                                                               |
+| C. Input behaviour regression      | Partial                                                        | Unit test `register-form-focus` passed on rerun; full-app every-field 30-char typing not tested.                                                                                                                    |
+| D. Profile                         | Could not test / Partial                                       | Code/routes exist; stats recomputation/avatar/share/public 404/suspended hidden not browser-verified.                                                                                                               |
+| E. Organiser                       | Partial                                                        | Integration/route inventory/security tests cover many routes; wizard/slot limits/logo/export/formula-injection/transfer not browser-verified.                                                                       |
+| F. Registration as player          | Partial                                                        | Integration registration tests exist; rapid 36-slot cap, countdown, state UX not browser-verified.                                                                                                                  |
+| G. Pots                            | Partial                                                        | Draw integration exists; UI shuffle/lock/manual move/public view not browser-verified.                                                                                                                              |
+| H. Fixtures                        | Partial                                                        | Fixtures integration exists; publish-no-date-prompt, mobile pager/scroll behavior not browser-verified.                                                                                                             |
+| I. Results                         | Partial                                                        | Results integration exists; focus/scroll/grid UX, reports/notifications not browser-verified.                                                                                                                       |
+| J. League table                    | Partial                                                        | Standings engine/integration exist; tie-breaker crafted browser case, sticky column/mobile not verified.                                                                                                            |
+| K. Knockout                        | Partial                                                        | Simulate passed (full knockout, legs=2, final=1, champion). UI single-generate button/decider/correction/reset/bracket mobile not verified.                                                                         |
+| L. Stats/community                 | Partial                                                        | Stats/rankings code exists; browser filters/pagination/charts not verified.                                                                                                                                         |
+| M. Image system                    | Could not test                                                 | No export/download/pixel verification performed.                                                                                                                                                                    |
+| N. WhatsApp contact                | Partial                                                        | Contact integration exists; link format/visibility/rate-limit UI not browser-verified.                                                                                                                              |
+| O. Notifications/email             | Partial                                                        | Notifications-email integration exists; preferences/unsubscribe/webhook signed/unsigned behavior partially covered by code/tests, not browser-verified.                                                             |
+| P. Super admin                     | Partial                                                        | Super-admin integration exists; maintenance mode end-to-end, masked WhatsApp reveal audit, session revocation UX not browser-verified.                                                                              |
+| Q. Public/SEO                      | Could not test / Partial                                       | Public routes exist; metadata/sitemap/robots/favicons/manifest/link crawl not browser-verified.                                                                                                                     |
+| R. Security smoke                  | Partial                                                        | Security inventory/rules/integration mostly pass; CSP report test failing due log format; manual role/API smoke, headers, XSS rendering, cross-origin POST, cookie flags, public PII leak check not fully executed. |
+| S. Accessibility                   | Could not test                                                 | No keyboard/axe/reduced-motion audit run.                                                                                                                                                                           |
+| T. Performance/robustness          | Could not test                                                 | No Lighthouse/slow3G/offline/double-click/back-forward/refresh tests run.                                                                                                                                           |
+| U. Data integrity/automated suites | Partial                                                        | simulate pass; lint/typecheck/build/format/rules/security pass; test has flaky first-run timeout; integration 1 fail/193 pass; e2e not run.                                                                         |
 
 ## 4. Defect List
 
-| ID | Sev | Area | Title | Repro | Expected | Actual | Evidence | Viewport | Suspected |
-|---|---|---|---|---|---|---|---|---|---|
-| QA-001 | High | R/U | CSP report integration test fails after structured logging change | Run `npm run test:integration` | CSP report route logs expected by tests, or tests updated intentionally | `security-controls.test.ts` expects `[csp] script-src-elem /dashboard` but logger emits JSON `csp.report` events; 1 failed / 193 passed | `.qa/logs/test-integration.txt` (to be captured), shell result | n/a | `src/app/api/csp-report/route.ts`, `src/lib/observability/logger.ts`, `tests/integration/security-controls.test.ts` |
-| QA-002 | Medium | U | Register form focus test flaky/timeout on first full-suite run | Run `npm test`; rerun file | Stable pass | First run timed out at 5000ms in `register-form-focus.test.tsx`; isolated rerun passed 3/3 | `.qa/logs/test.txt` | n/a | `src/components/auth/register-form-focus.test.tsx` or test environment timing |
-| QA-003 | High | B/H/I/M/T | Required Phase 18B E2E/browser smoke coverage incomplete | Inspect `e2e/smoke.spec.ts` and run criteria | E2E covers register/login/logout, tournament register, public pages no console errors, organiser result entry/focus regression, mobile 390px profile link, auth redirects, maintenance mode check; CI job or explicit manual choice | Current smoke spec covers only public page console smoke, register form fields, unauth redirects for organiser/super-admin, mobile profile/login link presence. No login/logout/tournament register/result-entry/focus/maintenance E2E. CI has manual workflow but not integrated required gate decision documented fully in acceptance report. | `e2e/smoke.spec.ts`, `e2e/README.md`, `.github/workflows/e2e.yml` | n/a | `e2e/*` |
+| ID     | Sev    | Area      | Title                                                             | Repro                                        | Expected                                                                                                                                                                                                                            | Actual                                                                                                                                                                                                                                                                                                                                          | Evidence                                                          | Viewport | Suspected                                                                                                           |
+| ------ | ------ | --------- | ----------------------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------- |
+| QA-001 | High   | R/U       | CSP report integration test fails after structured logging change | Run `npm run test:integration`               | CSP report route logs expected by tests, or tests updated intentionally                                                                                                                                                             | `security-controls.test.ts` expects `[csp] script-src-elem /dashboard` but logger emits JSON `csp.report` events; 1 failed / 193 passed                                                                                                                                                                                                         | `.qa/logs/test-integration.txt` (to be captured), shell result    | n/a      | `src/app/api/csp-report/route.ts`, `src/lib/observability/logger.ts`, `tests/integration/security-controls.test.ts` |
+| QA-002 | Medium | U         | Register form focus test flaky/timeout on first full-suite run    | Run `npm test`; rerun file                   | Stable pass                                                                                                                                                                                                                         | First run timed out at 5000ms in `register-form-focus.test.tsx`; isolated rerun passed 3/3                                                                                                                                                                                                                                                      | `.qa/logs/test.txt`                                               | n/a      | `src/components/auth/register-form-focus.test.tsx` or test environment timing                                       |
+| QA-003 | High   | B/H/I/M/T | Required Phase 18B E2E/browser smoke coverage incomplete          | Inspect `e2e/smoke.spec.ts` and run criteria | E2E covers register/login/logout, tournament register, public pages no console errors, organiser result entry/focus regression, mobile 390px profile link, auth redirects, maintenance mode check; CI job or explicit manual choice | Current smoke spec covers only public page console smoke, register form fields, unauth redirects for organiser/super-admin, mobile profile/login link presence. No login/logout/tournament register/result-entry/focus/maintenance E2E. CI has manual workflow but not integrated required gate decision documented fully in acceptance report. | `e2e/smoke.spec.ts`, `e2e/README.md`, `.github/workflows/e2e.yml` | n/a      | `e2e/*`                                                                                                             |
 
 ## 5. Missing / Not Implemented / Partial (vs vision/roadmap)
 
@@ -81,16 +82,16 @@ Could not test. No exported image files generated/verified.
 
 ## 9. Recommendations (Suggestions, not implemented)
 
-| Priority | Effort | Suggestion | Reason |
-|---|---|---|---|
-| P0 | S | Reconcile CSP report logging contract and integration test before tagging/release | Current red drift breaks integration gate and obscures security observability expectations. |
-| P0 | M | Complete required Playwright smoke flows on emulator+prod build | Release confidence for critical paths is currently insufficient. |
-| P1 | S | Add CI job or explicit required manual pre-release gate for e2e | Prevents accidental releases without smoke validation. |
-| P1 | M | Run Lighthouse mobile on required pages and fix top regressions | Phase 18B acceptance requires measured performance. |
-| P1 | S | Add `.qa/` to `.gitignore` and keep evidence out of commits | Avoid leaking local artifacts/screenshots/logs. |
-| P2 | M | Add browser QA script for viewport/link crawl/console capture | Makes future audits repeatable and less manual. |
-| P2 | M | Validate backup/restore drill against emulator and scrubbed export review | Backups are only useful if restore path is understood and exports are safe. |
-| P3 | L | Add staging smoke with seeded realistic data and visual diff for graphics exports | Graphics regressions are high-impact and hard to catch with unit tests. |
+| Priority | Effort | Suggestion                                                                        | Reason                                                                                      |
+| -------- | ------ | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| P0       | S      | Reconcile CSP report logging contract and integration test before tagging/release | Current red drift breaks integration gate and obscures security observability expectations. |
+| P0       | M      | Complete required Playwright smoke flows on emulator+prod build                   | Release confidence for critical paths is currently insufficient.                            |
+| P1       | S      | Add CI job or explicit required manual pre-release gate for e2e                   | Prevents accidental releases without smoke validation.                                      |
+| P1       | M      | Run Lighthouse mobile on required pages and fix top regressions                   | Phase 18B acceptance requires measured performance.                                         |
+| P1       | S      | Add `.qa/` to `.gitignore` and keep evidence out of commits                       | Avoid leaking local artifacts/screenshots/logs.                                             |
+| P2       | M      | Add browser QA script for viewport/link crawl/console capture                     | Makes future audits repeatable and less manual.                                             |
+| P2       | M      | Validate backup/restore drill against emulator and scrubbed export review         | Backups are only useful if restore path is understood and exports are safe.                 |
+| P3       | L      | Add staging smoke with seeded realistic data and visual diff for graphics exports | Graphics regressions are high-impact and hard to catch with unit tests.                     |
 
 ## 10. Proposed Fix Order
 
@@ -106,8 +107,7 @@ Could not test. No exported image files generated/verified.
 - **TODO/FIXME scan:** `src/lib/engine/types.ts` and `src/lib/utils/dates.ts` previously had phase TODOs; current worktree replaced with neutral comments. No other TODO/FIXME/501/FeatureNotice found by quick scan? Needs exhaustive confirmation.
 - **Dead code/console/security patterns:** `console.info` remains in `src/lib/firebase/client.ts` dev App Check skip; several `console.error/warn` remain in scripts/tests/dev-only paths. No `dangerouslySetInnerHTML`/`Math.random` in engine found by quick scan.
 
-*Report appended incrementally. Further evidence pending.*
-
+_Report appended incrementally. Further evidence pending._
 
 ## 11. Automated Execution Log (this run)
 
@@ -145,3 +145,26 @@ Could not test. No exported image files generated/verified.
 - `.qa/append_report.py`
 - `.qa/screenshots/` (empty)
 - `.qa/downloads/` (empty)
+
+## 14. Final Batch 1 / Phase 18B acceptance addendum (2026-11-28)
+
+The original QA report above documents the pre-fix audit. The following results supersede its open QA-001 and QA-002 defects after the Fix Batch 1 pass.
+
+- QA-001 (CSP structured logging contract): FIXED. tests/integration/security-controls.test.ts now asserts the structured csp.report event, fields, redaction, size cap and rate limiting. npm run test:integration: 194/194 passed.
+- QA-002 (register form focus flake under full-suite load): FIXED. src/components/auth/register-form-focus.test.tsx now uses a per-test timeout for slow full-suite workers. npm test passed 3 consecutive full runs: 61 files / 539 tests each (126.28s, 85.71s, 144.79s).
+- npm run lint: PASS.
+- npm run typecheck: PASS.
+- npm run build: PASS.
+- npm run format:check: PASS.
+- npm run test:rules: PASS.
+- npm run test:security: 5/5 passed.
+- npm run simulate: PASS. 36-player full-tournament rehearsal: 144 league results, 8 matchdays, 45 knockout matches (legs=2/final=1), champion Player01, runner-up Player10, table frozen, Hall of Fame 1, rated 36.
+- npm run e2e: not green at final hand-off. Last complete run: 10 passed / 2 failed / 0 skipped. Failures were seeded-login flakiness (Email or password is incorrect) on player (desktop) and organiser (mobile). The login helper now retries that specific error. A --last-failed rerun then left one failure: mobile organiser result inputs were intercepted by the sticky header; the spec was changed to scrollIntoViewIfNeeded() + fill() instead of brittle clicks. The targeted verification of that mobile test was cancelled by a server restart, so the final e2e rerun remains outstanding. No e2e failures are hidden by skipping tests.
+
+### Residual risk
+
+- Final full npm run e2e needs one clean rerun on a stable machine/session to confirm the login retry and mobile result-entry fixes. Traces/screenshots are retained on failure by Playwright config.
+
+### Vercel runtime note
+
+- Production ERR_REQUIRE_ESM from jwks-rsa/jose was fixed in commit 8ab4874 by pinning jwks-rsa's jose to ^5.10.0; Vercel still needs a manual redeploy of main before the live site recovers.
